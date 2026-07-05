@@ -1,0 +1,3288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>BOM 详情 · 硬禾科技 ezPLM</title>
+  <style>
+/* ============================================
+   硬禾科技 ezPLM 协同平台 - 设计系统 v2
+   高保真企业 SaaS 视觉系统
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Source+Han+Serif+SC:wght@500;600;700&display=swap');
+
+:root {
+  /* 品牌色 */
+  --brand: #00890b;
+  --brand-50: #f0faf1;
+  --brand-100: #d9f3dd;
+  --brand-200: #b1e6ba;
+  --brand-300: #7ed18d;
+  --brand-400: #4cb663;
+  --brand-500: #00890b;
+  --brand-600: #006e09;
+  --brand-700: #005707;
+  --brand-800: #044206;
+
+  /* AI 紫色阶梯 */
+  --ai: #7B61FF;
+  --ai-50: #f6f4ff;
+  --ai-100: #ece8ff;
+  --ai-200: #d6cdff;
+  --ai-300: #b4a4ff;
+  --ai-400: #8c75ff;
+  --ai-500: #7B61FF;
+  --ai-600: #5d40e0;
+  --ai-700: #4a2db5;
+  --ai-800: #3a228e;
+
+  /* 中性色 */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --gray-50: #fafafa;
+  --gray-100: #f4f4f5;
+  --gray-150: #ececee;
+  --gray-200: #e4e4e7;
+  --gray-300: #d4d4d8;
+  --gray-400: #a1a1aa;
+  --gray-500: #71717a;
+  --gray-600: #52525b;
+  --gray-700: #3f3f46;
+  --gray-800: #27272a;
+  --gray-900: #18181b;
+  --gray-950: #09090b;
+
+  /* 状态色 */
+  --success: #16a34a;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #fed7aa;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --info: #0284c7;
+  --info-bg: #f0f9ff;
+  --info-border: #bae6fd;
+
+  /* 字体 */
+  --font-sans: "Inter", "PingFang SC", -apple-system, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  --font-display: "Source Han Serif SC", "Inter", "PingFang SC", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  /* 阴影 */
+  --shadow-xs: 0 1px 1px rgba(15,23,42,0.04);
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 1px rgba(15,23,42,0.02);
+  --shadow: 0 1px 3px rgba(15,23,42,0.05), 0 1px 2px -1px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15,23,42,0.07), 0 2px 4px -2px rgba(15,23,42,0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15,23,42,0.08), 0 4px 6px -4px rgba(15,23,42,0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(15,23,42,0.10), 0 8px 10px -6px rgba(15,23,42,0.06);
+  --shadow-ai: 0 4px 14px -4px rgba(123, 97, 255, 0.20), 0 2px 4px -2px rgba(123, 97, 255, 0.10);
+  --shadow-ai-lg: 0 20px 40px -10px rgba(123, 97, 255, 0.30), 0 8px 16px -4px rgba(123, 97, 255, 0.15);
+
+  /* 圆角 */
+  --r-xs: 4px; --r-sm: 6px; --r: 8px; --r-md: 10px; --r-lg: 12px; --r-xl: 16px; --r-full: 9999px;
+
+  /* 缓动 */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  color: var(--gray-800);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+input, textarea, select { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--ai-100); color: var(--ai-700); }
+
+/* 主布局 */
+.app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+
+.sidebar {
+  background: var(--gray-950);
+  color: var(--gray-300);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  border-right: 1px solid var(--gray-800);
+  overflow: hidden;
+}
+.sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 50%, transparent);
+}
+
+.brand { padding: 18px 20px; border-bottom: 1px solid var(--gray-800); }
+.brand-logo { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 32px; height: 32px;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, #00b410 0%, #00890b 100%);
+  display: grid; place-items: center;
+  color: white;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  box-shadow: 0 2px 6px rgba(0, 137, 11, 0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.brand-name { font-size: 14px; font-weight: 600; color: white; letter-spacing: 0.2px; }
+.brand-sub { font-size: 11px; color: var(--gray-500); margin-top: 1px; font-feature-settings: "tnum"; }
+
+.nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+.nav-section { margin-bottom: 18px; }
+.nav-section-title {
+  font-size: 10px; font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  padding: 0 12px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
+  color: var(--gray-400);
+  font-size: 13px; font-weight: 500;
+  margin-bottom: 1px;
+  transition: all 150ms var(--ease);
+  position: relative;
+}
+.nav-item:hover { background: var(--gray-900); color: var(--gray-200); }
+.nav-item.active { background: var(--gray-900); color: white; }
+.nav-item.active::before {
+  content: ''; position: absolute;
+  left: -10px; top: 7px; bottom: 7px;
+  width: 3px; background: var(--brand);
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 8px rgba(0, 180, 16, 0.4);
+}
+.nav-item .ai-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ai);
+  margin-left: auto;
+  box-shadow: 0 0 6px var(--ai);
+  animation: aiBlink 2.5s ease-in-out infinite;
+}
+@keyframes aiBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.75; }
+
+.user-card {
+  padding: 14px 16px;
+  border-top: 1px solid var(--gray-800);
+  display: flex; align-items: center; gap: 10px;
+}
+.user-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  color: white;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name {
+  font-size: 12.5px; font-weight: 500; color: white;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.user-role { font-size: 10.5px; color: var(--gray-500); margin-top: 1px; }
+
+.main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+.topbar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--gray-200);
+  padding: 11px 28px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar-breadcrumb {
+  font-size: 12px; color: var(--gray-500);
+  display: flex; align-items: center; gap: 6px;
+}
+.topbar-breadcrumb .sep { color: var(--gray-300); margin: 0 2px; }
+.topbar-breadcrumb .current { color: var(--gray-900); font-weight: 500; }
+
+.topbar-search { margin-left: auto; position: relative; }
+.topbar-search input {
+  width: 280px;
+  padding: 6px 36px 6px 32px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  background: var(--surface);
+  outline: none;
+  transition: all 150ms var(--ease);
+  color: var(--gray-800);
+}
+.topbar-search input::placeholder { color: var(--gray-400); }
+.topbar-search input:focus {
+  background: white;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-50);
+  width: 340px;
+}
+.topbar-search-icon {
+  position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  color: var(--gray-400);
+  pointer-events: none;
+}
+.topbar-search-kbd {
+  position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--gray-400);
+  background: var(--gray-100);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--gray-200);
+}
+.topbar-actions { display: flex; gap: 6px; align-items: center; }
+.icon-btn {
+  width: 30px; height: 30px;
+  border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  color: var(--gray-500);
+  transition: all 150ms var(--ease);
+  position: relative;
+}
+.icon-btn:hover { background: var(--gray-100); color: var(--gray-800); }
+.icon-btn-dot::after {
+  content: ''; position: absolute;
+  top: 5px; right: 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid white;
+}
+
+.page { padding: 28px 32px 80px; max-width: 1480px; width: 100%; }
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+.page-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gray-900);
+  letter-spacing: -0.4px;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+.page-subtitle { font-size: 13px; color: var(--gray-500); font-feature-settings: "tnum"; }
+.page-subtitle .sep {
+  display: inline-block;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--gray-300);
+  margin: 0 8px;
+  vertical-align: middle;
+}
+.page-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* 按钮 */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--r-sm);
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 120ms var(--ease);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  background: var(--brand);
+  color: white;
+  box-shadow: 0 1px 2px rgba(0, 137, 11, 0.18), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-primary:hover {
+  background: var(--brand-600);
+  box-shadow: 0 2px 4px rgba(0, 137, 11, 0.25), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.btn-default {
+  background: white;
+  color: var(--gray-700);
+  border-color: var(--gray-200);
+  box-shadow: var(--shadow-xs);
+}
+.btn-default:hover { background: var(--gray-50); border-color: var(--gray-300); color: var(--gray-900); }
+.btn-ai {
+  background: var(--ai);
+  color: white;
+  box-shadow: 0 1px 2px rgba(123, 97, 255, 0.20), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-ai:hover { background: var(--ai-600); box-shadow: var(--shadow-ai); }
+.btn-ghost { color: var(--gray-600); }
+.btn-ghost:hover { background: var(--gray-100); color: var(--gray-900); }
+.btn-icon { padding: 7px; }
+.btn-sm { padding: 4px 10px; font-size: 12px; gap: 4px; }
+.btn-lg { padding: 10px 18px; font-size: 14px; }
+
+/* 卡片 */
+.card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: all 200ms var(--ease);
+}
+.card-hoverable:hover {
+  border-color: var(--gray-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.card-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--gray-900);
+  display: flex; align-items: center; gap: 8px;
+  letter-spacing: -0.1px;
+}
+.card-body { padding: 18px; }
+
+.card-ai {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(123, 97, 255, 0.06) 0%, transparent 50%),
+    white;
+  border: 1px solid var(--ai-100);
+  position: relative;
+}
+.card-ai::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--ai-500) 30%, var(--ai-300) 70%, transparent 100%);
+  opacity: 0.8;
+}
+
+/* 徽章 */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: 11px; font-weight: 500;
+  line-height: 1.6;
+  border: 1px solid transparent;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+}
+.badge-ai { background: var(--ai-50); color: var(--ai-700); border-color: var(--ai-100); }
+.badge-ai::before {
+  content: ''; width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--ai-500);
+  box-shadow: 0 0 4px var(--ai-400);
+}
+.badge-success { background: var(--success-bg); color: #14532d; border-color: var(--success-border); }
+.badge-warning { background: var(--warning-bg); color: #78350f; border-color: var(--warning-border); }
+.badge-danger { background: var(--danger-bg); color: #7f1d1d; border-color: var(--danger-border); }
+.badge-info { background: var(--info-bg); color: #075985; border-color: var(--info-border); }
+.badge-gray { background: var(--gray-100); color: var(--gray-700); border-color: var(--gray-200); }
+.badge-brand { background: var(--brand-50); color: var(--brand-700); border-color: var(--brand-100); }
+
+.ai-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px 1px 4px;
+  background: var(--ai-50);
+  color: var(--ai-700);
+  border-radius: var(--r-xs);
+  font-size: 10px; font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.2px;
+  vertical-align: middle;
+  border: 1px solid var(--ai-100);
+}
+.ai-chip::before { content: '✦'; color: var(--ai-500); font-size: 9px; }
+
+/* 表格 */
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table thead th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+}
+.table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--gray-700);
+  vertical-align: middle;
+}
+.table tbody tr { transition: background 100ms var(--ease); }
+.table tbody tr:hover { background: var(--gray-50); }
+.table tbody tr:last-child td { border-bottom: 0; }
+
+.cell-mono { font-family: var(--font-mono); font-size: 12px; color: var(--gray-700); font-feature-settings: "tnum"; }
+.cell-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-feature-settings: "tnum"; }
+.cell-strong { color: var(--gray-900); font-weight: 500; }
+
+/* 统计 */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: all 200ms var(--ease);
+}
+.stat:hover {
+  border-color: var(--gray-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.stat-label {
+  font-size: 12px; color: var(--gray-500); font-weight: 500;
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--gray-900);
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-meta {
+  font-size: 11px; color: var(--gray-500);
+  margin-top: 6px;
+  display: flex; align-items: center; gap: 4px;
+  font-feature-settings: "tnum";
+}
+.stat-trend {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.stat-trend-up { background: var(--success-bg); color: #166534; }
+.stat-trend-down { background: var(--danger-bg); color: #991b1b; }
+
+.stat-ai {
+  background: linear-gradient(180deg, var(--ai-50) 0%, white 100%);
+  border-color: var(--ai-100);
+}
+.stat-ai .stat-value { color: var(--ai-700); }
+
+/* 表单 */
+.input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  background: white;
+  outline: none;
+  transition: all 150ms var(--ease);
+  color: var(--gray-800);
+}
+.input::placeholder { color: var(--gray-400); }
+.input:hover { border-color: var(--gray-300); }
+.input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
+.field-label {
+  font-size: 12px; font-weight: 500;
+  color: var(--gray-700);
+  margin-bottom: 5px;
+  display: block;
+}
+
+/* AI 面板 */
+.ai-panel {
+  background: linear-gradient(135deg, var(--ai-50) 0%, white 80%);
+  border: 1px solid var(--ai-100);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+}
+.ai-panel::after {
+  content: ''; position: absolute;
+  top: 0; right: 0;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(123, 97, 255, 0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+.ai-panel-title {
+  font-size: 13px; font-weight: 600;
+  color: var(--ai-700);
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+.ai-panel-title::before {
+  content: '✦';
+  color: var(--ai-500);
+  font-size: 14px;
+  animation: aiSparkle 3s ease-in-out infinite;
+}
+@keyframes aiSparkle {
+  0%, 100% { opacity: 1; transform: rotate(0deg) scale(1); }
+  50% { opacity: 0.7; transform: rotate(180deg) scale(1.15); }
+}
+
+/* AI 浮动按钮 */
+.ai-fab {
+  position: fixed;
+  bottom: 28px; right: 28px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ai) 0%, #a78bff 100%);
+  color: white;
+  display: grid; place-items: center;
+  box-shadow: var(--shadow-ai-lg);
+  cursor: pointer;
+  z-index: 50;
+  transition: all 200ms var(--ease-out);
+}
+.ai-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 24px 48px -12px rgba(123, 97, 255, 0.45);
+}
+.ai-fab::before {
+  content: '✦';
+  font-size: 22px;
+  animation: aiSparkle 3s ease-in-out infinite;
+}
+.ai-fab-pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--ai);
+  opacity: 0.25;
+  animation: aiPulse 2s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes aiPulse {
+  0% { transform: scale(1); opacity: 0.3; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* 状态点 */
+.dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.dot-success { background: var(--success); box-shadow: 0 0 0 2px var(--success-bg); }
+.dot-warning { background: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
+.dot-danger { background: var(--danger); box-shadow: 0 0 0 2px var(--danger-bg); }
+.dot-info { background: var(--info); box-shadow: 0 0 0 2px var(--info-bg); }
+.dot-gray { background: var(--gray-400); }
+.dot-pulse { position: relative; }
+.dot-pulse::after {
+  content: ''; position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.5;
+  animation: dotPulse 1.5s ease-out infinite;
+}
+@keyframes dotPulse {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* 辅助 */
+.text-mono { font-family: var(--font-mono); }
+.text-display { font-family: var(--font-display); }
+.text-muted { color: var(--gray-500); }
+.text-strong { color: var(--gray-900); font-weight: 500; }
+.text-ai { color: var(--ai-700); }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
+.text-info { color: var(--info); }
+
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+.mb-2 { margin-bottom: 8px; } .mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; } .mb-6 { margin-bottom: 24px; }
+.w-full { width: 100%; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
+::-webkit-scrollbar-track { background: transparent; }
+.sidebar ::-webkit-scrollbar { width: 4px; }
+.sidebar ::-webkit-scrollbar-thumb { background: var(--gray-700); }
+
+/* 动画 */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-in { animation: fadeUp 500ms var(--ease-out) both; }
+.animate-in-1 { animation-delay: 50ms; }
+.animate-in-2 { animation-delay: 100ms; }
+.animate-in-3 { animation-delay: 160ms; }
+.animate-in-4 { animation-delay: 220ms; }
+.animate-in-5 { animation-delay: 280ms; }
+
+/* 分隔 */
+.divider { height: 1px; background: var(--gray-200); margin: 16px 0; }
+.divider-vertical { width: 1px; background: var(--gray-200); align-self: stretch; }
+
+</style>
+  <script src="rbac.js"></script>
+  <script src="workflow.js"></script>
+  <script src="i18n.js"></script>
+  <script src="ui-helpers.js"></script>
+<style>
+/* ============ BOM 视图 Tab 切换 ============ */
+.bom-view-tab {
+  padding: 12px 18px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: all 150ms;
+  display: inline-flex;
+  align-items: center;
+}
+.bom-view-tab:hover { color: var(--gray-900); }
+.bom-view-tab-active {
+  color: var(--ai-700);
+  border-bottom-color: var(--ai);
+  font-weight: 600;
+}
+/* MBOM 工艺路线 */
+.process-node {
+  display: flex; flex-direction: column; align-items: center;
+  flex-shrink: 0; min-width: 100px;
+}
+.process-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: white; font-size: 14px; font-weight: 700;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+  box-shadow: 0 0 0 3px white, 0 0 0 4px var(--gray-200);
+}
+.process-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--gray-900); text-align: center;
+  margin-bottom: 2px;
+}
+.process-machine {
+  font-size: 10px; color: var(--gray-500);
+  text-align: center;
+}
+.process-time {
+  font-size: 10px; color: var(--ai-700);
+  font-family: var(--font-mono); font-weight: 600;
+  margin-top: 2px;
+}
+.process-arrow {
+  flex: 1; min-width: 16px;
+  align-self: center;
+  color: var(--gray-300);
+  font-size: 18px; font-weight: 700;
+  text-align: center;
+}
+.param-cell {
+  display: flex; justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--gray-50);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.param-cell .param-label { color: var(--gray-500); }
+.param-cell .param-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--gray-900);
+}
+.panel-pcb {
+  background: linear-gradient(135deg, #84cc16 0%, #65a30d 100%);
+  border-radius: 3px;
+  position: relative;
+}
+.panel-pcb::before {
+  content: '';
+  position: absolute; inset: 4px;
+  border: 1px dashed rgba(255,255,255,0.4);
+  border-radius: 2px;
+}
+.consumable-cell {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: 8px;
+  font-size: 12px;
+}
+</style>
+
+<script>
+function switchBomView(view, btn) {
+  document.querySelectorAll('.bom-view-tab').forEach(t => t.classList.remove('bom-view-tab-active'));
+  if (btn) btn.classList.add('bom-view-tab-active');
+  document.querySelectorAll('.bom-view-pane').forEach(p => p.style.display = 'none');
+  const target = document.getElementById('bom-tab-' + view);
+  if (target) target.style.display = 'block';
+}
+function showBomVersionDetail(version) {
+  const el = document.getElementById('bom-version-detail');
+  if (!el) return;
+  // 简单 demo:点击版本节点时显示该版本的快照信息（共用变更摘要区显示)
+  if (window.Workflow) window.Workflow.showToast('已切换到版本 ' + version + ' 的变更摘要', 'info');
+}
+</script>
+</head>
+<body>
+<div id="app" class="app">
+  <div class="main">
+    <div class="page">
+
+      <!-- 返回按钮 -->
+      <div style="margin-bottom: 12px;">
+        <a href="bom.html" style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-600); text-decoration:none;" onmouseover="this.style.color='var(--brand)'" onmouseout="this.style.color='var(--gray-600)'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 18-6-6 6-6"/></svg>
+          返回 BOM 列表
+        </a>
+      </div>
+
+      <!-- 页头 -->
+      <div class="page-header animate-in">
+        <div>
+          <h1 class="page-title">客户 BOM 智能匹配</h1>
+          <div class="page-subtitle">
+            客户：联创科技
+            <span class="sep"></span>
+            项目：LC-2026-A
+            <span class="sep"></span>
+            物料数：156 项
+            <span class="sep"></span>
+            导入时间：2026-04-25 09:32
+          </div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-default" data-perm="bom.edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            重新导入
+          </button>
+          <button class="btn btn-default" data-perm="bom.export">导出 Excel</button>
+          <button class="btn btn-primary" data-perm="bom.create" onclick="submitBomForReview()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+            提交确认
+          </button>
+          <button class="btn btn-primary" data-perm="bom.approve" style="background: var(--success); border-color: var(--success);" onclick="approveBom()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+            审批通过
+          </button>
+          <span data-show-roles="viewer,sales,buyer" style="font-size: 11px; color: var(--gray-500); padding: 8px 12px; background: var(--gray-50); border-radius: 6px;">您无权审批此 BOM（只读）</span>
+        </div>
+      </div>
+
+      <!-- ============ BOM 审批流卡片 ============ -->
+      <div class="card mb-6 animate-in animate-in-1" style="border-color: var(--ai-200); background: linear-gradient(135deg, var(--ai-50) 0%, white 100%);">
+        <div class="card-header" style="background: linear-gradient(135deg, var(--ai-100) 0%, transparent 100%);">
+          <div class="card-title" style="color: var(--ai-700);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            BOM 提交确认流程
+          </div>
+          <div style="font-size: 11px; color: var(--gray-500);">流程模板:BOM 提交确认 · 当前状态:草稿 · 准备就绪可提交</div>
+        </div>
+        <div style="padding: 22px 24px;">
+          <div id="bom-approval-flow" style="display: flex; align-items: stretch; gap: 0; overflow-x: auto;">
+            <!-- JS 渲染 -->
+          </div>
+          <div id="bom-approval-action-area" style="margin-top: 18px; padding: 14px 16px; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+            <!-- JS 渲染 -->
+          </div>
+        </div>
+      </div>
+
+            <!-- 审批历史时间轴 -->
+      <div class="card mb-6 animate-in animate-in-2" style="margin-bottom: 16px;">
+        <div class="card-header">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            审批历史
+          </div>
+          <span style="font-size: 11px; color: var(--gray-500);">所有审批操作自动记录 · 可审计追溯</span>
+        </div>
+        <div id="bom-history" style="padding: 20px 24px;"></div>
+      </div>
+
+      <!-- 顶部统计 -->
+      <div class="stat-grid animate-in animate-in-1">
+        <div class="stat">
+          <div class="stat-label">总物料数</div>
+          <div class="stat-value">156</div>
+          <div class="stat-meta text-muted">15 个版本组</div>
+        </div>
+        <div class="stat stat-ai">
+          <div class="stat-label">
+            <span class="ai-chip">AI 匹配</span>
+          </div>
+          <div class="stat-value">142</div>
+          <div class="stat-meta">
+            <span class="stat-trend stat-trend-up">91.0%</span>
+            <span class="text-muted">匹配率</span>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">需人工确认</div>
+          <div class="stat-value text-warning">11</div>
+          <div class="stat-meta text-muted">置信度 &lt; 90%</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">未识别</div>
+          <div class="stat-value text-danger">3</div>
+          <div class="stat-meta text-muted">建议新增物料</div>
+        </div>
+      </div>
+
+      <!-- AI 增强结果概要 -->
+      <div class="ai-panel mb-6 animate-in animate-in-2">
+        <div class="ai-panel-title">AI 增强结果概要 · 处理耗时 8.2 秒</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; font-size: 13px; color: var(--gray-700); position: relative; z-index: 1;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: var(--ai-700); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;">语义匹配</span>
+              <span class="ai-chip">Agent ①</span>
+            </div>
+            <div style="font-size: 12.5px; line-height: 1.55; color: var(--gray-600);">132 项基于客户描述自动匹配到内部料号；优先级：客户 A 料号 → 有库存 → 合格供应商</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: var(--ai-700); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;">图像识别</span>
+              <span class="ai-chip">Agent ②</span>
+            </div>
+            <div style="font-size: 12.5px; line-height: 1.55; color: var(--gray-600);">10 项从客户上传的图片 / PDF 中提取并转为标准模板</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: var(--ai-700); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;">替代料推荐</span>
+              <span class="ai-chip">Agent ⑤</span>
+            </div>
+            <div style="font-size: 12.5px; line-height: 1.55; color: var(--gray-600);">3 项 EOL 物料已自动从 Digi-Key / Mouser / LCSC 推荐替代方案</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Manufacturing OS 视图切换 ============ -->
+      <div style="margin-bottom: 16px; border-bottom: 1px solid var(--gray-150); display: flex; gap: 4px;">
+        <button class="bom-view-tab bom-view-tab-active" onclick="switchBomView('ebom', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          EBOM · 工程 BOM
+        </button>
+        <button class="bom-view-tab" onclick="switchBomView('mbom', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          MBOM · 制造 BOM
+          <span style="font-size:9px; padding:1px 5px; background:var(--ai); color:white; border-radius:6px; margin-left:4px; font-weight:700;">NEW</span>
+        </button>
+        <button class="bom-view-tab" onclick="switchBomView('graph', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+          版本图谱
+          <span style="font-size:9px; padding:1px 5px; background:var(--ai); color:white; border-radius:6px; margin-left:4px; font-weight:700;">NEW</span>
+        </button>
+        <button class="bom-view-tab" onclick="switchBomView('avl', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          AVL · 替代料策略
+        </button>
+      </div>
+
+      <!-- ============ EBOM Tab(默认)============ -->
+      <div id="bom-tab-ebom" class="bom-view-pane">
+
+      <!-- 主体表格 -->
+      <div class="card animate-in animate-in-3">
+        <div class="card-header">
+          <div class="card-title">物料明细</div>
+          <div class="flex gap-2">
+            <button class="btn btn-default btn-sm">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              全部 156
+            </button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--ai-700);">需人工确认 11</button>
+            <button class="btn btn-ghost btn-sm text-danger">未识别 3</button>
+          </div>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width: 40px;"><input type="checkbox"></th>
+              <th>位号</th>
+              <th>客户描述</th>
+              <th>内部料号</th>
+              <th>制造商料号 (MPN)</th>
+              <th style="text-align: right;">用量</th>
+              <th style="text-align: right;">库存</th>
+              <th>匹配状态</th>
+              <th style="width: 40px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">R1, R5, R12</td>
+              <td>10K 0603 1% RES</td>
+              <td class="cell-mono cell-strong">EE-R-10K-0603-1</td>
+              <td class="cell-mono">RC0603FR-0710KL</td>
+              <td class="cell-num">3</td>
+              <td class="cell-num text-success">12,580</td>
+              <td><span class="badge badge-ai">Agent ① · 98.7%</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">C1~C8</td>
+              <td>100nF 0603 X7R 50V</td>
+              <td class="cell-mono cell-strong">EE-C-100N-0603-X7R</td>
+              <td class="cell-mono">CL10B104KB8NNNC</td>
+              <td class="cell-num">8</td>
+              <td class="cell-num text-success">42,300</td>
+              <td><span class="badge badge-ai">Agent ① · 99.2%</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">U2</td>
+              <td>STM32F103C8T6 LQFP48</td>
+              <td class="cell-mono cell-strong">EE-IC-STM32F103-C8</td>
+              <td class="cell-mono">STM32F103C8T6</td>
+              <td class="cell-num">1</td>
+              <td class="cell-num text-success">854</td>
+              <td><span class="badge badge-ai">Agent ① · 100%</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+
+            <!-- 图像识别行 -->
+            <tr>
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">L1, L2</td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 30px; background: linear-gradient(135deg, var(--ai-50), var(--ai-100)); border: 1px solid var(--ai-200); border-radius: 4px; flex-shrink: 0; font-size: 9px; color: var(--ai-700); font-weight: 600; letter-spacing: 0.4px;">IMG</span>
+                  <span style="font-size: 12px; color: var(--gray-600);">图像识别</span>
+                </div>
+              </td>
+              <td class="cell-mono cell-strong">EE-L-10UH-0805</td>
+              <td class="cell-mono">LQM2HPN100MJ0L</td>
+              <td class="cell-num">2</td>
+              <td class="cell-num text-success">3,420</td>
+              <td><span class="badge badge-ai">Agent ② · OCR</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+
+            <!-- 中置信度 - 需要确认 -->
+            <tr style="background: var(--ai-50);">
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">U7</td>
+              <td>3.3V LDO 500mA SOT-23</td>
+              <td>
+                <select class="input" style="font-family: var(--font-mono); padding: 4px 8px; max-width: 220px; font-size: 12px;">
+                  <option>EE-IC-LDO-3V3-AMS1117</option>
+                  <option>EE-IC-LDO-3V3-AP2127K</option>
+                  <option>EE-IC-LDO-3V3-XC6206</option>
+                </select>
+              </td>
+              <td class="cell-mono">AMS1117-3.3</td>
+              <td class="cell-num">1</td>
+              <td class="cell-num">186</td>
+              <td><span class="badge badge-ai">Agent ① · 76.4%</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+            <tr style="background: var(--ai-50);">
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">D3, D4</td>
+              <td>SCHOTTKY DIODE 40V 2A</td>
+              <td>
+                <select class="input" style="font-family: var(--font-mono); padding: 4px 8px; max-width: 220px; font-size: 12px;">
+                  <option>EE-D-SS24-SMA</option>
+                  <option>EE-D-MBRS240-SMB</option>
+                  <option>EE-D-SK24-SMA</option>
+                </select>
+              </td>
+              <td class="cell-mono">SS24</td>
+              <td class="cell-num">2</td>
+              <td class="cell-num text-warning">28</td>
+              <td><span class="badge badge-ai">Agent ① · 82.1%</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+
+            <!-- EOL 替代 -->
+            <tr>
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">U9</td>
+              <td>USB-Serial Bridge CP2102</td>
+              <td class="cell-mono" style="text-decoration: line-through; opacity: 0.55;">EE-IC-CP2102</td>
+              <td>
+                <span class="cell-mono" style="text-decoration: line-through; opacity: 0.55;">CP2102-GMR</span>
+                <span class="badge badge-danger" style="margin-left: 6px;">EOL</span>
+              </td>
+              <td class="cell-num">1</td>
+              <td class="cell-num text-danger">0</td>
+              <td><span class="badge badge-ai">Agent ⑤ 替代</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+            <!-- AI 推荐替代方案 -->
+            <tr>
+              <td colspan="2"></td>
+              <td colspan="7" style="background: linear-gradient(90deg, var(--ai-50) 0%, white 100%); padding: 12px 14px;">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                  <span class="ai-chip">Agent ⑤</span>
+                  <span style="font-size: 12px; color: var(--ai-700); font-weight: 500;">已从 Digi-Key / Mouser / LCSC 找到 3 个替代方案</span>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button class="btn btn-default btn-sm" style="border-color: var(--ai-200); background: white; box-shadow: var(--shadow-sm);">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-right: 4px;"></span>
+                    <span class="cell-mono">CH340G</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">¥ 2.40</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">库存 8K</span>
+                    <span class="badge badge-ai" style="margin-left: 6px;">推荐</span>
+                  </button>
+                  <button class="btn btn-default btn-sm">
+                    <span class="cell-mono">FT232RL</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">¥ 18.50</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">库存 1.2K</span>
+                  </button>
+                  <button class="btn btn-default btn-sm">
+                    <span class="cell-mono">CP2104</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">¥ 6.80</span>
+                    <span style="margin-left: 6px; color: var(--gray-500);">库存 856</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- 未识别 -->
+            <tr style="background: var(--danger-bg);">
+              <td><input type="checkbox"></td>
+              <td class="cell-mono">U12</td>
+              <td>专用模块 模组 - 无标准描述</td>
+              <td class="text-danger" style="font-size: 12px; font-weight: 500;">⚠ 未识别</td>
+              <td>—</td>
+              <td class="cell-num">1</td>
+              <td>—</td>
+              <td><span class="badge badge-danger">建议新增</span></td>
+              <td><button class="btn btn-ghost btn-sm">⋯</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ECN 联动提示 -->
+      <div class="card mb-6 animate-in animate-in-4" style="margin-top: 16px; border-left: 3px solid var(--ai); border-radius: 0 var(--r-lg) var(--r-lg) 0;">
+        <div style="padding: 14px 18px; display: flex; align-items: flex-start; gap: 12px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--ai-50); border: 1px solid var(--ai-100); display: grid; place-items: center; flex-shrink: 0;">
+            <span style="color: var(--ai-700); font-size: 16px;">✦</span>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: var(--gray-900); font-size: 13px;">检测到本 BOM 与现行版本 V2.3 存在差异</span>
+              <span class="ai-chip">Agent ⑧</span>
+            </div>
+            <div style="font-size: 12px; color: var(--gray-600); line-height: 1.6;">
+              发现 6 项物料变更（替换 4 项，新增 1 项，删除 1 项）。受影响范围：在制工单 3 张、库存批次 12 个、未发货订单 2 笔。
+              <a href="ecn.html" style="color: var(--ai-700); font-weight: 500; margin-left: 4px;">→ 查看变更影响分析</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /EBOM Tab 结束 -->
+
+      <!-- ============ MBOM Tab ============ -->
+      <div id="bom-tab-mbom" class="bom-view-pane" style="display:none;">
+
+        <!-- MBOM 说明 -->
+        <div class="card mb-6" style="border-color: var(--ai-200); background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); margin-bottom: 16px;">
+          <div style="padding: 14px 18px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:var(--ai); color:white; border-radius:10px; display:grid; place-items:center; font-size:18px;">🏭</div>
+            <div style="flex:1;">
+              <div style="font-size:14px; font-weight:700; color:var(--gray-900);">MBOM · 制造 BOM <span style="font-size:11px; color:var(--gray-500); font-weight:500;">(派生自 EBOM V3.2 · 上次同步 2026-05-21 09:32)</span></div>
+              <div style="font-size:12px; color:var(--gray-600); margin-top:2px;">连接 SMT 产线 · 含 Panel/钢网/工艺路线/辅料/工序 · 直接驱动 MES 排产</div>
+            </div>
+            <button class="btn btn-default btn-sm" onclick="openMesSync()">同步 MES</button>
+            <button class="btn btn-default btn-sm">导出 MBOM</button>
+          </div>
+        </div>
+
+        <!-- 工艺路线 -->
+        <div class="card mb-6" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div class="card-title">工艺路线 (Process Routing)</div>
+            <span style="font-size:11px; color:var(--gray-500);">8 道工序 · 4 个工作中心 · 估时 285 秒/PCS</span>
+          </div>
+          <div style="padding: 20px 24px;">
+            <div style="display:flex; align-items:stretch; gap:0; overflow-x:auto;">
+              <!-- 工序节点 -->
+              <div class="process-node">
+                <div class="process-icon" style="background:#0891b2;">1</div>
+                <div class="process-label">锡膏印刷</div>
+                <div class="process-machine">DEK Horizon 03i</div>
+                <div class="process-time">28s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#7B61FF;">2</div>
+                <div class="process-label">SPI 锡膏检测</div>
+                <div class="process-machine">Koh Young aSPIre3</div>
+                <div class="process-time">12s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#f59e0b;">3</div>
+                <div class="process-label">高速贴片</div>
+                <div class="process-machine">Yamaha YSM20R ×2</div>
+                <div class="process-time">98s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#f59e0b;">4</div>
+                <div class="process-label">精密贴片</div>
+                <div class="process-machine">Yamaha YSM10</div>
+                <div class="process-time">62s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#dc2626;">5</div>
+                <div class="process-label">回流焊接</div>
+                <div class="process-machine">Heller 1936 MK7</div>
+                <div class="process-time">42s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#7B61FF;">6</div>
+                <div class="process-label">AOI 检测</div>
+                <div class="process-machine">Koh Young Zenith</div>
+                <div class="process-time">15s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:#16a34a;">7</div>
+                <div class="process-label">ICT 测试</div>
+                <div class="process-machine">Keysight i3070</div>
+                <div class="process-time">18s</div>
+              </div>
+              <div class="process-arrow">→</div>
+              <div class="process-node">
+                <div class="process-icon" style="background:var(--success);">✓</div>
+                <div class="process-label">合格入库</div>
+                <div class="process-machine">SN 绑定 · 入 WIP</div>
+                <div class="process-time">10s</div>
+              </div>
+            </div>
+
+            <!-- 关键工艺参数 -->
+            <div style="margin-top:20px; padding-top:18px; border-top:1px dashed var(--gray-200);">
+              <div style="font-size:11px; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">关键工艺参数（变更需 PE 审批）</div>
+              <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px;">
+                <div class="param-cell"><span class="param-label">回流峰值温度</span><span class="param-value">245°C ±3</span></div>
+                <div class="param-cell"><span class="param-label">回流停留时间</span><span class="param-value">60-90s</span></div>
+                <div class="param-cell"><span class="param-label">锡膏厚度</span><span class="param-value">120 ±10μm</span></div>
+                <div class="param-cell"><span class="param-label">贴片压力</span><span class="param-value">2.5N</span></div>
+                <div class="param-cell"><span class="param-label">N2 浓度</span><span class="param-value">&lt;500 ppm</span></div>
+                <div class="param-cell"><span class="param-label">SPI 容差</span><span class="param-value">±15%</span></div>
+                <div class="param-cell"><span class="param-label">AOI 灵敏度</span><span class="param-value">L3 高</span></div>
+                <div class="param-cell"><span class="param-label">板温曲线</span><span class="param-value">7 区配方</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel + 钢网 + 工装 三列 -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:16px;">
+
+          <!-- Panel -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Panel · 拼板规格</div>
+            </div>
+            <div style="padding:16px 18px;">
+              <div style="aspect-ratio:1.4; background:linear-gradient(135deg, #f0fdf4 0%, white 100%); border:2px dashed var(--success); border-radius:8px; padding:8px; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:repeat(2, 1fr); gap:4px; margin-bottom:12px;">
+                <div class="panel-pcb"></div><div class="panel-pcb"></div><div class="panel-pcb"></div>
+                <div class="panel-pcb"></div><div class="panel-pcb"></div><div class="panel-pcb"></div>
+              </div>
+              <div style="font-size:12px; color:var(--gray-700);">
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">拼板布局</span><strong>3 × 2 = 6 联</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">Panel 尺寸</span><strong>280 × 200 mm</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">单 PCB 尺寸</span><strong>85 × 90 mm</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">板厚</span><strong>1.6 mm FR4</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">利用率</span><strong style="color:var(--success);">82%</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">连接方式</span><strong>V-cut + 邮票孔</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 钢网 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">钢网 · Stencil</div>
+            </div>
+            <div style="padding:16px 18px;">
+              <div style="aspect-ratio:1.4; background:#27272a; border-radius:8px; margin-bottom:12px; position:relative; overflow:hidden;">
+                <div style="position:absolute; inset:18px; background:repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 8px); border:1px dashed rgba(255,255,255,0.3); border-radius:4px;"></div>
+                <div style="position:absolute; bottom:8px; right:8px; color:rgba(255,255,255,0.5); font-size:9px; font-family:var(--font-mono);">SS304 · 0.12mm</div>
+              </div>
+              <div style="font-size:12px; color:var(--gray-700);">
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">钢网编号</span><strong class="cell-mono">STN-LC-018-V32</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">厚度</span><strong>0.12 mm</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">材质</span><strong>SS304 不锈钢</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">开口数</span><strong>1,248 个</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">已用次数</span><strong>12,860 次 (寿命 60%)</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">下次清洗</span><strong style="color:var(--warning);">5/26 (480 次后)</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 工装夹具 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">工装夹具 + 治具</div>
+            </div>
+            <div style="padding:16px 18px;">
+              <div style="aspect-ratio:1.4; background:linear-gradient(135deg, #fef3c7 0%, white 100%); border-radius:8px; margin-bottom:12px; padding:10px; display:flex; align-items:center; justify-content:center;">
+                <span style="font-size:36px;">🔧</span>
+              </div>
+              <div style="font-size:12px; color:var(--gray-700);">
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">ICT 治具</span><strong class="cell-mono">FIX-LC-018-ICT</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">分板治具</span><strong class="cell-mono">FIX-LC-018-DEP</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">FCT 测试夹具</span><strong class="cell-mono">FIX-LC-018-FCT</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">AOI 程序</span><strong class="cell-mono">AOI-V32-R3.aoi</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">ICT 程序</span><strong class="cell-mono">ICT-V32.i3070</strong></div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;"><span style="color:var(--gray-500);">SMT 程序版本</span><strong class="cell-mono" style="color:var(--ai-700);">SMT-V32-R5</strong></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- SMT 物料 + 辅料 -->
+        <div class="card mb-6" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div class="card-title">SMT 站位贴装料 · Feeder Layout</div>
+            <span style="font-size:11px; color:var(--gray-500);">SMT 142 项 · 高速 86 项 · 精密 56 项 · 占用 Feeder 18 条</span>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>站位号</th>
+                <th>机台</th>
+                <th>料号</th>
+                <th>位号</th>
+                <th>用量/PCS</th>
+                <th>包装</th>
+                <th>Feeder</th>
+                <th>当前库位</th>
+                <th>校验</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="cell-mono">M1-S03</td>
+                <td>YSM20R-1</td>
+                <td class="cell-mono cell-strong">EE-C-100N-0603</td>
+                <td>C1~C8</td>
+                <td>8</td>
+                <td>盘装 4000/卷</td>
+                <td>F-08mm</td>
+                <td>A2-15</td>
+                <td><span class="diff-tag diff-ok">扫码已绑定</span></td>
+              </tr>
+              <tr>
+                <td class="cell-mono">M1-S07</td>
+                <td>YSM20R-1</td>
+                <td class="cell-mono cell-strong">EE-R-10K-0603</td>
+                <td>R1, R5, R12</td>
+                <td>3</td>
+                <td>盘装 5000/卷</td>
+                <td>F-08mm</td>
+                <td>A2-22</td>
+                <td><span class="diff-tag diff-ok">扫码已绑定</span></td>
+              </tr>
+              <tr>
+                <td class="cell-mono">M1-S15</td>
+                <td>YSM20R-2</td>
+                <td class="cell-mono cell-strong">EE-IC-CH340G-SOP16</td>
+                <td>U3</td>
+                <td>1</td>
+                <td>管装 50/管</td>
+                <td>F-32mm 矩阵</td>
+                <td>B1-08</td>
+                <td><span class="diff-tag diff-warn">⚠ 待扫码</span></td>
+              </tr>
+              <tr>
+                <td class="cell-mono">M2-S04</td>
+                <td>YSM10</td>
+                <td class="cell-mono cell-strong">EE-IC-STM32F103C8T6</td>
+                <td>U1</td>
+                <td>1</td>
+                <td>托盘 90/盘</td>
+                <td>Tray</td>
+                <td>B2-01</td>
+                <td><span class="diff-tag diff-ok">扫码已绑定</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 辅料 -->
+          <div style="padding:14px 18px; border-top:1px dashed var(--gray-200);">
+            <div style="font-size:11px; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">辅料 (Consumables) · 不计入 EBOM</div>
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;">
+              <div class="consumable-cell"><span style="font-size:18px;">🧪</span><div><strong>锡膏</strong><div style="font-size:10px; color:var(--gray-500);">Senju M705-GRN360 · 0.18 g/板</div></div></div>
+              <div class="consumable-cell"><span style="font-size:18px;">💨</span><div><strong>助焊剂</strong><div style="font-size:10px; color:var(--gray-500);">Alpha EF-2202 · 喷雾</div></div></div>
+              <div class="consumable-cell"><span style="font-size:18px;">🧼</span><div><strong>清洗剂</strong><div style="font-size:10px; color:var(--gray-500);">Vigon N600 · 钢网用</div></div></div>
+              <div class="consumable-cell"><span style="font-size:18px;">🛡</span><div><strong>红胶</strong><div style="font-size:10px; color:var(--gray-500);">底部填充 · IC 加固</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 版本图谱 Tab ============ -->
+      <div id="bom-tab-graph" class="bom-view-pane" style="display:none;">
+
+        <!-- 版本说明 -->
+        <div class="card mb-6" style="border-color: var(--ai-200); background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); margin-bottom: 16px;">
+          <div style="padding: 14px 18px; display:flex; align-items:center; gap:12px;">
+            <div style="width:40px; height:40px; background:var(--ai); color:white; border-radius:10px; display:grid; place-items:center; font-size:18px;">📐</div>
+            <div style="flex:1;">
+              <div style="font-size:14px; font-weight:700; color:var(--gray-900);">BOM Version Graph · 设计图谱</div>
+              <div style="font-size:12px; color:var(--gray-600); margin-top:2px;">完整版本演进树 · 含分支/合并/ECO · 影响工单与库存可视化 · 点击节点查看详情</div>
+            </div>
+            <select class="input" style="font-size:12px; padding:5px 10px;">
+              <option>全部版本</option>
+              <option>近 6 个月</option>
+              <option>仅主干</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 版本图谱可视化 -->
+        <div class="card mb-6" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div class="card-title">版本演进树（共 8 个版本 · 2 个分支 · 1 个 ECO）</div>
+            <div style="display: flex; gap: 12px; font-size: 11px;">
+              <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#71717a; border-radius:50%;"></span>已归档</span>
+              <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#16a34a; border-radius:50%;"></span>已发布</span>
+              <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#7B61FF; border-radius:50%;"></span>当前</span>
+              <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>审批中</span>
+              <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#dc2626; border-radius:50%;"></span>ECO 分支</span>
+            </div>
+          </div>
+          <div style="padding: 24px;">
+            <svg viewBox="0 0 1100 380" style="width:100%; height:380px;">
+              <!-- 主干横轴 -->
+              <line x1="50" y1="200" x2="1050" y2="200" stroke="var(--gray-150)" stroke-width="2" stroke-dasharray="4 4"/>
+
+              <!-- ECO 分支线（向上）-->
+              <path d="M 480 200 Q 480 130 540 110 L 720 110" fill="none" stroke="#dc2626" stroke-width="3"/>
+              <!-- ECO 合并回主干 -->
+              <path d="M 720 110 Q 800 110 820 200" fill="none" stroke="#dc2626" stroke-width="3" stroke-dasharray="6 4"/>
+
+              <!-- 实验分支（向下）-->
+              <path d="M 620 200 Q 620 280 700 290" fill="none" stroke="#71717a" stroke-width="2" stroke-dasharray="6 4"/>
+
+              <!-- 主干节点连线 -->
+              <line x1="140" y1="200" x2="930" y2="200" stroke="var(--gray-300)" stroke-width="3"/>
+
+              <!-- 节点 1: V1.0 (归档) -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V1.0')">
+                <circle cx="140" cy="200" r="14" fill="#71717a" stroke="white" stroke-width="3"/>
+                <text x="140" y="205" text-anchor="middle" fill="white" font-size="9" font-weight="700">V1</text>
+                <text x="140" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V1.0 · 首版</text>
+                <text x="140" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2024-08-12</text>
+                <text x="140" y="245" text-anchor="middle" font-size="9" fill="var(--gray-400)">归档 · 0 工单</text>
+              </g>
+
+              <!-- 节点 2: V1.1 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V1.1')">
+                <circle cx="260" cy="200" r="12" fill="#71717a" stroke="white" stroke-width="3"/>
+                <text x="260" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V1.1 · 修补</text>
+                <text x="260" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2024-11-03</text>
+                <text x="260" y="245" text-anchor="middle" font-size="9" fill="var(--gray-400)">归档 · 2 工单</text>
+              </g>
+
+              <!-- 节点 3: V2.0 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.0')">
+                <circle cx="380" cy="200" r="14" fill="#16a34a" stroke="white" stroke-width="3"/>
+                <text x="380" y="205" text-anchor="middle" fill="white" font-size="9" font-weight="700">V2</text>
+                <text x="380" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V2.0 · 大改</text>
+                <text x="380" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2025-04-15</text>
+                <text x="380" y="245" text-anchor="middle" font-size="9" fill="var(--success)">已发布 · 8 工单</text>
+              </g>
+
+              <!-- 节点 4: V2.1 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.1')">
+                <circle cx="480" cy="200" r="12" fill="#16a34a" stroke="white" stroke-width="3"/>
+                <text x="480" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V2.1</text>
+                <text x="480" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2025-07-22</text>
+                <text x="480" y="245" text-anchor="middle" font-size="9" fill="var(--success)">已发布</text>
+              </g>
+
+              <!-- ECO 分支起点 V2.1-ECO-A -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.1-ECO-A')">
+                <circle cx="540" cy="110" r="12" fill="#dc2626" stroke="white" stroke-width="3"/>
+                <text x="540" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="#dc2626">V2.1-ECO-A</text>
+                <text x="540" y="95" text-anchor="middle" font-size="9" fill="#dc2626">紧急 EOL 替换分支</text>
+              </g>
+
+              <!-- 节点 5: V2.2 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.2')">
+                <circle cx="620" cy="200" r="12" fill="#16a34a" stroke="white" stroke-width="3"/>
+                <text x="620" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V2.2</text>
+                <text x="620" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2025-10-08</text>
+                <text x="620" y="245" text-anchor="middle" font-size="9" fill="var(--success)">已发布</text>
+              </g>
+
+              <!-- ECO 节点 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.1-ECO-A-R3')">
+                <circle cx="720" cy="110" r="11" fill="#dc2626" stroke="white" stroke-width="3"/>
+                <text x="720" y="80" text-anchor="middle" font-size="11" font-weight="600" fill="#dc2626">V2.1-ECO-A-R3</text>
+                <text x="720" y="95" text-anchor="middle" font-size="9" fill="#dc2626">即将合并回主干 →</text>
+              </g>
+
+              <!-- 节点 6: V2.3 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.3')">
+                <circle cx="820" cy="200" r="13" fill="#16a34a" stroke="white" stroke-width="3"/>
+                <text x="820" y="170" text-anchor="middle" font-size="11" font-weight="600" fill="var(--gray-700)">V2.3</text>
+                <text x="820" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2026-02-18</text>
+                <text x="820" y="245" text-anchor="middle" font-size="9" fill="var(--success)">已发布 · 12 工单</text>
+              </g>
+
+              <!-- 节点 7: V3.2 (当前 · 审批中) -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V3.2')">
+                <circle cx="930" cy="200" r="16" fill="#7B61FF" stroke="white" stroke-width="3"/>
+                <text x="930" y="205" text-anchor="middle" fill="white" font-size="10" font-weight="700">V3.2</text>
+                <text x="930" y="160" text-anchor="middle" font-size="12" font-weight="700" fill="#7B61FF">⭐ V3.2 · 当前</text>
+                <text x="930" y="232" text-anchor="middle" font-size="10" fill="var(--gray-500)" font-family="JetBrains Mono">2026-05-21</text>
+                <text x="930" y="245" text-anchor="middle" font-size="9" fill="#7B61FF" font-weight="600">审批中 · 待 QE</text>
+              </g>
+
+              <!-- 实验分支 -->
+              <g style="cursor:pointer;" onclick="showBomVersionDetail('V2.2-LAB')">
+                <circle cx="700" cy="290" r="10" fill="#a1a1aa" stroke="white" stroke-width="3" stroke-dasharray="2 2"/>
+                <text x="700" y="320" text-anchor="middle" font-size="10" fill="var(--gray-500)">V2.2-LAB · 国产化实验</text>
+                <text x="700" y="333" text-anchor="middle" font-size="9" fill="var(--gray-400)">未发布 · 仅研发</text>
+              </g>
+
+            </svg>
+          </div>
+
+          <!-- 当前选中版本的变更摘要 -->
+          <div style="padding: 16px 22px; border-top: 1px solid var(--gray-150); background: linear-gradient(135deg, var(--ai-50) 0%, white 100%);" id="bom-version-detail">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+              <span style="font-size:14px; font-weight:700; color:var(--ai-700);">⭐ V3.2 · 当前选中版本</span>
+              <span class="diff-tag" style="background:#ede9fe; color:#7B61FF; border:1px solid #c4b5fd;">审批中</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; font-size:12px;">
+              <div>
+                <div style="color:var(--gray-500); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">变更点</div>
+                <div style="font-weight:700; color:var(--gray-900);">6 项 (替换 4 / 增 1 / 删 1)</div>
+              </div>
+              <div>
+                <div style="color:var(--gray-500); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">影响工单</div>
+                <div style="font-weight:700; color:var(--warning);">3 张在制 + 9 待投产</div>
+              </div>
+              <div>
+                <div style="color:var(--gray-500); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">成本变化</div>
+                <div style="font-weight:700; color:var(--success);">↓ ¥4.40 /板 (-5.1%)</div>
+              </div>
+              <div>
+                <div style="color:var(--gray-500); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">风险评估</div>
+                <div style="font-weight:700; color:var(--warning);">中风险 · CCC 重测</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 版本对比矩阵 -->
+        <div class="card mb-6" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div class="card-title">版本对比矩阵</div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <span style="font-size:11px; color:var(--gray-500);">对比:</span>
+              <select class="input" style="font-size:12px; padding:4px 8px; width:120px;"><option>V2.3</option><option>V2.2</option></select>
+              <span style="color:var(--gray-400);">vs</span>
+              <select class="input" style="font-size:12px; padding:4px 8px; width:120px;"><option selected>V3.2 (当前)</option></select>
+              <button class="btn btn-default btn-sm">导出差异</button>
+            </div>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>对比维度</th>
+                <th>V2.3</th>
+                <th>V3.2 (当前)</th>
+                <th>差异</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>物料总数</td><td class="cell-mono">152 项</td><td class="cell-mono">156 项</td><td><span class="diff-tag diff-up">+4 项</span></td></tr>
+              <tr><td>BOM 单板成本</td><td class="cell-mono">¥86.40</td><td class="cell-mono">¥82.00</td><td><span class="diff-tag diff-ok">↓ ¥4.40 (-5.1%)</span></td></tr>
+              <tr><td>EOL 物料数</td><td class="cell-mono" style="color:var(--danger);">3 项</td><td class="cell-mono" style="color:var(--success);">0 项</td><td><span class="diff-tag diff-ok">全部已替换</span></td></tr>
+              <tr><td>关键 IC 数</td><td class="cell-mono">8 颗</td><td class="cell-mono">8 颗</td><td><span class="diff-tag" style="background:var(--gray-100); color:var(--gray-700);">无变化</span></td></tr>
+              <tr><td>SMT 站位</td><td class="cell-mono">18 站</td><td class="cell-mono">18 站</td><td><span class="diff-tag" style="background:var(--gray-100); color:var(--gray-700);">无变化</span></td></tr>
+              <tr><td>钢网</td><td class="cell-mono">STN-LC-018-V23</td><td class="cell-mono">STN-LC-018-V32</td><td><span class="diff-tag diff-warn">需重做</span></td></tr>
+              <tr><td>认证状态</td><td>CCC 通过</td><td>CCC 待重测</td><td><span class="diff-tag diff-warn">⚠ 待认证</span></td></tr>
+              <tr><td>关联 ECN</td><td>-</td><td class="cell-mono">ECN-2026-0425-007</td><td><span class="diff-tag diff-up">USB EOL 替换</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ AVL Tab(占位 · 跳转 substitute-rules.html) ============ -->
+      <div id="bom-tab-avl" class="bom-view-pane" style="display:none;">
+        <div class="card" style="padding: 40px 24px; text-align: center;">
+          <div style="font-size: 32px; margin-bottom: 12px;">⏳</div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--gray-900); margin-bottom: 4px;">AVL 替代料策略引擎</div>
+          <div style="font-size: 12px; color: var(--gray-500); margin-bottom: 16px;">完整的 5 种替代料策略配置请前往独立配置页</div>
+          <a href="substitute-rules.html" class="btn btn-primary btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+            打开 AVL 规则引擎
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 导航数据（移除 MES 引用） =====
+const NAV = {
+  brand: { name: '硬禾科技', sub: 'ezPLM 协同平台', initial: '硬' },
+  sections: [
+    {
+      title: '工作台',
+      items: [
+        { id: 'dashboard', label: 'SMT 工作台', ai: true, href: 'index.html' },
+        { id: 'rfq', label: 'RFQ 管理', ai: true, href: 'rfq.html' },
+      ]
+    },
+    {
+      title: '工程数据',
+      items: [
+        { id: 'bom', label: 'BOM 管理', ai: true, href: 'bom.html' },
+        { id: 'bom-compare', label: 'BOM 版本比对', ai: true, href: 'bom-compare.html' },
+        { id: 'ecn', label: 'ECN 工程变更', ai: true, href: 'ecn.html' },
+        { id: 'material', label: '物料与规格', href: 'material.html' },
+      ]
+    },
+    {
+      title: '供应链',
+      items: [
+        { id: 'procurement', label: '采购与供应商', ai: true, href: 'procurement.html' },
+        { id: 'quote', label: '报价与客户', ai: true, href: 'quote.html' },
+        { id: 'quote-sim', label: '报价模拟运算', ai: true, href: 'quote-sim.html' },
+        { id: 'procurement-preset', label: '供应商预设下单', ai: true, href: 'procurement-preset.html' },
+        { id: 'reconciliation', label: '对账单 AR/AP', ai: true, href: 'reconciliation.html' },
+      ]
+    },
+    {
+      title: '追溯与协同',
+      items: [
+        { id: 'trace', label: '批次级追溯', ai: true, href: 'trace.html' },
+        { id: 'supplier', label: '供应商门户', ai: true, href: 'supplier.html' },
+        { id: 'shortage-eta', label: '缺料 ETA 齐料', ai: true, href: 'shortage-eta.html' },
+        { id: 'kitting', label: '齐套分析 / GTB', ai: true, href: 'kitting.html' },
+        { id: 'inventory', label: '库存总览看板', href: 'inventory.html' },
+      ]
+    },
+    {
+      title: '二期预览',
+      items: [
+        { id: 'phase2', label: '二期总览', href: 'phase2.html' },
+        { id: 'p2-ecn', label: 'ECN 批量联动', href: 'p2-ecn.html' },
+        { id: 'p2-quality', label: '品质数据联动', href: 'p2-quality.html' },
+        { id: 'p2-po-wo', label: 'PO 反查工单', href: 'p2-po-wo.html' },
+        { id: 'p2-ocr', label: '生产报表 OCR', href: 'p2-ocr-report.html' },
+        { id: 'p2-rpa', label: 'RPA run ERP', href: 'p2-rpa-erp.html' },
+        { id: 'p2-scrape', label: '实时询价抓取', href: 'p2-scrape.html' },
+        { id: 'p2-portal', label: '客户自助门户', href: 'p2-portal.html' },
+        { id: 'p2-aps', label: '高级 APS 排产', href: 'p2-aps.html' },
+        { id: 'p2-sn', label: 'SN 级追溯', href: 'p2-sn-trace.html' },
+      ]
+    },
+  ]
+};
+
+// 图标库 - 简洁线性图标
+const ICONS = {
+  bom: '<path d="M3 7h18M3 12h18M3 17h18" stroke-linecap="round"/>',
+  ecn: '<path d="M3 12c0-5 4-9 9-9 3 0 6 1.5 7.5 4M21 12c0 5-4 9-9 9-3 0-6-1.5-7.5-4M16 7l5-3M8 17l-5 3" stroke-linecap="round" stroke-linejoin="round"/>',
+  material: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/>',
+  procurement: '<path d="M5 7h14l-1.5 9H6.5z M5 7l-1-3H2 M9 21h0 M17 21h0" stroke-linecap="round" stroke-linejoin="round"/>',
+  quote: '<path d="M14 3v5h5 M5 3h9l5 5v13H5z M9 13h6 M9 17h4" stroke-linecap="round" stroke-linejoin="round"/>',
+  plan: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  iqc: '<path d="M9 12l2 2 4-4 M21 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9c2.5 0 4.5 1 6 2.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  complaint: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z M12 7v4 M12 15h0" stroke-linecap="round" stroke-linejoin="round"/>',
+  compliance: '<path d="M12 22s-8-4-8-12V5l8-3 8 3v5c0 8-8 12-8 12z M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>',
+  trace: '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 7l3 3M14 7l3-2M7 17l3-3M14 17l3 2" stroke-linecap="round"/>',
+  supplier: '<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2 M16 3.13a4 4 0 010 7.75 M21 21v-2a4 4 0 00-3-3.87" stroke-linecap="round" stroke-linejoin="round"/>',
+  slow: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round" stroke-linejoin="round"/>',
+  trader: '<path d="M3 3h18v4H3z M5 7v14h14V7 M9 21v-4h6v4 M9 11h6 M9 15h6" stroke-linecap="round" stroke-linejoin="round"/>',
+  'quote-sim': '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5" stroke-linecap="round"/>',
+  'procurement-preset': '<path d="M5 7h14l-1 9H6z M5 7l-1-3H2 M9 21h.01M17 21h.01M9 11h6" stroke-linecap="round" stroke-linejoin="round"/>',
+  'reconciliation': '<path d="M3 6h18M3 12h18M3 18h18 M8 3v18" stroke-linecap="round"/>',
+  'shortage-eta': '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2 M9 2h6" stroke-linecap="round" stroke-linejoin="round"/>',
+  'p2-ecn': '<path d="M3 12c0-5 4-9 9-9 3 0 6 1.5 7.5 4M21 12c0 5-4 9-9 9-3 0-6-1.5-7.5-4" stroke-linecap="round"/>',
+  'p2-quality': '<path d="M12 22s-8-4-8-12V5l8-3 8 3v5c0 8-8 12-8 12z" stroke-linecap="round" stroke-linejoin="round"/>',
+  'p2-po-wo': '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 7l3 3M14 14l3 3" stroke-linecap="round"/>',
+  'p2-ocr': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6" stroke-linecap="round"/>',
+  'p2-rpa': '<rect x="4" y="6" width="16" height="12" rx="2"/><path d="M9 11l3 2-3 2M12 2v4" stroke-linecap="round" stroke-linejoin="round"/>',
+  'p2-scrape': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/>',
+  'p2-portal': '<path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M12.5 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/>',
+  'p2-aps': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16" stroke-linecap="round"/>',
+  'p2-sn': '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 7l3 3M14 7l3-2M7 17l3-3M14 17l3 2" stroke-linecap="round"/>',
+  'dashboard': '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  'rfq': '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke-linejoin="round"/><path d="M8 9h8M8 13h5" stroke-linecap="round"/>',
+  'bom-compare': '<path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M12 2v20" stroke-linecap="round"/>',
+  'kitting': '<path d="M20 7L12 3 4 7v10l8 4 8-4z M12 12l8-5M12 12L4 7M12 12v9" stroke-linecap="round" stroke-linejoin="round"/>',
+  'inventory': '<path d="M3 9l9-6 9 6v11a1 1 0 01-1 1H4a1 1 0 01-1-1z M9 21V12h6v9" stroke-linecap="round" stroke-linejoin="round"/>',
+  'phase2': '<path d="M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+
+function iconSvg(id) {
+  const path = ICONS[id] || '<rect x="2" y="2" width="12" height="12" rx="2"/>';
+  return `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${path}</svg>`;
+}
+
+function renderSidebar(currentId) {
+  const sections = NAV.sections.map(s => `
+    <div class="nav-section">
+      <div class="nav-section-title">${s.title}</div>
+      ${s.items.map(item => `
+        <a href="${item.href}" class="nav-item ${item.id === currentId ? 'active' : ''}">
+          ${iconSvg(item.id)}
+          <span>${item.label}</span>
+          ${item.ai ? '<span class="ai-dot" title="AI 增强"></span>' : ''}
+        </a>
+      `).join('')}
+    </div>
+  `).join('');
+
+  return `
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <div class="brand-mark">${NAV.brand.initial}</div>
+          <div>
+            <div class="brand-name">${NAV.brand.name}</div>
+            <div class="brand-sub">${NAV.brand.sub}</div>
+          </div>
+        </div>
+      </div>
+      <nav class="nav">${sections}</nav>
+      <div class="user-card">
+        <div class="user-avatar">王</div>
+        <div class="user-info">
+          <div class="user-name">王 工 / 联创科技</div>
+          <div class="user-role">PM 经理 · A 类客户</div>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function renderTopbar(crumbs) {
+  const breadcrumb = crumbs.map((c, i) => {
+    const isLast = i === crumbs.length - 1;
+    return `<span class="${isLast ? 'current' : ''}">${c}</span>${!isLast ? '<span class="sep">/</span>' : ''}`;
+  }).join('');
+
+  return `
+    <header class="topbar">
+      <div class="topbar-breadcrumb">${breadcrumb}</div>
+      <div class="topbar-search">
+        <svg class="topbar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input placeholder="搜索物料 / 工单 / 客户 / 供应商…" />
+        <span class="topbar-search-kbd">⌘K</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" title="设置">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="icon-btn icon-btn-dot" title="通知">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
+      </div>
+    </header>
+  `;
+}
+
+// ===== AI 助手抽屉的页面专属主题 =====
+const AI_THEMES = {
+  bom: {
+    title: 'BOM 专属助手',
+    agents: 'Agent ① ② ⑤ ⑧',
+    intro: '当前 BOM「智能门锁主控板 V3.2」· 156 项物料 · 142 项已匹配 · 11 项需人工确认 · 1 项 EOL。',
+    suggestions: [
+      { icon: '🎯', label: '一键确认本 BOM 中 95% 以上置信度的匹配', sub: '可批量处理本 BOM 中 132 项 · 节省 2 小时', action: 'batch-confirm' },
+      { icon: '🔄', label: '为 CP2102 EOL 物料推荐本 BOM 适用的替代', sub: 'CH340G / CH9102F / PL2303 · Agent ⑤ 已验证', action: 'eol-replace' },
+      { icon: '💰', label: '生成本 BOM 的成本分析与降本建议', sub: '当前 BOM 单板成本 ¥87 · 预计可降本 8-12%', action: 'cost-analysis' },
+      { icon: '🔀', label: '与上一版 BOM（V3.1）对比 · 触发 ECN 影响', sub: '检测到 6 项变更 · 涉及 28 张在售工单', action: 'version-diff' },
+    ],
+  },
+  ecn: {
+    title: 'ECN 决策助手',
+    agents: 'Agent ⑧',
+    intro: '当前 ECN 涉及 USB 接口 EOL 替换。我已分析全链路影响，可以协助您做决策。',
+    suggestions: [
+      { icon: '🧠', label: '为这次变更推荐最佳生效策略', sub: '基于在制工单、库存与客户合同综合评估' },
+      { icon: '📝', label: '起草客户告知函（联创 + 时代）', sub: '基于合同条款个性化措辞' },
+      { icon: '📋', label: '生成变更管理 8D 报告', sub: '含影响分析、应对措施、效果验证' },
+      { icon: '🔍', label: '查询此物料历史变更记录', sub: '近 2 年共 3 次替代' },
+    ],
+  },
+  procurement: {
+    title: '采购智能助手',
+    agents: 'Agent ④ ⑤ ⑦',
+    intro: '本月采购 ¥2.86M，已为您拦截 ¥28.4K 重复下单。当前有 12 笔交期未回复。',
+    suggestions: [
+      { icon: '✦', label: '基于工单需求自动生成本周采购清单', sub: '含 AI 比价 + 在途消化建议' },
+      { icon: '📞', label: '一键催办所有未回复交期的供应商', sub: '12 笔 OPO，自动选择最佳话术' },
+      { icon: '📈', label: '分析本月采购成本，找出优化空间', sub: '同比 / 环比 / 替代料降本' },
+      { icon: '🚨', label: '审视即将逾期的订单，建议处理方案', sub: 'Arrow 2 笔 · 富昌 1 笔' },
+    ],
+  },
+  quote: {
+    title: '报价智能助手',
+    agents: 'Agent ① ② ③ ⑦',
+    intro: '当前为联创科技 (A 类) LC-2026-A 项目报价。我已完成 156 项物料的成本核算。',
+    suggestions: [
+      { icon: '💰', label: '检查所有报价项的毛利底线', sub: 'L1, L2 已被标记为低于阈值' },
+      { icon: '📋', label: '生成报价 PDF 与对比说明', sub: '含 A/B/C 三种方案对比' },
+      { icon: '🤝', label: '基于客户历史成交价推荐最优报价', sub: '近 12 个月数据 + 竞争分析' },
+      { icon: '⏱️', label: '提醒上级审批人尽快处理', sub: '张总待审批 2 小时' },
+    ],
+  },
+  complaint: {
+    title: '客诉处理助手',
+    agents: 'Agent ② ⑥ ⑪',
+    intro: '联创科技 USB 接口客诉已进入 Check 阶段。整改后下游良率回升至 99.84%。',
+    suggestions: [
+      { icon: '📊', label: '总结本次客诉的根因与教训', sub: '生成 Act 阶段标准化文档' },
+      { icon: '🔗', label: '查询同批次物料是否还有其他在制品', sub: '基于图数据库正向追溯' },
+      { icon: '📨', label: '起草客户结案报告', sub: '含 8D 分析与改善承诺' },
+      { icon: '🔄', label: '更新供应商富明的 PPM 评分', sub: '建议调整为 B 级供应商' },
+    ],
+  },
+  trace: {
+    title: '追溯智能助手',
+    agents: 'Agent ⑥',
+    intro: '当前追溯批次 SR2026-USB-189。该批次关联 3 张工单、3 个客户，需要您关注。',
+    suggestions: [
+      { icon: '🔍', label: '深挖：同供应商同时段还有哪些批次', sub: '可能存在系统性质量问题' },
+      { icon: '📦', label: '统计该批次产品的客户分布与退货风险', sub: '已发货 650 PCS' },
+      { icon: '📜', label: '查看此物料的历史追溯记录', sub: '近 6 个月共 12 次追溯' },
+      { icon: '⚠️', label: '基于此批次问题预警同类风险', sub: '类似料盘 SR2026-USB-204 待评估' },
+    ],
+  },
+  supplier: {
+    title: '供应商管理助手',
+    agents: 'Agent ⑦',
+    intro: '当前合作 28 家供应商，本月协同 124 笔。Arrow 准时率下滑至 76.4%，需关注。',
+    suggestions: [
+      { icon: '📊', label: '生成本月供应商 KPI 评分报告', sub: '准时率 / PPM / 配合度三维评估' },
+      { icon: '⚡', label: '一键发送催办给所有未回复供应商', sub: '12 家 · 自动适配模板' },
+      { icon: '🔄', label: '基于历史表现调整供应商等级', sub: '建议 Arrow 降为 B 类，富昌升为 A 类' },
+      { icon: '📨', label: '起草新供应商引入流程邮件', sub: '附 RoHS 文件清单与样品要求' },
+    ],
+  },
+  slow: {
+    title: '呆滞料处置助手',
+    agents: 'Agent ④',
+    intro: '当前呆滞料 ¥186K，超龄 90+ 天的有 ¥84K，建议优先处置。',
+    suggestions: [
+      { icon: '💡', label: '为 12 项特价处置物料推荐最佳渠道', sub: 'eetree.cn 社区 / 华强北 / 同行' },
+      { icon: '🔄', label: '分析能否将呆滞料转用到其他项目', sub: '匹配在产工单 BOM' },
+      { icon: '📉', label: '深度分析为什么会形成呆滞料', sub: '涉及预测、采购、设计三方' },
+      { icon: '⚠️', label: '预警下个月可能形成的新呆滞料', sub: '基于消耗速度模型' },
+    ],
+  },
+  material: {
+    title: '物料管理助手',
+    agents: 'Agent ① ⑤',
+    intro: '当前管理 8,420 个物料主数据，覆盖 95% 常用电子元器件。检测到 12 项需关注。',
+    suggestions: [
+      { icon: '🆕', label: '为新物料一键查询规格、封装、合规信息', sub: '基于 MPN 自动从厂商网站提取' },
+      { icon: '🔗', label: '建立替代料关系图谱', sub: '识别 EOL 风险与降本机会' },
+      { icon: '📋', label: '检查物料文档完整性', sub: '12 项缺少规格书或承认书' },
+      { icon: '🎯', label: '推荐编码规则优化建议', sub: '统一公司内部料号格式' },
+    ],
+  },
+  plan: {
+    title: '计划齐料助手',
+    agents: 'Agent ④',
+    intro: '本周排产 8 张工单，齐料率 78%。3 张工单可能因缺料延期，需要您关注。',
+    suggestions: [
+      { icon: '📅', label: '基于齐料情况优化本周排产顺序', sub: '齐料率高的优先开工' },
+      { icon: '⚡', label: '为 3 张缺料工单生成催料计划', sub: '联系采购加急或调用安全库存' },
+      { icon: '📊', label: '分析工时数据，识别瓶颈工序', sub: '基于历史完工记录' },
+      { icon: '🎯', label: '预测下周可能的齐料风险', sub: '基于在途订单和 ETA' },
+    ],
+  },
+  iqc: {
+    title: 'IQC 智能助手',
+    agents: 'Agent ② ⑩',
+    intro: '本月 IQC 检验 156 批次，合格率 96.8%。检测到 3 项物料风险预警。',
+    suggestions: [
+      { icon: '⚠️', label: '识别本月高风险物料', sub: '基于历史数据与供应商 PPM 趋势' },
+      { icon: '📋', label: '生成本月 IQC 月报', sub: '含批退率 TOP 5 与改善建议' },
+      { icon: '🔄', label: '调整高风险物料抽检策略', sub: '建议加严抽检 5 项物料' },
+      { icon: '📨', label: '起草供应商品质沟通函', sub: 'PPM 高于阈值的 2 家供应商' },
+    ],
+  },
+  compliance: {
+    title: '合规管理助手',
+    agents: '—',
+    intro: '当前 1,247 份合规文件覆盖 156 个 MPN。1 份已超期，4 份即将超期。',
+    suggestions: [
+      { icon: '📨', label: '一键向 5 家供应商请求最新 RoHS 文件', sub: '附自动生成的请求函' },
+      { icon: '📋', label: '生成本月合规审计报告', sub: '可用于客户审核与政府申报' },
+      { icon: '⚠️', label: '识别哪些产品受合规风险影响', sub: '关联 BOM 与客户订单' },
+      { icon: '🌐', label: '查询最新 REACH SVHC 清单更新', sub: '本月新增 4 项物质' },
+    ],
+  },
+  'po-detail': {
+    title: 'PO 详情助手',
+    agents: 'Agent ④ ⑤ ⑦',
+    intro: 'PO-2026-0418 当前在途，预计 5 天后到货。我可以帮您管理这张订单。',
+    suggestions: [
+      { icon: '📞', label: '催促供应商提前发货', sub: '生成催促邮件 + 钉钉消息' },
+      { icon: '📋', label: '提前生成入库 IQC 检验单', sub: '基于此 MPN 历史检验项目' },
+      { icon: '🔄', label: '查看是否可以合并下次订单', sub: '为节省运费' },
+      { icon: '📦', label: '关联此 PO 的工单与客户', sub: '识别交付影响范围' },
+    ],
+  },
+  'po-create': {
+    title: '下单审核助手',
+    agents: 'Agent ④ ⑤',
+    intro: '我会在您下单前自动校验在途、库存和价格。当前已发现 1 项重要建议。',
+    suggestions: [
+      { icon: '⚠️', label: '采纳"减少 100 件"的拦截建议', sub: '可消耗在途 200 件库存' },
+      { icon: '🔄', label: '切换到 Digi-Key（价低 4%）', sub: '但交期 +2 天，请权衡' },
+      { icon: '📋', label: '查询此供应商最近 3 笔同物料的价格', sub: '判断本次报价是否合理' },
+      { icon: '✦', label: '一键填充其他常用物料', sub: '基于本月采购模式' },
+    ],
+  },
+  'po-import': {
+    title: '需求合并助手',
+    agents: 'Agent ④',
+    intro: '已为您从 3 张工单中合并 156 项需求。AI 智能优化后只需采购 96 项。',
+    suggestions: [
+      { icon: '📦', label: '确认所有"在途消化"和"库存充足"项', sub: '批量跳过 60 项' },
+      { icon: '🔄', label: '为 96 项需采购物料分配最优供应商', sub: '基于价格、交期、配合度' },
+      { icon: '📊', label: '计算总采购金额对现金流的影响', sub: '并对比月度预算' },
+      { icon: '🎯', label: '建议拼单合作方', sub: '其他工单可一起下单的供应商' },
+    ],
+  },
+  'price-compare': {
+    title: '比价决策助手',
+    agents: 'Agent ⑤',
+    intro: 'STM32F103C8T6 在 8 个源中 LCSC 综合最优。也可考虑国产替代降本 27%。',
+    suggestions: [
+      { icon: '💡', label: '深度对比国产替代料 CKS32 与原型号', sub: '引脚 / 性能 / 历史使用记录' },
+      { icon: '📊', label: '分析此物料近 6 个月价格走势', sub: '判断是否为最佳采购时机' },
+      { icon: '🎯', label: '一键将本次比价结果加入采购清单', sub: '默认使用 AI 推荐供应商' },
+      { icon: '🔍', label: '查询其他 BOM 中是否有相同物料', sub: '可拼单降低单价' },
+    ],
+  },
+  'trader-sourcing': {
+    title: '找货引擎助手',
+    agents: 'Agent ⑤ ⑫',
+    intro: '正在为您搜索 STM32F103C8T6 (200 颗)。已扫描 8 个数据源，找到 12 个候选货源。',
+    suggestions: [
+      { icon: '🔥', label: '查看现货市场实时价格', sub: '华强北 / 同行调货圈实时数据' },
+      { icon: '💎', label: '识别本次询价的"差价机会"', sub: '客户预算 vs 找货成本' },
+      { icon: '🔄', label: '为冷门物料推荐替代方案', sub: '基于 100 万元器件库语义匹配' },
+      { icon: '📞', label: '一键发送询价邮件给推荐供应商', sub: '使用历史合作模板' },
+    ],
+  },
+  'trader-quote': {
+    title: '报价策略助手',
+    agents: 'Agent ③ ⑫',
+    intro: '已为本单 (联创科技 · STM32F103 × 200) 生成 3 档报价方案。建议采用稳健方案。',
+    suggestions: [
+      { icon: '💰', label: '基于客户历史成交毛利推荐报价', sub: '该客户近 12 单平均毛利 18%' },
+      { icon: '📈', label: '查看同行近期同物料报价区间', sub: '基于平台脱敏数据 · 仅会员可见' },
+      { icon: '🎲', label: '生成 3 档报价：激进 / 稳健 / 保守', sub: '每档对应不同成交概率与利润' },
+      { icon: '📨', label: '一键生成正式报价单 PDF', sub: '含付款条件、交期、有效期' },
+    ],
+  },
+  'trader-customer': {
+    title: '客户经营助手',
+    agents: 'Agent ③',
+    intro: '当前 38 个活跃客户，本月 TOP 3 贡献了 62% 毛利。建议关注 5 个流失风险客户。',
+    suggestions: [
+      { icon: '🎯', label: '识别本月高价值客户', sub: '联创科技 / 时代电子 / 远景智造' },
+      { icon: '⚠️', label: '预警可能流失的客户', sub: '近 30 天询价频率下降的客户' },
+      { icon: '📊', label: '生成客户毛利分析报告', sub: '按客户、按品类、按时间维度' },
+      { icon: '💌', label: '为休眠客户起草关怀沟通', sub: '基于历史询价品类推荐新货源' },
+    ],
+  },
+};
+
+function renderAiDrawer() {
+  return `
+    <div id="ai-drawer-mask" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.4); z-index:99; backdrop-filter: blur(4px);" onclick="closeAiDrawer()"></div>
+    <aside id="ai-drawer" style="display:none; position:fixed; top:0; right:0; bottom:0; width:420px; background:white; z-index:100; box-shadow: -8px 0 24px rgba(15,23,42,0.12); transform: translateX(100%); transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column;">
+      <!-- 头部 -->
+      <div style="background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); border-bottom: 1px solid var(--ai-100); padding: 20px 24px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: -40px; right: -40px; width: 160px; height: 160px; background: radial-gradient(circle, rgba(123, 97, 255, 0.18) 0%, transparent 70%); pointer-events: none;"></div>
+        <div style="display: flex; align-items: center; justify-content: space-between; position: relative;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--ai) 0%, #a78bff 100%); display: grid; place-items: center; color: white; font-size: 18px; box-shadow: var(--shadow-ai);">✦</div>
+            <div>
+              <div id="ai-drawer-title" style="font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--gray-900); letter-spacing: -0.2px;">AI 助手</div>
+              <div id="ai-drawer-agents" style="font-size: 11px; color: var(--ai-700); font-family: var(--font-mono); margin-top: 2px;"></div>
+            </div>
+          </div>
+          <button class="icon-btn" onclick="closeAiDrawer()" style="background: white;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- 对话区 -->
+      <div style="flex: 1; overflow-y: auto; padding: 20px 24px;">
+        <!-- AI 介绍 -->
+        <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+          <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--ai-50); border: 1px solid var(--ai-100); display: grid; place-items: center; color: var(--ai-700); font-size: 13px; flex-shrink: 0;">✦</div>
+          <div style="flex: 1;">
+            <div id="ai-drawer-intro" style="background: var(--gray-50); border: 1px solid var(--gray-150); border-radius: 12px 12px 12px 4px; padding: 12px 14px; font-size: 13px; line-height: 1.65; color: var(--gray-800);"></div>
+            <div style="font-size: 11px; color: var(--gray-400); margin-top: 4px;">刚刚 · AI 助手</div>
+          </div>
+        </div>
+
+        <!-- 建议操作 -->
+        <div style="font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin-bottom: 10px; padding-left: 4px;">建议操作</div>
+        <div id="ai-drawer-suggestions" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;"></div>
+      </div>
+
+      <!-- 输入区 -->
+      <div style="padding: 16px 20px; border-top: 1px solid var(--gray-150); background: var(--gray-50);">
+        <div style="position: relative;">
+          <textarea placeholder="也可以直接问我任何问题..." style="width: 100%; padding: 10px 44px 10px 14px; border: 1px solid var(--gray-200); border-radius: var(--r-md); font-family: inherit; font-size: 13px; resize: none; outline: none; background: white; min-height: 44px; max-height: 120px; line-height: 1.5;" onfocus="this.style.borderColor='var(--ai)'; this.style.boxShadow='0 0 0 3px var(--ai-50)';" onblur="this.style.borderColor='var(--gray-200)'; this.style.boxShadow='';"></textarea>
+          <button style="position: absolute; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--ai); color: white; display: grid; place-items: center; box-shadow: var(--shadow-ai);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 10px; font-size: 11px; color: var(--gray-500);">
+          <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="font-family: var(--font-mono); padding: 1px 5px; background: white; border: 1px solid var(--gray-200); border-radius: 3px; font-size: 10px;">↵</kbd> 发送</span>
+          <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="font-family: var(--font-mono); padding: 1px 5px; background: white; border: 1px solid var(--gray-200); border-radius: 3px; font-size: 10px;">⇧↵</kbd> 换行</span>
+          <span style="margin-left: auto; color: var(--ai-700); font-weight: 500;">基于您的业务数据回答</span>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function openAiDrawer(themeKey) {
+  const theme = AI_THEMES[themeKey] || AI_THEMES.procurement;
+  document.getElementById('ai-drawer-title').textContent = theme.title;
+  document.getElementById('ai-drawer-agents').textContent = theme.agents;
+  document.getElementById('ai-drawer-intro').textContent = theme.intro;
+
+  const suggestions = theme.suggestions.map((s, i) => `
+    <button class="ai-suggestion" ${s.action ? `onclick="openBomSuggestionModal('${s.action}')"` : ''} style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: white; border: 1px solid var(--gray-200); border-radius: var(--r-md); text-align: left; transition: all 150ms var(--ease); cursor: pointer; animation: fadeUp 400ms var(--ease-out) ${i * 60}ms both;" onmouseover="this.style.borderColor='var(--ai-300)'; this.style.background='var(--ai-50)'; this.style.transform='translateX(2px)';" onmouseout="this.style.borderColor='var(--gray-200)'; this.style.background='white'; this.style.transform='';">
+      <span style="font-size: 18px; line-height: 1; flex-shrink: 0;">${s.icon}</span>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 500; color: var(--gray-900); line-height: 1.4; margin-bottom: 3px;">${s.label}</div>
+        <div style="font-size: 11px; color: var(--gray-500); line-height: 1.4;">${s.sub}</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--gray-400); flex-shrink: 0; margin-top: 2px;"><path d="M5 12h14 M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  `).join('');
+  document.getElementById('ai-drawer-suggestions').innerHTML = suggestions;
+
+  const mask = document.getElementById('ai-drawer-mask');
+  const drawer = document.getElementById('ai-drawer');
+  mask.style.display = 'block';
+  drawer.style.display = 'flex';
+  // 触发动画
+  setTimeout(() => {
+    drawer.style.transform = 'translateX(0)';
+  }, 10);
+}
+
+function closeAiDrawer() {
+  const mask = document.getElementById('ai-drawer-mask');
+  const drawer = document.getElementById('ai-drawer');
+  drawer.style.transform = 'translateX(100%)';
+  setTimeout(() => {
+    mask.style.display = 'none';
+    drawer.style.display = 'none';
+  }, 320);
+}
+
+function renderAiFab(themeKey) {
+  return `<button class="ai-fab" title="AI 助手" onclick="openAiDrawer('${themeKey}')"><span class="ai-fab-pulse"></span></button>`;
+}
+
+function mountChrome(currentId, crumbs, aiKey) {
+  const root = document.getElementById('app');
+  const main = root.querySelector('.main');
+  const mainHTML = main.innerHTML;
+  // aiKey 默认与 currentId 相同；可单独指定（如 PO 详情用 'po-detail' 主题但侧边栏仍高亮 procurement）
+  const themeKey = aiKey || currentId;
+  root.innerHTML = renderSidebar(currentId) + `<div class="main">${renderTopbar(crumbs)}<div id="page-content">${mainHTML}</div></div>` + renderAiFab(themeKey) + renderAiDrawer();
+
+  // 全局键盘 ESC 关闭
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAiDrawer();
+  });
+}
+
+</script>
+<script>
+  mountChrome('bom', ['工程数据', '<a href=\'bom.html\' style=\'color:inherit; text-decoration:none;\'>BOM 管理</a>', '客户 BOM 智能匹配']);
+</script>
+<script>
+  // 根据 URL 参数显示不同的 BOM
+  const BOM_DB = {
+    'BOM-LC-2026-018': { customer: '联创科技', project: 'LC-2026-A', count: 156, time: '2026-04-25 09:32', name: '智能门锁主控板 V3.2' },
+    'BOM-LC-2026-012': { customer: '联创科技', project: 'LC-2025-Q4', count: 152, time: '2026-04-18 14:20', name: '智能门锁主控板 V3.1' },
+    'BOM-SD-2026-004': { customer: '时代电子', project: 'SD-2026-IG', count: 218, time: '2026-04-24 11:08', name: '工业网关 IG-200' },
+    'BOM-YJ-2025-089': { customer: '远景智造', project: 'YJ-2025-EV', count: 98, time: '2026-04-20 16:45', name: '远景充电控制板' },
+    'BOM-HX-2026-002': { customer: '华星科技', project: 'HX-2026-Q1', count: 68, time: '2026-04-25 11:30', name: '电机驱动模块 MD-500' },
+    'BOM-SH-2026-007': { customer: '深华自动化', project: 'SH-PLC-2026', count: 142, time: '2026-04-18 10:15', name: 'PLC 扩展板' },
+    'BOM-MS-2025-052': { customer: '迈思威工业', project: 'MS-IoT-2025', count: 86, time: '2026-04-11 09:50', name: '传感器采集板 V2' },
+    'BOM-BX-2026-001': { customer: '博翔无人机', project: 'BX-DRONE-2026', count: 312, time: '2026-04-25 14:32', name: '无人机飞控板 FC-V4' },
+    'BOM-RH-2025-076': { customer: '瑞和音频', project: 'RH-BT-2025', count: 54, time: '2026-03-25 08:22', name: '蓝牙音箱主板 BT-200' },
+    'BOM-YD-2024-098': { customer: '悦电新能源', project: 'YD-EV-2024', count: 128, time: '2025-10-15 16:00', name: '车载充电桩控制器' },
+  };
+  const _bomParams = new URLSearchParams(window.location.search);
+  const _bomId = _bomParams.get('bom');
+  if (_bomId && BOM_DB[_bomId]) {
+    const b = BOM_DB[_bomId];
+    // 更新页头标题与副标题
+    const title = document.querySelector('.page-title');
+    if (title) title.textContent = b.name + ' · BOM 智能匹配';
+    const subtitle = document.querySelector('.page-subtitle');
+    if (subtitle) {
+      subtitle.innerHTML = `
+        BOM 编号：<span style="font-family: var(--font-mono); font-weight: 600; color: var(--gray-900);">${_bomId}</span>
+        <span class="sep"></span>
+        客户：${b.customer}
+        <span class="sep"></span>
+        项目：${b.project}
+        <span class="sep"></span>
+        物料数：${b.count} 项
+        <span class="sep"></span>
+        导入时间：${b.time}
+      `;
+    }
+    document.title = b.name + ' · BOM 详情 · ezPLM';
+  }
+</script>
+
+<style>
+/* ============ BOM 模块 Modal 通用样式 ============ */
+.ai-modal {
+  position: fixed; inset: 0; z-index: 200;
+  align-items: center; justify-content: center;
+  padding: 24px;
+}
+.ai-modal[style*="display:flex"], .ai-modal.show { display: flex !important; }
+.ai-modal-mask {
+  position: absolute; inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 250ms;
+}
+.ai-modal.show .ai-modal-mask { opacity: 1; }
+.ai-modal-panel {
+  position: relative;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  background: white;
+  border-radius: 14px;
+  box-shadow: var(--shadow-xl);
+  display: flex; flex-direction: column;
+  transform: translateY(20px) scale(0.98);
+  opacity: 0;
+  transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-modal.show .ai-modal-panel {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+.ai-modal-header {
+  padding: 16px 22px;
+  background: linear-gradient(135deg, var(--ai-700) 0%, var(--ai) 100%);
+  border-radius: 14px 14px 0 0;
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative; overflow: hidden;
+}
+.ai-modal-header::before {
+  content: ''; position: absolute;
+  top: -40px; right: -40px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ai-modal-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.25);
+  display: grid; place-items: center;
+  color: white; font-size: 18px;
+  position: relative;
+}
+.ai-modal-close {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  color: white; cursor: pointer;
+  transition: all 150ms;
+}
+.ai-modal-close:hover { background: rgba(255,255,255,0.2); }
+.ai-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px;
+}
+.ai-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--gray-150);
+  background: var(--gray-50);
+  display: flex; align-items: center; justify-content: space-between;
+  border-radius: 0 0 14px 14px;
+}
+
+/* 小型 KPI 卡 */
+.kpi-mini {
+  padding: 12px;
+  background: white;
+  border: 1px solid var(--gray-150);
+  border-radius: 10px;
+}
+.kpi-mini-label {
+  font-size: 10px;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.kpi-mini-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--gray-900);
+  line-height: 1.1;
+}
+.kpi-mini-meta {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* 差异标签 */
+.diff-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+.diff-tag.diff-ok { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+.diff-tag.diff-warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+.diff-tag.diff-up { background: var(--ai-50); color: var(--ai-700); border: 1px solid var(--ai-100); }
+
+/* BOM 创建场景卡 */
+.bom-create-card {
+  padding: 16px 14px;
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 200ms;
+  position: relative;
+}
+.bom-create-card:hover {
+  border-color: var(--ai-300);
+  box-shadow: 0 0 0 3px var(--ai-50);
+  transform: translateY(-2px);
+}
+.bom-create-card.active {
+  border-color: var(--ai);
+  background: linear-gradient(135deg, var(--ai-50) 0%, white 60%);
+  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.12);
+}
+.bom-create-card .bcc-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+.bom-create-card .bcc-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+.bom-create-card .bcc-desc {
+  font-size: 11px;
+  color: var(--gray-500);
+  line-height: 1.4;
+}
+.bom-create-card .bcc-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--ai);
+  color: white;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* 数据源 mini 标签 */
+.src-tag-mini {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  margin-right: 4px;
+}
+
+/* src-filter */
+.src-filter {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--gray-600);
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.src-filter:hover { border-color: var(--gray-300); color: var(--gray-900); }
+.src-filter-active {
+  background: var(--gray-900);
+  color: white;
+  border-color: var(--gray-900);
+}
+</style>
+
+<script>
+  function openBomSuggestionModal(actionKey) {
+    if (typeof closeAiDrawer === 'function') closeAiDrawer();
+    setTimeout(() => {
+      const modal = document.getElementById('modal-' + actionKey);
+      if (!modal) {
+        console.warn('Modal not found:', actionKey);
+        return;
+      }
+      modal.style.display = 'flex';
+      requestAnimationFrame(() => modal.classList.add('show'));
+    }, 200);
+  }
+
+  function closeBomSuggestionModal(actionKey) {
+    const modal = document.getElementById('modal-' + actionKey);
+    if (!modal) return;
+    modal.classList.remove('show');
+    setTimeout(() => { modal.style.display = 'none'; }, 280);
+  }
+
+  function openCreateBomModal() {
+    const modal = document.getElementById('modal-create-bom');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('show'));
+  }
+
+  function closeCreateBomModal() {
+    const modal = document.getElementById('modal-create-bom');
+    if (!modal) return;
+    modal.classList.remove('show');
+    setTimeout(() => { modal.style.display = 'none'; }, 280);
+  }
+
+  function selectBomCreateMode(card) {
+    document.querySelectorAll('.bom-create-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    // 显示对应的配置区
+    const mode = card.dataset.mode;
+    document.querySelectorAll('.bom-mode-config').forEach(c => c.style.display = 'none');
+    const target = document.getElementById('bom-mode-' + mode);
+    if (target) target.style.display = 'block';
+  }
+
+  function showToast(msg) {
+    let toast = document.getElementById('toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast';
+      toast.style.cssText = 'position:fixed; top:24px; right:24px; padding:12px 18px; background:var(--gray-900); color:white; border-radius:8px; font-size:13px; box-shadow:var(--shadow-xl); z-index:10000; opacity:0; transform:translateY(-10px); transition:all 200ms;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-10px)';
+    }, 2400);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.ai-modal.show').forEach(m => {
+        m.classList.remove('show');
+        setTimeout(() => { m.style.display = 'none'; }, 280);
+      });
+    }
+  });
+</script>
+
+<!-- ============ Modal: 一键确认高置信匹配 ============ -->
+<div id="modal-batch-confirm" class="ai-modal" style="display:none;">
+  <div class="ai-modal-mask" onclick="closeBomSuggestionModal('batch-confirm')"></div>
+  <div class="ai-modal-panel" style="width:920px;">
+    <div class="ai-modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div class="ai-modal-icon">✦</div>
+        <div>
+          <div style="font-size:16px; font-weight:600; color:white;">一键确认本 BOM 高置信匹配</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.75); margin-top:2px;">Agent ① · 智能门锁主控板 V3.2 · 批量处理 132 项</div>
+        </div>
+      </div>
+      <button onclick="closeBomSuggestionModal('batch-confirm')" class="ai-modal-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="ai-modal-body">
+
+      <!-- 概览 -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px;">
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">本 BOM 物料</div>
+          <div class="kpi-mini-value">156</div>
+          <div class="kpi-mini-meta text-muted">总数</div>
+        </div>
+        <div class="kpi-mini" style="border-color: var(--success-border); background: linear-gradient(135deg, var(--success-bg) 0%, white 70%);">
+          <div class="kpi-mini-label" style="color: var(--success);">95%+ 高置信</div>
+          <div class="kpi-mini-value" style="color: var(--success);">132</div>
+          <div class="kpi-mini-meta text-muted">可一键确认</div>
+        </div>
+        <div class="kpi-mini" style="border-color: var(--warning-border); background: linear-gradient(135deg, var(--warning-bg) 0%, white 70%);">
+          <div class="kpi-mini-label" style="color: var(--warning);">中置信 80~95%</div>
+          <div class="kpi-mini-value" style="color: var(--warning);">11</div>
+          <div class="kpi-mini-meta text-muted">建议人工复核</div>
+        </div>
+        <div class="kpi-mini" style="border-color: var(--danger-border); background: linear-gradient(135deg, var(--danger-bg) 0%, white 70%);">
+          <div class="kpi-mini-label" style="color: var(--danger);">未识别</div>
+          <div class="kpi-mini-value" style="color: var(--danger);">13</div>
+          <div class="kpi-mini-meta text-muted">需手工选择物料</div>
+        </div>
+      </div>
+
+      <!-- 置信度分布图 -->
+      <div style="padding: 14px 16px; background: white; border: 1px solid var(--gray-150); border-radius: 10px; margin-bottom: 18px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 12px;">置信度分布</div>
+        <div style="display: flex; gap: 1px; height: 32px; border-radius: 6px; overflow: hidden;">
+          <div style="width: 64%; background: var(--success); display: grid; place-items: center; color: white; font-size: 11px; font-weight: 600;">100% · 100 项</div>
+          <div style="width: 21%; background: #4ade80; display: grid; place-items: center; color: white; font-size: 11px; font-weight: 600;">95-99% · 32 项</div>
+          <div style="width: 7%; background: var(--warning); display: grid; place-items: center; color: white; font-size: 10px; font-weight: 600;">80-94% · 11</div>
+          <div style="width: 8%; background: var(--danger); display: grid; place-items: center; color: white; font-size: 10px; font-weight: 600;">< 80% · 13</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--gray-500);">
+          <span>0%</span>
+          <span>50%</span>
+          <span>100%</span>
+        </div>
+      </div>
+
+      <!-- 待确认明细 -->
+      <div style="border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden;">
+        <div style="padding: 10px 14px; background: var(--gray-50); border-bottom: 1px solid var(--gray-150); display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 13px; font-weight: 600;">132 项待确认（前 5 条）</div>
+          <span style="font-size: 11px; color: var(--gray-500);">点击单条可单独取消</span>
+        </div>
+        <table class="table" style="margin: 0;">
+          <thead>
+            <tr>
+              <th><input type="checkbox" checked /></th>
+              <th>位号</th>
+              <th>客户描述</th>
+              <th>匹配物料</th>
+              <th>置信度</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><input type="checkbox" checked /></td><td class="cell-mono">R1, R5, R12</td><td>10K 0603 1% RES</td><td class="cell-mono">EE-R-10K-0603-1</td><td><span style="color: var(--success); font-weight: 700;">98.7%</span></td></tr>
+            <tr><td><input type="checkbox" checked /></td><td class="cell-mono">C1~C8</td><td>100nF 0603 X7R 50V</td><td class="cell-mono">EE-C-100N-0603-X7R</td><td><span style="color: var(--success); font-weight: 700;">99.2%</span></td></tr>
+            <tr><td><input type="checkbox" checked /></td><td class="cell-mono">U2</td><td>STM32F103C8T6 LQFP48</td><td class="cell-mono">EE-IC-STM32F103-C8</td><td><span style="color: var(--success); font-weight: 700;">100%</span></td></tr>
+            <tr><td><input type="checkbox" checked /></td><td class="cell-mono">L1, L2</td><td>10uH 功率电感</td><td class="cell-mono">EE-L-10UH-0805</td><td><span style="color: var(--success); font-weight: 700;">97.4%</span></td></tr>
+            <tr><td><input type="checkbox" checked /></td><td class="cell-mono">D1~D4</td><td>40V 2A 肖特基</td><td class="cell-mono">EE-D-SS24-SMA</td><td><span style="color: var(--success); font-weight: 700;">96.8%</span></td></tr>
+            <tr><td colspan="5" style="text-align: center; color: var(--gray-500); font-size: 11px;">查看其余 127 项 ⌄</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+    <div class="ai-modal-footer">
+      <div style="font-size: 11px; color: var(--gray-500);">已勾选 132 项 · 预计节省 2 小时人工确认时间</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-default" onclick="closeBomSuggestionModal('batch-confirm')">取消</button>
+        <button class="btn btn-default" onclick="openBulkConfirm()">仅确认 100% 匹配（100 项）</button>
+        <button class="btn btn-primary" onclick="closeBomSuggestionModal('batch-confirm'); showToast('✓ 已批量确认 132 项匹配 · 本 BOM 进度 84.6% → 100%');">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+          一键确认 132 项
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Modal: 本 BOM EOL 替代推荐 ============ -->
+<div id="modal-eol-replace" class="ai-modal" style="display:none;">
+  <div class="ai-modal-mask" onclick="closeBomSuggestionModal('eol-replace')"></div>
+  <div class="ai-modal-panel" style="width:940px;">
+    <div class="ai-modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div class="ai-modal-icon">✦</div>
+        <div>
+          <div style="font-size:16px; font-weight:600; color:white;">EOL 物料替代推荐</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.75); margin-top:2px;">Agent ⑤ · 智能门锁主控板 V3.2 · 1 项 EOL 待处理</div>
+        </div>
+      </div>
+      <button onclick="closeBomSuggestionModal('eol-replace')" class="ai-modal-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="ai-modal-body">
+
+      <!-- EOL 物料卡 -->
+      <div style="padding: 16px 18px; background: linear-gradient(135deg, var(--danger-bg) 0%, white 100%); border: 1px solid var(--danger-border); border-radius: 12px; margin-bottom: 18px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 48px; height: 48px; background: var(--danger); color: white; border-radius: 12px; display: grid; place-items: center; font-size: 22px;">⚠</div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 16px; font-weight: 700; color: var(--gray-900); font-family: var(--font-mono);">CP2102-GMR</span>
+              <span class="diff-tag" style="background: var(--danger); color: white; font-weight: 600;">EOL 已停产</span>
+            </div>
+            <div style="font-size: 12px; color: var(--gray-700);">U9 位号 · USB to Serial Bridge · Silicon Labs · 本 BOM 用量:1 PCS/台</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 2px;">原单价</div>
+            <div style="font-family: var(--font-mono); font-size: 18px; color: var(--gray-700); text-decoration: line-through;">¥ 6.80</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">本地库存 0 PCS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 个候选 -->
+      <div style="margin-bottom: 18px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 10px;">AI 已为 U9 位号找到 3 个替代方案</div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <!-- 候选 1: CH340G 推荐 -->
+          <div style="padding: 14px; border: 2px solid var(--success); border-radius: 10px; background: linear-gradient(135deg, var(--success-bg) 0%, white 70%); position: relative;">
+            <span style="position: absolute; top: -8px; right: 12px; padding: 2px 10px; background: var(--success); color: white; border-radius: 10px; font-size: 10px; font-weight: 700;">✦ 推荐</span>
+            <div style="font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px;">CH340G</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 10px;">沁恒微 · SOP-16</div>
+
+            <div style="margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                <span style="color: var(--gray-500);">匹配度</span>
+                <span style="font-weight: 700; color: var(--success);">98%</span>
+              </div>
+              <div style="height: 4px; background: var(--gray-100); border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; width: 98%; background: var(--success);"></div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; margin-bottom: 10px;">
+              <div>
+                <div style="color: var(--gray-500);">单价</div>
+                <div style="font-family: var(--font-mono); font-weight: 700; color: var(--success);">¥ 2.40</div>
+                <div style="font-size: 10px; color: var(--success);">↓ 65%</div>
+              </div>
+              <div>
+                <div style="color: var(--gray-500);">本地库存</div>
+                <div style="font-weight: 700; color: var(--success);">8,200</div>
+                <div style="font-size: 10px; color: var(--gray-500);">PCS</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 8px;">
+              <span class="diff-tag diff-ok" style="font-size: 10px;">✓ Pin 兼容</span>
+              <span class="diff-tag diff-ok" style="font-size: 10px;">✓ 驱动兼容</span>
+            </div>
+
+            <button class="btn btn-primary btn-sm" style="width: 100%;">采用此方案</button>
+          </div>
+
+          <!-- 候选 2: CH9102F -->
+          <div style="padding: 14px; border: 1px solid var(--gray-200); border-radius: 10px; background: white;">
+            <div style="font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px;">CH9102F</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 10px;">沁恒微 · QFN-24</div>
+
+            <div style="margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                <span style="color: var(--gray-500);">匹配度</span>
+                <span style="font-weight: 700; color: var(--ai-700);">94%</span>
+              </div>
+              <div style="height: 4px; background: var(--gray-100); border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; width: 94%; background: var(--ai);"></div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; margin-bottom: 10px;">
+              <div>
+                <div style="color: var(--gray-500);">单价</div>
+                <div style="font-family: var(--font-mono); font-weight: 700;">¥ 2.85</div>
+                <div style="font-size: 10px; color: var(--success);">↓ 58%</div>
+              </div>
+              <div>
+                <div style="color: var(--gray-500);">本地库存</div>
+                <div style="font-weight: 700;">3,400</div>
+                <div style="font-size: 10px; color: var(--gray-500);">PCS</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 8px;">
+              <span class="diff-tag diff-warn" style="font-size: 10px;">~ 不同封装</span>
+              <span class="diff-tag diff-ok" style="font-size: 10px;">✓ USB-C</span>
+            </div>
+
+            <button class="btn btn-default btn-sm" style="width: 100%;">采用此方案</button>
+          </div>
+
+          <!-- 候选 3: PL2303 -->
+          <div style="padding: 14px; border: 1px solid var(--gray-200); border-radius: 10px; background: white;">
+            <div style="font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px;">PL2303TA</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-bottom: 10px;">Prolific · SOP-8</div>
+
+            <div style="margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                <span style="color: var(--gray-500);">匹配度</span>
+                <span style="font-weight: 700; color: var(--ai-700);">86%</span>
+              </div>
+              <div style="height: 4px; background: var(--gray-100); border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; width: 86%; background: var(--ai);"></div>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; margin-bottom: 10px;">
+              <div>
+                <div style="color: var(--gray-500);">单价</div>
+                <div style="font-family: var(--font-mono); font-weight: 700;">¥ 4.20</div>
+                <div style="font-size: 10px; color: var(--success);">↓ 38%</div>
+              </div>
+              <div>
+                <div style="color: var(--gray-500);">本地库存</div>
+                <div style="font-weight: 700; color: var(--warning);">180</div>
+                <div style="font-size: 10px; color: var(--gray-500);">PCS · 低</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 8px;">
+              <span class="diff-tag diff-warn" style="font-size: 10px;">~ 驱动需更新</span>
+            </div>
+
+            <button class="btn btn-default btn-sm" style="width: 100%;">采用此方案</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI 总结 -->
+      <div style="padding: 14px 16px; background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); border: 1px solid var(--ai-100); border-radius: 10px;">
+        <div style="font-size: 12px; color: var(--gray-700); line-height: 1.65;">
+          <strong style="color: var(--ai-700);">✦ AI 综合建议:</strong>采用 <strong>CH340G</strong> 替代 CP2102 是最优解。本 BOM 量产 2,000 台,每台节省 <strong style="color: var(--success);">¥4.40</strong>,合计 <strong style="color: var(--success);">¥8,800</strong> 降本。Pin-to-Pin 兼容无需修改 PCB,驱动兼容无需修改固件,可立即切换。
+        </div>
+      </div>
+
+    </div>
+    <div class="ai-modal-footer">
+      <div style="font-size: 11px; color: var(--gray-500);">采纳后会自动触发 ECN 影响分析并通知客户</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-default" onclick="closeBomSuggestionModal('eol-replace')">仅查看</button>
+        <button class="btn btn-default">查看更多候选</button>
+        <button class="btn btn-primary" onclick="closeBomSuggestionModal('eol-replace'); showToast('✓ U9 位号已替换为 CH340G · 已发起 ECN 评审');">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+          采纳推荐方案(CH340G)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Modal: 本 BOM 成本分析 ============ -->
+<div id="modal-cost-analysis" class="ai-modal" style="display:none;">
+  <div class="ai-modal-mask" onclick="closeBomSuggestionModal('cost-analysis')"></div>
+  <div class="ai-modal-panel" style="width:980px;">
+    <div class="ai-modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div class="ai-modal-icon">✦</div>
+        <div>
+          <div style="font-size:16px; font-weight:600; color:white;">本 BOM 成本分析与降本建议</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.75); margin-top:2px;">Agent ③ · 智能门锁主控板 V3.2 · 当前单板成本 ¥87</div>
+        </div>
+      </div>
+      <button onclick="closeBomSuggestionModal('cost-analysis')" class="ai-modal-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="ai-modal-body">
+
+      <!-- 总成本 KPI -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px;">
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">单板物料成本</div>
+          <div class="kpi-mini-value">¥ 87.00</div>
+          <div class="kpi-mini-meta text-muted">当前</div>
+        </div>
+        <div class="kpi-mini" style="border-color: var(--success-border); background: linear-gradient(135deg, var(--success-bg) 0%, white 70%);">
+          <div class="kpi-mini-label" style="color: var(--success);">AI 降本后</div>
+          <div class="kpi-mini-value" style="color: var(--success);">¥ 76.50</div>
+          <div class="kpi-mini-meta text-muted">↓ 12.1%</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">年产量</div>
+          <div class="kpi-mini-value">24K</div>
+          <div class="kpi-mini-meta text-muted">台 · 2,000/月</div>
+        </div>
+        <div class="kpi-mini" style="border-color: var(--success-border); background: linear-gradient(135deg, var(--success-bg) 0%, white 70%);">
+          <div class="kpi-mini-label" style="color: var(--success);">年降本</div>
+          <div class="kpi-mini-value" style="color: var(--success);">¥ 252K</div>
+          <div class="kpi-mini-meta text-muted">¥10.5 × 24K</div>
+        </div>
+      </div>
+
+      <!-- 成本构成 -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+
+        <!-- 成本构成饼图（用 SVG 模拟） -->
+        <div style="padding: 14px 16px; background: white; border: 1px solid var(--gray-150); border-radius: 10px;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 12px;">成本构成（按物料类型）</div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <svg viewBox="0 0 100 100" style="width: 140px; height: 140px;">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#f4f4f5" stroke-width="14"/>
+              <!-- IC 类 52% -->
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#7B61FF" stroke-width="14" stroke-dasharray="137 263" transform="rotate(-90 50 50)"/>
+              <!-- 电容 18% -->
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#3b82f6" stroke-width="14" stroke-dasharray="47 263" stroke-dashoffset="-137" transform="rotate(-90 50 50)"/>
+              <!-- 电阻 8% -->
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#16a34a" stroke-width="14" stroke-dasharray="21 263" stroke-dashoffset="-184" transform="rotate(-90 50 50)"/>
+              <!-- 连接器 14% -->
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="37 263" stroke-dashoffset="-205" transform="rotate(-90 50 50)"/>
+              <!-- 其他 8% -->
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#a1a1aa" stroke-width="14" stroke-dasharray="21 263" stroke-dashoffset="-242" transform="rotate(-90 50 50)"/>
+              <text x="50" y="50" text-anchor="middle" font-size="9" fill="#71717a" font-weight="600">单板</text>
+              <text x="50" y="60" text-anchor="middle" font-size="12" fill="#18181b" font-weight="700" font-family="JetBrains Mono">¥87</text>
+            </svg>
+            <div style="flex: 1; font-size: 11px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="width: 10px; height: 10px; background: #7B61FF; border-radius: 2px;"></span>
+                <span style="color: var(--gray-700); flex: 1;">IC 集成电路</span>
+                <span style="font-family: var(--font-mono); font-weight: 700;">52%</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="width: 10px; height: 10px; background: #3b82f6; border-radius: 2px;"></span>
+                <span style="color: var(--gray-700); flex: 1;">电容</span>
+                <span style="font-family: var(--font-mono); font-weight: 700;">18%</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="width: 10px; height: 10px; background: #f59e0b; border-radius: 2px;"></span>
+                <span style="color: var(--gray-700); flex: 1;">连接器</span>
+                <span style="font-family: var(--font-mono); font-weight: 700;">14%</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="width: 10px; height: 10px; background: #16a34a; border-radius: 2px;"></span>
+                <span style="color: var(--gray-700); flex: 1;">电阻</span>
+                <span style="font-family: var(--font-mono); font-weight: 700;">8%</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 10px; height: 10px; background: #a1a1aa; border-radius: 2px;"></span>
+                <span style="color: var(--gray-700); flex: 1;">其他</span>
+                <span style="font-family: var(--font-mono); font-weight: 700;">8%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOP 5 高成本物料 -->
+        <div style="padding: 14px 16px; background: white; border: 1px solid var(--gray-150); border-radius: 10px;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 12px;">TOP 5 高成本物料</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--gray-50); border-radius: 4px;">
+              <div>
+                <span class="cell-mono" style="font-weight: 700;">STM32F103C8T6</span>
+                <span style="font-size: 10px; color: var(--gray-500); margin-left: 4px;">U2</span>
+              </div>
+              <span class="cell-mono" style="color: var(--gray-900); font-weight: 600;">¥ 4.85</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--gray-50); border-radius: 4px;">
+              <div>
+                <span class="cell-mono" style="font-weight: 700;">USB-C 母座</span>
+                <span style="font-size: 10px; color: var(--gray-500); margin-left: 4px;">J1</span>
+              </div>
+              <span class="cell-mono" style="color: var(--gray-900); font-weight: 600;">¥ 3.80</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--danger-bg); border-radius: 4px;">
+              <div>
+                <span class="cell-mono" style="font-weight: 700; color: var(--danger);">CP2102 ⚠ EOL</span>
+                <span style="font-size: 10px; color: var(--gray-500); margin-left: 4px;">U9</span>
+              </div>
+              <span class="cell-mono" style="color: var(--gray-900); font-weight: 600;">¥ 6.80</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--gray-50); border-radius: 4px;">
+              <div>
+                <span class="cell-mono" style="font-weight: 700;">指纹模块</span>
+                <span style="font-size: 10px; color: var(--gray-500); margin-left: 4px;">M1</span>
+              </div>
+              <span class="cell-mono" style="color: var(--gray-900); font-weight: 600;">¥ 24.00</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--gray-50); border-radius: 4px;">
+              <div>
+                <span class="cell-mono" style="font-weight: 700;">蓝牙模块 BLE</span>
+                <span style="font-size: 10px; color: var(--gray-500); margin-left: 4px;">M2</span>
+              </div>
+              <span class="cell-mono" style="color: var(--gray-900); font-weight: 600;">¥ 8.50</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI 降本建议 -->
+      <div style="border: 1px solid var(--ai-100); border-radius: 12px; overflow: hidden;">
+        <div style="padding: 14px 16px; background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); border-bottom: 1px solid var(--ai-100);">
+          <div style="font-size: 13px; font-weight: 600; color: var(--ai-700); display: flex; align-items: center; gap: 6px;">
+            ✦ AI 降本建议（共 3 条 · 预计降本 12.1%）
+          </div>
+        </div>
+
+        <div class="cost-tip">
+          <span style="width: 28px; height: 28px; background: var(--success); color: white; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">1</span>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 2px;">CP2102 → CH340G 替换</div>
+            <div style="font-size: 11px; color: var(--gray-600);">U9 位号 · 单板节省 <strong style="color: var(--success);">¥ 4.40</strong> · 年节省 <strong style="color: var(--success);">¥ 105,600</strong>· Pin-to-Pin 兼容</div>
+          </div>
+          <button class="btn btn-primary btn-sm">采纳</button>
+        </div>
+
+        <div class="cost-tip">
+          <span style="width: 28px; height: 28px; background: var(--success); color: white; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">2</span>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 2px;">STM32F103 → CKS32F103 国产替代</div>
+            <div style="font-size: 11px; color: var(--gray-600);">U2 位号 · 单板节省 <strong style="color: var(--success);">¥ 1.65</strong> · 年节省 <strong style="color: var(--success);">¥ 39,600</strong>· 98% 匹配度</div>
+          </div>
+          <button class="btn btn-primary btn-sm">采纳</button>
+        </div>
+
+        <div class="cost-tip">
+          <span style="width: 28px; height: 28px; background: var(--success); color: white; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">3</span>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 2px;">参与跨 BOM 集采（电容/电阻）</div>
+            <div style="font-size: 11px; color: var(--gray-600);">15+ BOM 共用 · 单板节省 <strong style="color: var(--success);">¥ 4.45</strong> · 年节省 <strong style="color: var(--success);">¥ 106,800</strong>· 8-15% 集采折扣</div>
+          </div>
+          <button class="btn btn-primary btn-sm">采纳</button>
+        </div>
+      </div>
+
+    </div>
+    <div class="ai-modal-footer">
+      <div style="font-size: 11px; color: var(--gray-500);">3 条建议全采纳 · 单板降本 ¥10.50 · 年降本 ¥252,000</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-default" onclick="closeBomSuggestionModal('cost-analysis')">关闭</button>
+        <button class="btn btn-default">导出成本报告</button>
+        <button class="btn btn-primary" onclick="closeBomSuggestionModal('cost-analysis'); showToast('✓ 已采纳全部 3 条降本建议 · 年节省 ¥252K');">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+          采纳全部建议
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.cost-tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.cost-tip:last-child { border-bottom: 0; }
+</style>
+
+<!-- ============ Modal: 与上一版对比 ============ -->
+<div id="modal-version-diff" class="ai-modal" style="display:none;">
+  <div class="ai-modal-mask" onclick="closeBomSuggestionModal('version-diff')"></div>
+  <div class="ai-modal-panel" style="width:1000px;">
+    <div class="ai-modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div class="ai-modal-icon">✦</div>
+        <div>
+          <div style="font-size:16px; font-weight:600; color:white;">版本对比 · 触发 ECN 影响分析</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.75); margin-top:2px;">Agent ⑧ · 智能门锁主控板 V3.1 → V3.2 · 6 项变更</div>
+        </div>
+      </div>
+      <button onclick="closeBomSuggestionModal('version-diff')" class="ai-modal-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="ai-modal-body">
+
+      <!-- 版本对比头部 -->
+      <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; margin-bottom: 18px;">
+        <div style="padding: 14px 16px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px;">
+          <div style="font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">旧版本</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--gray-900); margin-top: 4px;">V3.1（量产中）</div>
+          <div style="font-size: 11px; color: var(--gray-600); margin-top: 4px;">BOM-LC-2026-012 · 152 项物料</div>
+          <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">2 天前 · 单板 ¥91</div>
+        </div>
+        <div style="text-align: center; font-size: 24px; color: var(--ai);">→</div>
+        <div style="padding: 14px 16px; background: linear-gradient(135deg, var(--ai-50) 0%, white 100%); border: 1px solid var(--ai-100); border-radius: 10px;">
+          <div style="font-size: 11px; color: var(--ai-700); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">新版本（当前）</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--gray-900); margin-top: 4px;">V3.2（询价中）</div>
+          <div style="font-size: 11px; color: var(--gray-600); margin-top: 4px;">BOM-LC-2026-018 · 156 项物料</div>
+          <div style="font-size: 11px; color: var(--success); margin-top: 2px;">10 分钟前 · 单板 <strong>¥87</strong>（↓ 4.4%）</div>
+        </div>
+      </div>
+
+      <!-- 6 项变更明细 -->
+      <div style="border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; margin-bottom: 18px;">
+        <div style="padding: 12px 16px; background: var(--gray-50); border-bottom: 1px solid var(--gray-150); font-size: 13px; font-weight: 600;">6 项变更明细</div>
+
+        <div class="diff-row diff-row-added">
+          <span class="diff-badge diff-badge-add">+ 新增</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900);">L3, L4 · 共模电感 10uH（U2 周边新增 ESD 防护）</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">EE-L-10UH-CMC · 解决 V3.1 客户反馈的 ESD 失效问题</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--gray-500);">+¥1.20/台</div>
+        </div>
+
+        <div class="diff-row diff-row-changed">
+          <span class="diff-badge diff-badge-change">~ 替换</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900);">U9 · <span style="text-decoration: line-through; color: var(--gray-500);">CP2102</span> → <strong style="color: var(--success);">CH340G</strong></div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">CP2102 已 EOL · CH340G 节省 ¥4.40/台 · 软硬件 Pin 兼容</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--success);">−¥4.40/台</div>
+        </div>
+
+        <div class="diff-row diff-row-changed">
+          <span class="diff-badge diff-badge-change">~ 替换</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900);">M1 · <span style="text-decoration: line-through; color: var(--gray-500);">指纹模块 A 版</span> → <strong style="color: var(--success);">指纹模块 B 版（活体检测）</strong></div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">客户升级要求 · 增加活体检测功能</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--danger);">+¥3.50/台</div>
+        </div>
+
+        <div class="diff-row diff-row-added">
+          <span class="diff-badge diff-badge-add">+ 新增</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900);">J3 · USB-C 测试点接口</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">便于产线测试 · 量产工艺优化</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--gray-500);">+¥0.80/台</div>
+        </div>
+
+        <div class="diff-row diff-row-removed">
+          <span class="diff-badge diff-badge-remove">− 删除</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900); text-decoration: line-through;">R8 · 上拉电阻 4.7K（U2 复位线）</div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">U2 内部已有上拉,外部电阻冗余</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--success);">−¥0.008/台</div>
+        </div>
+
+        <div class="diff-row diff-row-changed">
+          <span class="diff-badge diff-badge-change">~ 用量</span>
+          <div style="flex: 1;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--gray-900);">C5~C12 · 0603 100nF 滤波电容 <span style="color: var(--gray-500);">8 → 12 个</span></div>
+            <div style="font-size: 11px; color: var(--gray-500); margin-top: 2px;">U2 电源处增加 4 颗滤波 · 提升抗干扰</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: var(--danger);">+¥0.048/台</div>
+        </div>
+      </div>
+
+      <!-- ECN 影响分析 -->
+      <div style="padding: 14px 16px; background: linear-gradient(135deg, var(--warning-bg) 0%, white 100%); border: 1px solid var(--warning-border); border-radius: 10px;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <span style="font-size: 16px; flex-shrink: 0;">⚠</span>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--warning); margin-bottom: 6px;">ECN 影响评估</div>
+            <div style="font-size: 12px; color: var(--gray-700); line-height: 1.65;">
+              本次变更属于 <strong style="color: var(--warning);">中等级别 ECN</strong>（涉及功能升级 + 关键物料替换）。影响:<br>
+              • 影响 <strong>28 张在售工单</strong>（联创科技库存待消化）<br>
+              • 需<strong>客户书面确认</strong>（活体检测功能升级）<br>
+              • 需<strong>重新认证</strong>(CCC / FCC 视客户要求)<br>
+              • 总成本变化:<strong style="color: var(--success);">−¥4.00 / 台</strong>(¥91 → ¥87)
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="ai-modal-footer">
+      <div style="font-size: 11px; color: var(--gray-500);">建议在 V3.1 库存消化后切换 · 预计 2 周</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-default" onclick="closeBomSuggestionModal('version-diff')">关闭</button>
+        <button class="btn btn-default">导出差异报告</button>
+        <button class="btn btn-primary" onclick="closeBomSuggestionModal('version-diff'); showToast('✓ 已发起 ECN-2026-028 变更评审');">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+          发起 ECN 变更评审
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.diff-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.diff-row:last-child { border-bottom: 0; }
+.diff-row-added { background: linear-gradient(90deg, var(--success-bg) 0%, white 70%); }
+.diff-row-removed { background: linear-gradient(90deg, var(--danger-bg) 0%, white 70%); }
+.diff-row-changed { background: white; }
+.diff-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.diff-badge-add { background: var(--success); color: white; }
+.diff-badge-remove { background: var(--danger); color: white; }
+.diff-badge-change { background: var(--ai); color: white; }
+</style>
+
+<script>
+// ============ BOM 审批流初始化 ============
+(function() {
+  function init() {
+    if (!window.Workflow || !window.RBAC) return;
+    // 当前 BOM 实例
+    const urlParams = new URLSearchParams(window.location.search);
+    const bomId = urlParams.get('bom') || 'BOM-LC-2026-018';
+    window.Workflow.render({
+      containerId: 'bom-approval-flow',
+      actionAreaId: 'bom-approval-action-area',
+      templateKey: 'bom-submit',
+      instanceKey: 'bom-' + bomId,
+      subjectLabel: bomId + ' 智能门锁主控板 V3.2',
+      defaultNodeIdx: 1,  // 默认在「提交确认」节点
+    });
+    window.Workflow.rerenderAll();
+    window.Workflow.renderHistory('bom-history', 'bom-' + bomId);
+    const _aB = window.Workflow.approve, _rB = window.Workflow.reject;
+    window.Workflow.approve = function(k){_aB(k); setTimeout(()=>window.Workflow.renderHistory('bom-history',k),1500);};
+    window.Workflow.reject = function(k){_rB(k); setTimeout(()=>window.Workflow.renderHistory('bom-history',k),2000);};
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 200));
+  } else {
+    setTimeout(init, 200);
+  }
+})();
+
+// 顶部按钮的快捷操作（也通过 Workflow 走流程）
+function submitBomForReview() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const bomId = urlParams.get('bom') || 'BOM-LC-2026-018';
+  window.Workflow.approve('bom-' + bomId);
+}
+function approveBom() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const bomId = urlParams.get('bom') || 'BOM-LC-2026-018';
+  window.Workflow.approve('bom-' + bomId);
+}
+</script><script>
+function openMesSync() {
+  if (!window.ezUI) return;
+  window.ezUI.showModal({
+    title: 'MES 系统同步 · MBOM/V3.2',
+    subtitle: '推送当前 MBOM 到 SMT 产线 MES · 预计 3-8 秒',
+    icon: '🏭',
+    accent: '#0f172a',
+    width: 760,
+    content: `
+      <div style="margin-bottom:14px; padding:12px 14px; background:#fef3c7; border:1px solid #fcd34d; border-radius:8px;">
+        <div style="font-size:12px; color:#92400e; font-weight:600; margin-bottom:4px;">⚠ 同步将自动锁定旧版本 MBOM/V2.3</div>
+        <div style="font-size:11px; color:#92400e;">所有新工单将强制使用 V3.2 · 已下达的工单可选择继续用 V2.3</div>
+      </div>
+
+      <div style="font-size:11px; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">将推送以下数据到 MES</div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        <label class="mes-sync-item">
+          <input type="checkbox" checked style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">MBOM 物料清单 · 156 项</strong>
+            <div style="font-size:11px; color:var(--gray-500);">含 SMT 站位 / Feeder 配置 / 包装规格</div>
+          </div>
+          <span style="font-size:11px; color:#16a34a; font-weight:600;">→ MES.bom_master</span>
+        </label>
+        <label class="mes-sync-item">
+          <input type="checkbox" checked style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">工艺路线 · 8 道工序</strong>
+            <div style="font-size:11px; color:var(--gray-500);">SMT 设备型号 + 工时 + 关键参数</div>
+          </div>
+          <span style="font-size:11px; color:#16a34a; font-weight:600;">→ MES.process_route</span>
+        </label>
+        <label class="mes-sync-item">
+          <input type="checkbox" checked style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">钢网 STN-LC-018-V32</strong>
+            <div style="font-size:11px; color:var(--gray-500);">绑定到 DEK Horizon 03i · 编号校验</div>
+          </div>
+          <span style="font-size:11px; color:#16a34a; font-weight:600;">→ MES.stencil</span>
+        </label>
+        <label class="mes-sync-item">
+          <input type="checkbox" checked style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">AOI 程序 · AOI-V32-R3.aoi</strong>
+            <div style="font-size:11px; color:var(--gray-500);">已加入 CH340G 检测点</div>
+          </div>
+          <span style="font-size:11px; color:#16a34a; font-weight:600;">→ MES.aoi_program</span>
+        </label>
+        <label class="mes-sync-item">
+          <input type="checkbox" checked style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">ICT 程序 · ICT-V32.i3070</strong>
+            <div style="font-size:11px; color:var(--gray-500);">USB 通信测试用例</div>
+          </div>
+          <span style="font-size:11px; color:#16a34a; font-weight:600;">→ MES.ict_program</span>
+        </label>
+        <label class="mes-sync-item">
+          <input type="checkbox" style="accent-color:#16a34a;"/>
+          <div style="flex:1;">
+            <strong style="font-size:13px;">工艺参数 8 项</strong>
+            <div style="font-size:11px; color:var(--gray-500);">回流峰值/锡膏厚度等 · 注意:需 PE 现场校准</div>
+          </div>
+          <span style="font-size:11px; color:#d97706; font-weight:600;">→ 需现场确认</span>
+        </label>
+      </div>
+
+      <!-- MES 同步 console -->
+      <div style="padding:12px 14px; background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color:white; border-radius:10px; font-family:var(--font-mono); font-size:11px;">
+        <div style="font-size:10px; color:#94a3b8; margin-bottom:6px;">// MES 同步命令预览</div>
+        <div style="color:#a5f3fc;">$ mes-cli release --mbom V3.2 --tenant LC2026A --confirm</div>
+        <div style="color:#94a3b8;">→ POST /api/mbom/release</div>
+        <div style="color:#94a3b8;">→ Body: {"version":"V3.2","items":156,"override_v2.3":true}</div>
+        <div style="color:#94a3b8;">→ Auth: Bearer eyJhbG... (admin token)</div>
+      </div>
+
+      <div style="margin-top:14px; padding:10px 12px; background:#fef2f2; border-radius:8px; font-size:11px; color:#dc2626;">
+        <strong>授权检查:</strong>此操作需 PE/工艺工程师 或以上权限。当前用户 王 工(PM)无此权限,需委托李 工(PE)代签。
+      </div>
+    `,
+    footer: `
+      <button onclick="window.ezUI.closeAllModals();" style="padding:7px 14px; background:#fafafa; border:1px solid #e4e4e7; border-radius:6px; font-size:12px; cursor:pointer;">取消</button>
+      <button onclick="confirmMesSync()" style="padding:7px 14px; background:#0f172a; color:white; border:0; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">🏭 推送到 MES</button>
+    `
+  });
+}
+function confirmMesSync() {
+  window.ezUI.closeAllModals();
+  // 显示同步进度
+  window.ezUI.showModal({
+    title: 'MES 同步进行中…',
+    subtitle: '请勿关闭浏览器 · 同步过程不可中断',
+    icon: '⚙',
+    accent: '#0f172a',
+    width: 580,
+    content: `
+      <div style="font-family:var(--font-mono); font-size:11px; color:#27272a; background:#0f172a; color:#a5f3fc; padding:14px 16px; border-radius:8px; min-height:200px;" id="mes-console">
+[09:43:21] Connecting to MES @ 192.168.10.45:8443...<br>
+      </div>
+    `,
+    footer: ''
+  });
+  
+  const out = () => document.getElementById('mes-console');
+  const lines = [
+    '[09:43:21] ✓ Connection established',
+    '[09:43:22] ✓ Auth via bearer token',
+    '[09:43:22] → Releasing MBOM/V3.2 (156 items)...',
+    '[09:43:24] ✓ MBOM/V3.2 released → MES.bom_master',
+    '[09:43:24] → Locking MBOM/V2.3...',
+    '[09:43:25] ✓ V2.3 frozen (新工单将禁用)',
+    '[09:43:25] → Pushing process route (8 stations)...',
+    '[09:43:26] ✓ 8 stations registered',
+    '[09:43:26] → Updating stencil binding STN-LC-018-V32...',
+    '[09:43:27] ✓ Stencil bound to DEK Horizon 03i',
+    '[09:43:27] → Uploading AOI-V32-R3.aoi to Koh Young Zenith...',
+    '[09:43:28] ✓ AOI program uploaded (8.4 MB)',
+    '[09:43:28] → Uploading ICT-V32.i3070...',
+    '[09:43:29] ✓ ICT program uploaded',
+    '[09:43:29] → Notifying SMT operators via WeChat Work...',
+    '[09:43:30] ✓ 6 operators notified',
+    '[09:43:30] <strong style="color:#86efac;">✓ MES 同步完成 · 总耗时 8.7s</strong>',
+  ];
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= lines.length) {
+      clearInterval(interval);
+      setTimeout(() => {
+        window.ezUI.closeAllModals();
+        window.ezUI.toast('✓ MES 同步完成 · MBOM/V3.2 已生效 · 旧版本已冻结', 'success');
+        if (window.Workflow) {
+          setTimeout(() => window.Workflow.sendWxNotify('MBOM/V3.2 已推送 MES · 旧版本已冻结', 'complete'), 500);
+        }
+      }, 1000);
+      return;
+    }
+    if (out()) out().innerHTML += lines[i] + '<br>';
+    i++;
+  }, 400);
+}
+</script>
+<style>
+.mes-sync-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; background: var(--gray-50);
+  border-radius: 8px; cursor: pointer;
+  transition: background 150ms;
+}
+.mes-sync-item:hover { background: var(--gray-100); }
+.mes-sync-item input { accent-color: #16a34a; }
+</style>
+
+
+<script>
+function openBulkConfirm() {
+  if (!window.ezUI) return;
+  window.ezUI.showModal({
+    title: '批量确认 · 100% AI 匹配物料',
+    subtitle: '100 项物料 · 全部置信度 100% · BOM Agent ① 自动归类',
+    icon: '✓',
+    accent: '#16a34a',
+    width: 640,
+    content: `
+      <div style="padding:12px 14px; background:#dcfce7; border:1px solid #86efac; border-radius:8px; margin-bottom:14px;">
+        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:6px;">即将批量确认以下 100 项物料</div>
+        <div style="font-size:12px; color:var(--gray-700); line-height:1.6;">
+          • 全部来自客户描述自动匹配的内部料号 · 置信度 100%<br>
+          • 已通过合规校验(RoHS / REACH / AECQ)<br>
+          • 已检查库存可用性 · 无 EOL 物料
+        </div>
+      </div>
+
+      <div style="font-size:11px; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">物料类型分布</div>
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:14px;">
+        <div style="padding:10px 12px; background:var(--gray-50); border-radius:8px; text-align:center;">
+          <div style="font-family:JetBrains Mono; font-size:18px; font-weight:800; color:#7B61FF;">42</div>
+          <div style="font-size:10px; color:var(--gray-500);">电阻 / 电容</div>
+        </div>
+        <div style="padding:10px 12px; background:var(--gray-50); border-radius:8px; text-align:center;">
+          <div style="font-family:JetBrains Mono; font-size:18px; font-weight:800; color:#7B61FF;">28</div>
+          <div style="font-size:10px; color:var(--gray-500);">IC / MCU</div>
+        </div>
+        <div style="padding:10px 12px; background:var(--gray-50); border-radius:8px; text-align:center;">
+          <div style="font-family:JetBrains Mono; font-size:18px; font-weight:800; color:#7B61FF;">18</div>
+          <div style="font-size:10px; color:var(--gray-500);">连接器 / 接插</div>
+        </div>
+        <div style="padding:10px 12px; background:var(--gray-50); border-radius:8px; text-align:center;">
+          <div style="font-family:JetBrains Mono; font-size:18px; font-weight:800; color:#7B61FF;">12</div>
+          <div style="font-size:10px; color:var(--gray-500);">其他</div>
+        </div>
+      </div>
+
+      <div style="font-size:11px; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">前 5 项预览</div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:12px;">
+        <thead><tr style="background:var(--gray-50);"><th style="padding:6px 8px; text-align:left;">客户描述</th><th style="padding:6px 8px; text-align:left;">匹配料号</th><th style="padding:6px 8px;">置信度</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:6px 8px;">10K 1% 0603 电阻</td><td style="padding:6px 8px; font-family:JetBrains Mono;">EE-R-10K-0603-1%</td><td style="padding:6px 8px; text-align:center; color:#16a34a;">100%</td></tr>
+          <tr><td style="padding:6px 8px;">100nF 50V 0603 X7R</td><td style="padding:6px 8px; font-family:JetBrains Mono;">EE-C-100N-0603</td><td style="padding:6px 8px; text-align:center; color:#16a34a;">100%</td></tr>
+          <tr><td style="padding:6px 8px;">USB Type-C 16 pin</td><td style="padding:6px 8px; font-family:JetBrains Mono;">EE-CN-USB-C-16P</td><td style="padding:6px 8px; text-align:center; color:#16a34a;">100%</td></tr>
+          <tr><td style="padding:6px 8px;">STM32F103C8T6</td><td style="padding:6px 8px; font-family:JetBrains Mono;">EE-IC-STM32F103-C8</td><td style="padding:6px 8px; text-align:center; color:#16a34a;">100%</td></tr>
+          <tr><td style="padding:6px 8px;">LED 红色 0603</td><td style="padding:6px 8px; font-family:JetBrains Mono;">EE-LED-RED-0603</td><td style="padding:6px 8px; text-align:center; color:#16a34a;">100%</td></tr>
+        </tbody>
+      </table>
+      <div style="text-align:center; font-size:11px; color:var(--gray-500);">… 还有 95 项未显示</div>
+    `,
+    footer: `
+      <button onclick="window.ezUI.closeAllModals();" style="padding:7px 14px; background:#fafafa; border:1px solid #e4e4e7; border-radius:6px; font-size:12px; cursor:pointer;">取消</button>
+      <button onclick="window.ezUI.closeAllModals(); window.ezUI.toast('✓ 已批量确认 100 项 · 仍剩 11 项需人工审核', 'success');" style="padding:7px 14px; background:#16a34a; color:white; border:0; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">批量确认 100 项</button>
+    `
+  });
+}
+</script>
+
+</body>
+</html>
