@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>供应商交期回复门户 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">采购协同 <span>/</span> <span class="current">供应商交期回复门户</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge amber">供应商视图 · 晶汇半导体</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>OPO 供应商交期回复轻量门户：待回复 OPO 清单 → ETA 在线回填（支持分批）→ Excel 模板下载/上传双通道 → 邮件催办 → 回复状态跟踪</b>。本页为供应商登录后的视图，与 <a href="opo.html">OPO 交期协同</a>（采购侧）对应。<span class="oos">供应商准入/考核/PPM/索赔等绩效管理为二期</span>，见<a href="phase2.html">变更需求池</a>。</div>
+        <span class="ai-loop-pill">供应商回填 → 采购侧匹配确认</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">供应商交期回复门户</div>
+          <div class="page-desc">晶汇半导体 · 待回复 5 行 · 本期催办截止 2026-06-15</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="dlTpl()">下载 Excel 回复模板</button>
+          <button class="btn" onclick="upTpl()">上传 Excel 回复</button>
+          <button class="btn primary" onclick="submitAll()">提交在线回填</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API（供应商侧）</h4>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/portal/opo/pending</code> <span class="muted">待回复 OPO 行（按登录供应商过滤）</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/portal/opo/replies</code> <span class="muted">在线回填 ETA（支持分批行）</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/portal/opo/replies/import</code> <span class="muted">Excel 模板上传</span></div>
+          </div>
+          <div>
+            <h4>数据模型</h4>
+            <div class="model mono">
+              OpoReply { opoLine, supplierId, batches:[<br>
+              &nbsp;&nbsp;{ qty, eta }], remark, repliedAt, channel: 门户|Excel }<br>
+              提交后进入采购侧自动匹配与异常判定
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><div class="kpi-num orange">5</div><div class="kpi-label">待回复 OPO 行</div></div>
+        <div class="kpi"><div class="kpi-num">12</div><div class="kpi-label">本月已回复</div></div>
+        <div class="kpi"><div class="kpi-num">2</div><div class="kpi-label">收到催办邮件（双周）</div></div>
+        <div class="kpi"><div class="kpi-num green">06-15</div><div class="kpi-label">本期回复截止</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">待回复 OPO 清单 · ETA 在线回填</div>
+          <span class="small muted">支持分批：点"+ 分批"为同一行填多个数量/日期</span></div>
+        <table class="tbl">
+          <thead><tr><th>OPO 行</th><th>MPN</th><th>订购数量</th><th>原承诺 ETA</th><th>回复 ETA</th><th>回复数量</th><th>备注</th><th>分批</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">OPO-5096-01</td><td class="mono">STM32F103C8T6</td><td class="mono">5,000</td><td class="mono">06-20</td><td><input type="date" value="2026-06-20" class="fld-inline"></td><td><input type="number" value="5000" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" placeholder="可选" style="width:120px"></td><td><button class="btn xs" onclick="splitRow('OPO-5096-01')">+ 分批</button></td></tr>
+            <tr><td class="mono">OPO-5102-02</td><td class="mono">AMS1117-3.3</td><td class="mono">20,000</td><td class="mono">06-18</td><td><input type="date" value="2026-06-22" class="fld-inline"></td><td><input type="number" value="20000" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" value="晶圆延迟 4 天" style="width:120px"></td><td><button class="btn xs" onclick="splitRow('OPO-5102-02')">+ 分批</button></td></tr>
+            <tr><td class="mono">OPO-5110-01</td><td class="mono">SM04B-SRSS-TB</td><td class="mono">8,000</td><td class="mono">06-16</td><td><input type="date" value="2026-06-20" class="fld-inline"></td><td><input type="number" value="3000" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" value="先交 3,000" style="width:120px"></td><td><button class="btn xs" onclick="splitRow('OPO-5110-01')">+ 分批</button></td></tr>
+            <tr style="background:var(--gray-50)"><td class="mono muted">└ 分批 2</td><td class="mono muted">SM04B-SRSS-TB</td><td class="mono muted">—</td><td class="mono muted">—</td><td><input type="date" value="2026-07-18" class="fld-inline"></td><td><input type="number" value="5000" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" value="余量原 ETA" style="width:120px"></td><td></td></tr>
+            <tr><td class="mono">OPO-5115-01</td><td class="mono">GD32F103C8T6</td><td class="mono">3,000</td><td class="mono">06-25</td><td><input type="date" class="fld-inline"></td><td><input type="number" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" style="width:120px"></td><td><button class="btn xs" onclick="splitRow('OPO-5115-01')">+ 分批</button></td></tr>
+            <tr><td class="mono">OPO-5120-01</td><td class="mono">CL10B104KB8NNNC</td><td class="mono">50,000</td><td class="mono">06-15</td><td><input type="date" class="fld-inline"></td><td><input type="number" class="fld-inline" style="width:90px"></td><td><input class="fld-inline" style="width:120px"></td><td><button class="btn xs" onclick="splitRow('OPO-5120-01')">+ 分批</button></td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">提交后由采购侧系统自动匹配，差异/异常进入采购的异常交期清单</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">回复状态跟踪</div></div>
+        <table class="tbl">
+          <thead><tr><th>OPO 行</th><th>回复时间</th><th>渠道</th><th>回复 ETA</th><th>采购侧状态</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">OPO-5089-01</td><td class="mono">06-02 10:18</td><td>门户</td><td class="mono">06-10</td><td><span class="badge green">已匹配 · 一致</span></td></tr>
+            <tr><td class="mono">OPO-5091-02</td><td class="mono">06-02 10:21</td><td>Excel 上传</td><td class="mono">06-30</td><td><span class="badge orange">异常交期 · 采购协调中</span></td></tr>
+            <tr><td class="mono">OPO-5093-01</td><td class="mono">06-05 16:40</td><td>门户</td><td class="mono">06-12</td><td><span class="badge green">已匹配 · 一致</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="banner soft">
+        催办机制：未回复行每<b>双周</b>自动发送催办邮件（含本门户链接与 Excel 模板附件双通道）；本页所有提交写入操作日志。
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<style>.fld-inline{padding:5px 8px;border:1px solid var(--gray-300);border-radius:7px;font:inherit;font-size:12px}</style>
+<script>
+function dlTpl(){ezExportCSV('OPO回复模板-晶汇半导体',[['OPO行','MPN','订购数量','回复ETA','回复数量','备注'],['OPO-5096-01','STM32F103C8T6','5000','','',''],['OPO-5102-02','AMS1117-3.3','20000','','',''],['OPO-5110-01','SM04B-SRSS-TB','8000','','',''],['OPO-5115-01','GD32F103C8T6','3000','','',''],['OPO-5120-01','CL10B104KB8NNNC','50000','','','']]);ezLog('下载 OPO 回复模板','晶汇半导体 5 行');}
+function upTpl(){
+  ezModal('上传 Excel 回复',`
+    <div class="upload-zone" onclick="ezToast('已解析回复 5 行：4 行有效 · 1 行日期格式待修正')">
+      <div class="uz-icon">📊</div><div><b>上传已填写的回复模板</b></div></div>`,
+    [{label:'取消'},{label:'上传并提交',cls:'primary',onClick:c=>{c();ezToast('Excel 回复已提交采购侧匹配');ezLog('Excel 上传 OPO 回复','5 行');}}]);
+}
+function splitRow(line){ezToast(line+' 已添加分批行（示例见 OPO-5110-01）');}
+function submitAll(){
+  ezModal('提交在线回填',`<div class="banner info">将提交 5 行回复（含 1 行分批 2 段）至采购侧自动匹配。提交后如需修改，请联系采购或重新上传。</div>`,
+    [{label:'取消'},{label:'确认提交',cls:'primary',onClick:c=>{c();ezToast('回复已提交，采购侧将自动匹配并反馈');ezLog('门户提交 OPO 回复','晶汇半导体 5 行');}}]);
+}
+</script>
+</body>
+</html>

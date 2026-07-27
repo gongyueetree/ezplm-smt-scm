@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPO 交期协同 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">采购协同 <span>/</span> <span class="current">OPO 交期协同</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge gray">双周催复 · 下次发送 06-15</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>ERP/MES 或 Excel 导入 OPO → 按供应商生成待回复清单 → 双周（每 14 天）或手动模拟催复 → Excel 模板或轻量门户逐行填报 → 自动匹配采购订单行 → 差异表 / 未回复 / 异常交期 → 导出供 ERP 导入</b>。<span class="oos">接口开放并联调后可直接回写 ERP；不强制假设 ERP 开放接口。</span></div>
+        <span class="ai-loop-pill">匹配结果可人工修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">OPO 交期协同</div>
+          <div class="page-desc">Demo 4 · 2026-06 第 2 个双周周期 · 41 行 OPO / 5 家供应商</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="importOPO()" title="原型演示解析 CSV；正式系统由后端解析 Excel / 对接 ERP">导入 OPO（CSV / Excel / ERP）</button>
+          <button class="btn" onclick="mailPreview()">模拟发送催复邮件</button>
+          <button class="btn primary" onclick="simulateReply()">模拟供应商门户回填</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/opo/import</code> <span class="muted">Excel / 中间表 / ERP 视图</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/opo/remind</code> <span class="muted">双周催复：自起始日起每 14 天，或手动触发</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/opo/replies</code> <span class="muted">门户逐行 / Excel 模板回填</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/opo/reports/{diff|no-reply|abnormal}</code></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/opo/export?format=erp-import</code></div>
+          </div>
+          <div>
+            <h4>数据模型</h4>
+            <div class="model mono">
+              OPOLine { ppoNo, lineNo, mpn, qty, needDate, etaOld,<br>
+              &nbsp;&nbsp;supplierId, replyEta?, replyQty?, replyAt?,<br>
+              &nbsp;&nbsp;diffDays, status: PENDING|REPLIED|ABNORMAL }<br>
+              异常规则：replyEta − needDate ≥ 7 天 或 数量短交
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><div class="card-title">双周催复周期</div>
+          <span class="small muted">规则：自周期起始日起，每 14 天执行一次（下次发送 = 上次发送 + 14 天）</span></div>
+        <div class="card-body" style="display:flex;gap:28px;flex-wrap:wrap">
+          <div><div class="small muted">周期起始日</div><div class="mono"><b>2026-05-18</b></div></div>
+          <div><div class="small muted">上次发送</div><div class="mono"><b>2026-06-01</b></div></div>
+          <div><div class="small muted">下次发送（+14 天）</div><div class="mono"><b>2026-06-15</b></div></div>
+          <div><div class="small muted">本轮供应商回复截止</div><div class="mono"><b>2026-06-15</b></div></div>
+          <div style="flex:1;min-width:220px"><div class="small muted">发送方式</div>
+            <div class="small">自动：到下次发送日由系统按周期发送；手动：随时点「模拟发送催复邮件」补发。<span class="oos">原型按钮均为模拟发送，不会真实发出邮件。</span></div></div>
+        </div>
+        <div class="card-body" style="border-top:1px solid var(--gray-150)"><div class="small muted">正式系统真实邮件发送依赖甲方邮件系统账号、SMTP/API 授权与网络环境，由实施阶段配置。</div></div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><div class="kpi-label">OPO 总行数</div><div class="kpi-value">41</div><div class="kpi-foot">5 家供应商</div></div>
+        <div class="kpi warn"><div class="kpi-label">未回复</div><div class="kpi-value" id="k-pending">23</div><div class="kpi-foot">距双周截止 2 天</div></div>
+        <div class="kpi"><div class="kpi-label">已回复</div><div class="kpi-value" id="k-replied">18</div><div class="kpi-foot" id="k-replied-foot">自动匹配 17 · 待人工 1</div></div>
+        <div class="kpi danger"><div class="kpi-label">异常交期</div><div class="kpi-value" id="k-abn">8</div><div class="kpi-foot">回复 ETA 晚于需求日 ≥7 天</div></div>
+      </div>
+
+      <div class="tabs" data-group="opo">
+        <button class="tab active" data-pane="p-diff">交期差异表</button>
+        <button class="tab" data-pane="p-noreply">未回复清单</button>
+        <button class="tab" data-pane="p-abn">异常交期清单</button>
+        <button class="tab" data-pane="p-portal">供应商轻量门户（预览）</button>
+      </div>
+
+      <div class="tab-pane active" data-group="opo" id="p-diff"><div class="card">
+        <div class="card-head"><div class="card-title">交期差异表</div>
+          <div style="margin-left:auto"><button class="btn sm primary" onclick="exportDiff()" title="原型演示导出 CSV；正式系统生成 ERP 可导入 XLSX">导出差异表（CSV · ERP 导入格式）</button></div></div>
+        <div class="card-body flush tbl-scroll"><table class="tbl" id="tbl-diff">
+          <thead><tr><th>OPO 行</th><th>MPN</th><th>供应商</th><th class="num">数量</th><th>需求日</th><th>原 ETA</th><th>回复 ETA</th><th class="num">差异(天)</th><th>状态</th></tr></thead>
+          <tbody id="diff-body"></tbody></table></div>
+        <div class="card-body" style="border-top:1px solid var(--gray-150)"><div class="banner info" style="margin:0">导出文件兼容 ERP 导入模板；<b>接口开放后</b>可直接回写 ERP（API / 中间表 / RPA 任选，见 <a href="integration.html" style="text-decoration:underline">系统集成</a>）。</div></div>
+      </div></div>
+
+      <div class="tab-pane" data-group="opo" id="p-noreply"><div class="card">
+        <div class="card-head"><div class="card-title">未回复清单（按供应商）</div>
+          <div style="margin-left:auto"><button class="btn sm" onclick="ezToast('模拟：向 3 家未回复供应商重发催复邮件（原型不真实发出）')">一键重发催复（模拟）</button></div></div>
+        <div class="card-body flush"><table class="tbl">
+          <thead><tr><th>供应商</th><th class="num">未回复行数</th><th>最早需求日</th><th>上次催复</th><th>渠道</th><th></th></tr></thead>
+          <tbody id="noreply-body"></tbody></table></div>
+      </div></div>
+
+      <div class="tab-pane" data-group="opo" id="p-abn"><div class="card">
+        <div class="card-head"><div class="card-title">异常交期清单</div>
+          <div style="margin-left:auto"><button class="btn sm primary" onclick="exportAbn()" title="原型演示导出 CSV；正式系统生成 XLSX">导出异常清单（CSV）</button></div></div>
+        <div class="card-body flush"><table class="tbl" id="tbl-abn">
+          <thead><tr><th>OPO 行</th><th>MPN</th><th>供应商</th><th>异常类型</th><th class="num">影响工单</th><th>建议动作</th></tr></thead>
+          <tbody id="abn-body"></tbody></table></div>
+      </div></div>
+
+      <div class="tab-pane" data-group="opo" id="p-portal"><div class="card">
+        <div class="card-head"><div class="card-title">供应商轻量门户 · 逐行填报（供应商视角预览）</div><div class="card-sub">供应商角色登录后仅见本厂 OPO 行</div>
+          <div style="margin-left:auto"><a class="btn sm" href="supplier.html">打开完整供应商门户页 →</a></div></div>
+        <div class="card-body flush tbl-scroll"><table class="tbl">
+          <thead><tr><th>OPO 行</th><th>MPN</th><th class="num">数量</th><th>需求日</th><th>回复 ETA</th><th>回复数量</th><th>备注</th><th></th></tr></thead>
+          <tbody>
+            <tr id="portal-row-5113"><td class="mono">OPO-5113-02</td><td class="mono">GRM188R71H104KA93D</td><td class="num">200,000</td><td>06-24</td>
+              <td><input type="date" value="2026-07-02" id="pr-eta"></td>
+              <td><input value="200000" id="pr-qty"></td>
+              <td><input placeholder="可选" id="pr-note"></td>
+              <td><button class="btn sm primary" onclick="portalSubmit()">提交本行</button> <span id="pr-status" class="small muted">待回复</span></td></tr>
+          </tbody></table></div>
+        <div class="card-body" style="border-top:1px solid var(--gray-150)"><div class="small muted">不便使用门户的供应商可下载 Excel 回复模板，回传后系统自动按 OPO 行号 + MPN 匹配；匹配不上的行进入人工处理队列。</div></div>
+      </div></div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function importOPO(){
+  ezImportCSV((rows,name)=>{
+    if(!rows)return;
+    ezToast('已导入 OPO '+(rows.length-1)+' 行：'+name); ezLog('导入 OPO',name);
+  });
+}
+function mailPreview(sup){
+  sup=sup||'富田被动件';
+  ezModal('预览双周 OPO 催复邮件 · '+sup,
+    `<div class="mail-preview">收件人：planning@${sup==='富田被动件'?'futian':'supplier'}.com
+主题：【乾创电子】OPO 交期回复提醒（截止 2026-06-15）
+
+${sup} 计划部您好：
+
+附件为贵司当前未回复交期的 OPO 明细（12 行），请于 2026-06-15 前通过以下任一方式回复：
+1）登录轻量门户逐行填报：https://ezplm.cn/portal
+2）填写附件 Excel 模板后回传本邮件
+
+谢谢配合。
+—— 乾创电子 采购部（系统按双周周期，自起始日起每 14 天发送）</div>`,
+    [{label:'关闭'},{label:'模拟发送',cls:'primary',onClick:c=>{c();ezToast('模拟发送催复邮件至 '+sup+'（原型不真实发出；正式系统依赖邮件账号/SMTP 授权）');ezLog('模拟发送 OPO 催复',sup);}}]);
+}
+// —— OPO 统一状态模型：所有 KPI 与未回复供应商表由此渲染 ——
+// —— OPO 行级统一状态模型：KPI、未回复供应商表、差异表、异常清单、门户行全部由 opoLines 计算 ——
+// status: 'PENDING'（未回复）| 'REPLIED'（已回复）。异常由 replyEta 与 requiredDate 比较得出，不单独存。
+const ABN_DAYS=7;       // 回复 ETA 晚于需求日 ≥7 天判为异常
+function dnum(mmdd){const [m,d]=mmdd.split('-').map(Number);return m*31+d;}      // 简易日期序
+const opoLines=[
+  // 已回复（含异常/偏晚/正常）
+  {id:'OPO-5102-03',sup:'华芯电子',mpn:'STM32F103C8T6',qty:5000,req:'06-28',oeta:'06-25',reta:'06-25',wo:'WO-7740',status:'REPLIED'},
+  {id:'OPO-5110-01',sup:'立讯通泰',mpn:'SM04B-SRSS-TB',qty:8000,req:'07-06',oeta:'07-10',reta:'07-18',wo:'WO-7741',status:'REPLIED'},
+  {id:'OPO-5118-02',sup:'晶汇半导体',mpn:'AMS1117-3.3',qty:3000,req:'06-30',oeta:'07-01',reta:'07-04',wo:'WO-7748',status:'REPLIED'},
+  {id:'OPO-5120-05',sup:'晶汇半导体',mpn:'PESD5V0S1BA',qty:6000,req:'06-26',oeta:'06-26',reta:'07-08',wo:'WO-7741',status:'REPLIED',shortQty:2000},
+  // 门户演示行：富田被动件，超期未回复（已超需求日）
+  {id:'OPO-5113-02',sup:'富田被动件',mpn:'GRM188R71H104KA93D',qty:200000,req:'06-24',oeta:'06-24',reta:null,wo:'WO-7748',status:'PENDING',overdue:true,portal:true},
+];
+// 为达到演示规模（总 41 行），补充未回复占位行（仅计数用，按供应商分布）
+const pendingFill={'富田被动件':11,'立讯通泰':7,'华芯电子':4};   // 不含已单列的门户行
+const SUP_META={'富田被动件':{earliest:'06-24',last:'06-01',ch:'<span class="badge amber">邮件 + Excel 模板</span>'},
+                '立讯通泰':{earliest:'06-26',last:'06-01',ch:'<span class="badge green">轻量门户</span>'},
+                '华芯电子':{earliest:'07-02',last:'06-01',ch:'<span class="badge green">轻量门户</span>'}};
+let fillSeq=900;
+Object.entries(pendingFill).forEach(([sup,n])=>{ for(let i=0;i<n;i++){ opoLines.push({id:'OPO-'+(fillSeq++),sup,mpn:'(批量)',qty:0,req:SUP_META[sup].earliest,oeta:'',reta:null,wo:'',status:'PENDING',fill:true}); } });
+const OPO_TOTAL=opoLines.length;
+
+function diffDays(l){ if(l.status!=='REPLIED'||!l.reta) return null; return dnum(l.reta)-dnum(l.req); }
+function isAbnormal(l){
+  if(l.status==='PENDING' && l.overdue) return true;           // 超期未回复
+  const d=diffDays(l); return d!=null && d>=ABN_DAYS;           // 回复过晚
+}
+function abnType(l){
+  if(l.status==='PENDING'&&l.overdue) return '超期未回复';
+  const d=diffDays(l); let t='延期 +'+d+' 天'; if(l.shortQty) t+=' · 短交 '+l.shortQty.toLocaleString(); return t;
+}
+function suggestAction(l){
+  if(l.status==='PENDING'&&l.overdue) return '电话催复 + 升级管理层';
+  if(l.shortQty) return '多源比价寻替代货源';
+  return '进入<a href="shortage.html" style="text-decoration:underline">缺料分析</a> · 触发 Call 料';
+}
+// 派生计数
+function pendingLines(){return opoLines.filter(l=>l.status==='PENDING');}
+function repliedLines(){return opoLines.filter(l=>l.status==='REPLIED');}
+function abnormalLines(){return opoLines.filter(isAbnormal);}
+function pendingBySupplier(){
+  const m={}; pendingLines().forEach(l=>{m[l.sup]=(m[l.sup]||0)+1;}); return m;
+}
+
+function renderOpo(){
+  // KPI
+  document.getElementById('k-pending').textContent=pendingLines().length;
+  document.getElementById('k-replied').textContent=repliedLines().length;
+  const autoM=repliedLines().filter(l=>!l.manual).length, manualM=repliedLines().filter(l=>l.manual).length;
+  document.getElementById('k-replied-foot').textContent='自动匹配 '+autoM+' · 待人工 '+manualM;
+  document.getElementById('k-abn').textContent=abnormalLines().length;
+  // 差异表（仅已回复行）
+  document.getElementById('diff-body').innerHTML=repliedLines().map(l=>{
+    const d=diffDays(l); const abn=isAbnormal(l);
+    const cls=abn?'row-danger':(d!=null&&d>=1?'row-warn':'');
+    const st=abn?'<span class="badge red">异常'+(l.shortQty?' · 短交 '+l.shortQty.toLocaleString():'')+'</span>':(d!=null&&d>=1?'<span class="badge amber">偏晚</span>':'<span class="badge green">正常</span>');
+    return `<tr class="${cls}"><td class="mono">${l.id}</td><td class="mono">${l.mpn}</td><td>${l.sup}</td><td class="num">${l.qty.toLocaleString()}</td><td>${l.req}</td><td>${l.oeta||'—'}</td><td>${l.reta||'—'}</td><td class="num">${d==null?'—':(d>0?'+':'')+d}</td><td>${st}</td></tr>`;
+  }).join('');
+  // 未回复供应商表
+  const by=pendingBySupplier();
+  document.getElementById('noreply-body').innerHTML=Object.keys(SUP_META).map(sup=>{
+    const n=by[sup]||0; if(!n) return '';
+    const meta=SUP_META[sup];
+    return `<tr><td>${sup}</td><td class="num">${n}</td><td>${meta.earliest}</td><td>${meta.last}</td><td>${meta.ch}</td>
+      <td><button class="btn sm" onclick="mailPreview('${sup}')">邮件预览</button></td></tr>`;
+  }).join('');
+  // 异常清单（统一由 abnormalLines 计算）
+  document.getElementById('abn-body').innerHTML=abnormalLines().map(l=>
+    `<tr><td class="mono">${l.id}</td><td class="mono">${l.mpn.length>14?l.mpn.slice(0,13)+'…':l.mpn}</td><td>${l.sup}</td><td>${abnType(l)}</td><td class="num mono">${l.wo||'—'}</td><td>${suggestAction(l)}</td></tr>`).join('');
+}
+
+let opoReplied=false;
+function simulateReply(){
+  if(opoReplied){ ezToast('本轮已模拟回填'); return; }
+  opoReplied=true;
+  // 9 行回填：富田 5 + 立讯 3 + 华芯 1；其中 2 行（华芯、晶汇新行）判为异常
+  const take=(sup,k,maker)=>{ let c=0; for(const l of opoLines){ if(c>=k)break; if(l.sup===sup&&l.status==='PENDING'&&l.fill){ Object.assign(l,maker(l)); l.status='REPLIED'; l.fill=false; l.mpn=l.mpn==='(批量)'?'(回填)':l.mpn; c++; } } };
+  take('富田被动件',5,()=>({reta:'06-26',req:'06-24',oeta:'06-25'}));        // 正常/偏晚
+  take('立讯通泰',3,()=>({reta:'07-02',req:'06-30',oeta:'06-30'}));          // 偏晚
+  take('华芯电子',1,()=>({reta:'07-09',req:'07-02',oeta:'07-01',mpn:'STM32F103C8T6',wo:'WO-7752'}));  // +7 异常
+  // 再追加 1 行新回复异常（晶汇）
+  opoLines.push({id:'OPO-5115-01',sup:'晶汇半导体',mpn:'GD32F103C8T6',qty:3000,req:'06-30',oeta:'07-01',reta:'07-11',wo:'WO-7741',status:'REPLIED'});
+  renderOpo();
+  ezToast('供应商回填 9 行 → 自动匹配；新增 2 行异常。KPI、未回复清单、差异表、异常清单均由行级数据统一重算','warn');
+  ezLog('供应商回填交期','9 行（行级模型重算）');
+}
+
+let portalDone=false;
+function portalSubmit(){
+  if(portalDone){ ezToast('该行已回复，请勿重复提交','warn'); return; }
+  const line=opoLines.find(l=>l.id==='OPO-5113-02'); if(!line) return;
+  portalDone=true;
+  const eta=document.getElementById('pr-eta').value;     // YYYY-MM-DD
+  const reta=eta.slice(5);
+  line.status='REPLIED'; line.reta=reta; line.overdue=false;  // 回复后不再"超期未回复"
+  const st=document.getElementById('pr-status'); if(st){ st.textContent='已回复 ✓ '+eta; st.className='small'; }
+  document.getElementById('pr-eta').disabled=true; document.getElementById('pr-qty').disabled=true;
+  renderOpo();   // 行级重算：未回复 -1、已回复 +1、该超期异常自动消失（除非新 reta 仍 ≥7 天）
+  ezToast('供应商提交 ETA '+eta+'：OPO-5113-02 转为已回复；KPI、未回复清单、异常清单由行级数据统一重算（该超期异常已据回复结果更新）');
+  ezLog('供应商门户回填','OPO-5113-02 ETA '+eta);
+}
+
+function exportDiff(){
+  const rows=repliedLines().map(l=>[l.id,l.mpn,l.sup,l.qty,l.req,l.oeta||'',l.reta||'',(diffDays(l)),isAbnormal(l)?'异常':(diffDays(l)>=1?'偏晚':'正常')]);
+  ezExportCSV('OPO交期差异表_ERP导入格式.csv',['OPO行','MPN','供应商','数量','需求日','原ETA','回复ETA','差异天','状态'],rows);
+  ezLog('导出交期差异表','ERP 导入格式');
+}
+function exportAbn(){
+  const rows=abnormalLines().map(l=>[l.id,l.mpn,l.sup,abnType(l),l.wo||'',suggestAction(l).replace(/<[^>]+>/g,'')]);
+  ezExportCSV('OPO异常交期清单.csv',['OPO行','MPN','供应商','异常类型','影响工单','建议动作'],rows);
+}
+renderOpo();
+</script>
+</body>
+</html>

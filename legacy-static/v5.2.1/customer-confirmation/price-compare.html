@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>多源比价与替代料 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">采购协同 <span>/</span> <span class="current">多源比价与替代料</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge blue">本批 12 个 MPN</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>固定模板上传 BOM/MPN 清单 → 支持人工录入、Excel 导入或已授权 API 接入多个常用平台的价格/库存/DC 信息 → 最低价标识 → 比价报表 → 历史价格趋势 → EOL 候选替代建议（需人工确认）</b>。<span class="oos">实时对接外部网站 API、自动爬取、账号登录、反爬、高频批量查询为二期/另行确认事项</span>，见<a href="phase2.html">变更需求池</a>。</div>
+        <span class="ai-loop-pill">替代建议 → 人工确认 → 记录修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">多源比价与替代料</div>
+          <div class="page-desc">批次 PC-0612 · 控制板 V3 关键料 12 项（节选 4）</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="uploadList()">上传 MPN 清单（模板）</button>
+          <button class="btn" onclick="importPrice()">导入平台价格数据</button>
+          <button class="btn primary" onclick="ezExportCSV('比价报表-PC-0612',cmpRows());ezLog('导出比价报表','PC-0612')" title="原型演示导出 CSV；正式系统按确认模板生成 XLSX">导出比价报表</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/compare/batches</code> <span class="muted">固定模板上传 MPN 清单</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/compare/batches/:id/sources</code> <span class="muted">价格数据：manual | excel | authorized-api</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/compare/batches/:id/report</code> <span class="muted">比价报表（最低价标识）</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/compare/mpn/:mpn/trend</code> <span class="muted">历史价格趋势</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/compare/mpn/:mpn/substitutes</code> <span class="muted">EOL 候选替代（需人工确认）</span></div>
+          </div>
+          <div>
+            <h4>数据模型 / 来源类型</h4>
+            <div class="model mono">
+              PriceQuote { mpn, source, channel: 人工|Excel|授权API,<br>
+              &nbsp;&nbsp;price, stockQty, dateCode, moq, fetchedAt, enteredBy }<br>
+              最低价 = min(有效报价 by mpn)；趋势按 fetchedAt 聚合
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">① 比价报表（绿色 = 当前最低价）</div>
+          <span class="small muted">数据来源：人工录入 / Excel 导入 / 已授权 API · 每个价格带录入渠道与时间</span></div>
+        <table class="tbl">
+          <thead><tr><th>MPN</th><th>平台 A</th><th>平台 B</th><th>平台 C</th><th>现货商 D</th><th>原厂代理 E</th><th>最低价</th><th>库存/DC</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">STM32F103C8T6</td><td class="mono">¥8.45</td><td class="mono ok"><b>¥8.05</b></td><td class="mono">¥8.32</td><td class="mono">¥8.90</td><td class="mono">¥8.20</td><td><span class="badge green">平台 B ¥8.05</span></td><td class="mono small">12,500 · DC2549</td><td><button class="btn xs" onclick="trend('STM32F103C8T6')">趋势</button></td></tr>
+            <tr><td class="mono">SM04B-SRSS-TB</td><td class="mono">¥1.95</td><td class="mono">—</td><td class="mono ok"><b>¥1.82</b></td><td class="mono">¥2.10</td><td class="mono">¥1.88</td><td><span class="badge green">平台 C ¥1.82</span></td><td class="mono small">8,000 · DC2602</td><td><button class="btn xs" onclick="trend('SM04B-SRSS-TB')">趋势</button></td></tr>
+            <tr><td class="mono">AMS1117-3.3</td><td class="mono ok"><b>¥0.42</b></td><td class="mono">¥0.46</td><td class="mono">¥0.44</td><td class="mono">¥0.55</td><td class="mono">¥0.46</td><td><span class="badge green">平台 A ¥0.42</span></td><td class="mono small">200,000 · DC2611</td><td><button class="btn xs" onclick="trend('AMS1117-3.3')">趋势</button></td></tr>
+            <tr class="warn-row"><td class="mono">MAX3232CSE <span class="badge red">EOL</span></td><td class="mono">¥6.80</td><td class="mono">¥7.20</td><td class="mono">—</td><td class="mono ok"><b>¥6.20</b></td><td class="mono">停售</td><td><span class="badge green">现货商 D ¥6.20</span></td><td class="mono small">仅 1,800 · DC2435</td><td><button class="btn xs primary" onclick="subst()">替代建议</button></td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">报价时效以录入时间为准；过期价格自动置灰（参数可配）</span></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><div class="card-title">② 历史价格趋势 · STM32F103C8T6</div></div>
+          <div style="padding:14px 16px">
+            <svg viewBox="0 0 520 150" style="width:100%;height:auto">
+              <polyline points="20,40 100,52 180,48 260,70 340,86 420,95 500,98" fill="none" stroke="#00890b" stroke-width="2.5"/>
+              <g font-size="10" fill="#9ca3af">
+                <text x="20" y="145">2026-01</text><text x="180" y="145">03</text><text x="340" y="145">05</text><text x="470" y="145">06</text>
+                <text x="20" y="32">¥9.40</text><text x="460" y="92">¥8.05</text>
+              </g>
+              <g stroke="#e7e8ea"><line x1="20" y1="120" x2="500" y2="120"/><line x1="20" y1="80" x2="500" y2="80"/><line x1="20" y1="40" x2="500" y2="40"/></g>
+            </svg>
+            <div class="small muted">近 6 个月均价走势（按录入数据聚合）：9.40 → 8.05，建议本批按平台 B 价格谈判。</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">③ EOL 候选替代建议（需人工确认）</div><span class="badge purple">AI 建议</span></div>
+          <div style="padding:14px 16px">
+            <table class="tbl">
+              <thead><tr><th>原 MPN</th><th>候选替代</th><th>依据</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">MAX3232CSE</td><td class="mono">SP3232EEN</td><td class="small">pin-to-pin · 乙方数据库 + 甲方历史替代记录</td><td><span class="badge amber">待工程确认</span></td></tr>
+                <tr><td class="mono">MAX3232CSE</td><td class="mono">SIT3232</td><td class="small">pin-to-pin · 国产替代，需打样验证</td><td><span class="badge amber">待工程确认</span></td></tr>
+              </tbody>
+            </table>
+            <div class="banner ai" style="margin-top:10px">替代建议仅基于数据库与历史记录，<b>必须经工程人工确认（必要时打样）后方可用于 BOM</b>；确认/否决结果记录留痕，用于改进建议。</div>
+            <div style="margin-top:8px"><button class="btn sm primary" onclick="confirmSub()">工程确认</button></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function uploadList(){
+  ezModal('上传 MPN 清单（固定模板）',`
+    <div class="upload-zone" onclick="ezToast('已载入 PC-0612：12 个 MPN')">
+      <div class="uz-icon">📋</div><div><b>上传 BOM / MPN 比价模板</b></div>
+      <div class="small muted">模板列：MPN / 品牌 / 需求数量 / 目标价（可选）</div></div>`,
+    [{label:'取消'},{label:'上传',cls:'primary',onClick:c=>{c();ezToast('PC-0612 已创建');ezLog('上传比价清单','12 MPN');}}]);
+}
+function importPrice(){
+  ezModal('导入平台价格数据',`
+    <label class="fld"><span>数据来源渠道</span>
+      <select><option>人工录入（逐条）</option><option selected>Excel 导入（平台导出文件）</option><option>已授权 API 接入（需平台开通授权）</option></select></label>
+    <div class="upload-zone" onclick="ezToast('已解析 平台B-报价导出-0612.xlsx：12 MPN × 价格/库存/DC')">
+      <div class="uz-icon">📊</div><div><b>上传平台导出 Excel</b></div></div>
+    <div class="banner warn" style="margin-top:10px">实时 API、自动爬取、账号登录、反爬与高频批量查询<b>不在本期范围</b>，需另行确认范围、费用和周期。</div>`,
+    [{label:'取消'},{label:'导入',cls:'primary',onClick:c=>{c();ezToast('价格数据已导入并刷新最低价标识');ezLog('导入平台价格','Excel · 平台B');}}]);
+}
+function trend(mpn){ezToast(mpn+' 趋势图已在 ② 区域展示（示例为该 MPN）');}
+function subst(){document.querySelectorAll('.card')[2].scrollIntoView({behavior:'smooth'});}
+function confirmSub(){
+  ezModal('工程确认 · MAX3232CSE 替代',`
+    <label class="fld"><span>结论</span><select><option>批准 SP3232EEN（直接替代）</option><option>批准 SIT3232（打样后启用）</option><option>否决，继续寻源原 MPN</option></select></label>
+    <label class="fld"><span>确认意见（留痕）</span><input placeholder="电气参数核对 / 打样计划…"></label>`,
+    [{label:'取消'},{label:'记录确认结果',cls:'primary',onClick:c=>{c();ezToast('替代确认结果已记录留痕');ezLog('替代料工程确认','MAX3232CSE');}}]);
+}
+function cmpRows(){return [
+  ['MPN','平台A','平台B','平台C','现货商D','原厂代理E','最低价','最低渠道','库存','DC'],
+  ['STM32F103C8T6','8.45','8.05','8.32','8.90','8.20','8.05','平台B','12500','2549'],
+  ['SM04B-SRSS-TB','1.95','','1.82','2.10','1.88','1.82','平台C','8000','2602'],
+  ['AMS1117-3.3','0.42','0.46','0.44','0.55','0.46','0.42','平台A','200000','2611'],
+  ['MAX3232CSE(EOL)','6.80','7.20','','6.20','停售','6.20','现货商D','1800','2435']];}
+</script>
+</body>
+</html>

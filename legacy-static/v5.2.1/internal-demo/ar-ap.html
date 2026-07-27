@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR/AP 对账辅助 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">履约与对账 <span>/</span> <span class="current">AR/AP 对账辅助</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge orange">4 张待处理对账单</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>对账单上传 → 与系统数据字段匹配 → 生成 AR / AP 建议清单 → 导出或转待办</b>。<span class="oos">本期不直接生成 ERP 正式 AR/AP 单据或财务凭证；直接回写 ERP 为接口开放后的扩展能力（二期）。</span></div>
+        <span class="ai-loop-pill">字段匹配建议 · 人工核对确认</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">AR/AP 对账辅助</div>
+          <div class="page-desc">Demo 6 · 客户对账单 → AR 建议清单；供应商对账单 → AP 建议清单</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="uploadStmt()">上传对账单</button>
+          <button class="btn" onclick="matchStmt()">执行字段匹配</button>
+          <button class="btn primary" onclick="exportList()">导出当前建议清单</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/recon/statements</code> <span class="muted">上传客户/供应商对账单（Excel/CSV）</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/recon/statements/:id/match</code> <span class="muted">与出货/收货、PO、发票字段匹配</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/recon/statements/:id/suggestions</code> <span class="muted">AR/AP 建议清单</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/recon/statements/:id/export</code> <span class="muted">导出 CSV / 转待办；ERP 回写=二期扩展</span></div>
+          </div>
+          <div>
+            <h4>数据模型</h4>
+            <div class="model mono">
+              ReconStmt { id, type: AR|AP, partyId, period,<br>
+              &nbsp;&nbsp;lines: ReconLine[], status }<br>
+              ReconLine { extDocNo, mpn?, qty, unitPrice, amount,<br>
+              &nbsp;&nbsp;matchedDocNo?, diffType?: 数量|单价|缺单, advice }
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><div class="kpi-num">2</div><div class="kpi-label">待处理客户对账单（AR）</div></div>
+        <div class="kpi"><div class="kpi-num">2</div><div class="kpi-label">待处理供应商对账单（AP）</div></div>
+        <div class="kpi"><div class="kpi-num orange">7</div><div class="kpi-label">字段差异行</div></div>
+        <div class="kpi"><div class="kpi-num green">41</div><div class="kpi-label">已匹配行</div></div>
+      </div>
+
+      <div class="tabs" data-group="recon">
+        <button class="tab active" data-pane="ar">AR · 客户对账</button>
+        <button class="tab" data-pane="ap">AP · 供应商对账</button>
+      </div>
+
+      <div class="pane active" data-group="recon" data-pane="ar">
+        <div class="card">
+          <div class="card-head"><div class="card-title">客户对账单 · 联创科技 2026-05（STMT-AR-2605）</div>
+            <span class="badge orange">3 行差异 / 24 行</span></div>
+          <table class="tbl">
+            <thead><tr><th>客户单据号</th><th>出货单匹配</th><th>MPN / 品名</th><th>对账数量</th><th>系统数量</th><th>对账单价</th><th>系统单价</th><th>差异类型</th><th>建议</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">LC-DN-0518</td><td class="mono ok">DO-26051802 ✓</td><td>控制板 V3 成品</td><td>3,000</td><td>3,000</td><td>¥128.00</td><td>¥128.00</td><td><span class="badge green">一致</span></td><td class="muted">纳入 AR 建议</td><td><button class="btn xs" onclick="ezToast('已确认纳入 AR 清单')">确认</button></td></tr>
+              <tr class="warn-row"><td class="mono">LC-DN-0522</td><td class="mono ok">DO-26052201 ✓</td><td>控制板 V3 成品</td><td>2,000</td><td><b class="oos">1,950</b></td><td>¥128.00</td><td>¥128.00</td><td><span class="badge orange">数量差异</span></td><td>核对补发 50 pcs 出货记录</td><td><button class="btn xs" onclick="diffModal('LC-DN-0522','数量差异 50 pcs：客户对账 2,000，系统出货 1,950。建议核对 05-23 补发记录是否漏录。')">处理</button></td></tr>
+              <tr class="warn-row"><td class="mono">LC-DN-0526</td><td class="mono ok">DO-26052601 ✓</td><td>电源板 V2 成品</td><td>1,200</td><td>1,200</td><td><b class="oos">¥96.50</b></td><td>¥98.00</td><td><span class="badge orange">单价差异</span></td><td>核对 5 月调价函生效日期</td><td><button class="btn xs" onclick="diffModal('LC-DN-0526','单价差异 ¥1.50：客户按新价 ¥96.50，系统仍为 ¥98.00。调价函 LC-PA-0512 生效日待人工确认。')">处理</button></td></tr>
+              <tr class="warn-row"><td class="mono">LC-DN-0530</td><td class="mono"><span class="oos">未找到</span></td><td>控制板 V3 成品</td><td>500</td><td>—</td><td>¥128.00</td><td>—</td><td><span class="badge red">缺单</span></td><td>系统无对应出货单，需人工查 ERP</td><td><button class="btn xs" onclick="diffModal('LC-DN-0530','客户对账单含 500 pcs 出货，系统未找到出货单。可能为 ERP 中手工单未同步，转待办由财务核查。')">处理</button></td></tr>
+              <tr><td class="mono">LC-DN-0531</td><td class="mono ok">DO-26053101 ✓</td><td>电源板 V2 成品</td><td>800</td><td>800</td><td>¥98.00</td><td>¥98.00</td><td><span class="badge green">一致</span></td><td class="muted">纳入 AR 建议</td><td><button class="btn xs" onclick="ezToast('已确认纳入 AR 清单')">确认</button></td></tr>
+            </tbody>
+          </table>
+          <div class="card-foot">
+            <span class="small muted">匹配字段：客户单据号 ↔ 出货单号 / 客户 PO / MPN / 数量 / 单价（容差 ±0.5%）· 其余 19 行一致已折叠</span>
+            <div>
+              <button class="btn sm" onclick="ezExportCSV('AR建议清单-联创2026-05',arRows())" title="原型演示导出 CSV；正式系统按确认模板生成 XLSX">导出 AR 建议清单</button>
+              <button class="btn sm primary" onclick="ezToast('已生成 3 条差异待办，指派财务/物控');ezLog('AR 对账转待办','STMT-AR-2605 · 3 条差异')">差异转待办</button>
+            </div>
+          </div>
+        </div>
+        <div class="banner soft">
+          <b>AR 建议清单</b>：一致行汇总金额 ¥589,600，建议开票；差异 3 行暂挂，处理后并入下期。<span class="oos">本期仅输出建议清单与导出文件，不直接生成 ERP 应收单据。</span>
+        </div>
+      </div>
+
+      <div class="pane" data-group="recon" data-pane="ap">
+        <div class="card">
+          <div class="card-head"><div class="card-title">供应商对账单 · 晶汇半导体 2026-05（STMT-AP-2605）</div>
+            <span class="badge orange">4 行差异 / 31 行</span></div>
+          <table class="tbl">
+            <thead><tr><th>供应商单据号</th><th>收货/PO 匹配</th><th>MPN</th><th>对账数量</th><th>系统收货</th><th>对账单价</th><th>PO 单价</th><th>差异类型</th><th>建议</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">JH-INV-0507</td><td class="mono ok">GR-260507 / PO-5096 ✓</td><td class="mono">STM32F103C8T6</td><td>5,000</td><td>5,000</td><td>¥8.20</td><td>¥8.20</td><td><span class="badge green">一致</span></td><td class="muted">纳入 AP 建议</td><td><button class="btn xs" onclick="ezToast('已确认纳入 AP 清单')">确认</button></td></tr>
+              <tr class="warn-row"><td class="mono">JH-INV-0513</td><td class="mono ok">GR-260513 / PO-5102 ✓</td><td class="mono">AMS1117-3.3</td><td>20,000</td><td><b class="oos">18,500</b></td><td>¥0.46</td><td>¥0.46</td><td><span class="badge orange">数量差异</span></td><td>1,500 pcs 来料检验退货，核对退货单</td><td><button class="btn xs" onclick="diffModal('JH-INV-0513','数量差异 1,500 pcs：来料检验退货单 RT-260514 已建，供应商对账未扣减。建议回复供应商按 18,500 结算。')">处理</button></td></tr>
+              <tr class="warn-row"><td class="mono">JH-INV-0519</td><td class="mono ok">GR-260519 / PO-5110 ✓</td><td class="mono">SM04B-SRSS-TB</td><td>8,000</td><td>8,000</td><td><b class="oos">¥1.95</b></td><td>¥1.88</td><td><span class="badge orange">单价差异</span></td><td>供应商按旧价开票，PO 已议价 ¥1.88</td><td><button class="btn xs" onclick="diffModal('JH-INV-0519','单价差异 ¥0.07：PO-5110 议价记录 ¥1.88（05-02 邮件确认），供应商按 ¥1.95 对账。建议附议价记录回复更正。')">处理</button></td></tr>
+              <tr class="warn-row"><td class="mono">JH-INV-0524</td><td class="mono"><span class="oos">未找到</span></td><td class="mono">CL10B104KB8NNNC</td><td>50,000</td><td>—</td><td>¥0.018</td><td>—</td><td><span class="badge red">缺单</span></td><td>无对应收货记录，疑为 06 月在途提前开票</td><td><button class="btn xs" onclick="diffModal('JH-INV-0524','系统无收货记录。OPO-5120 同 MPN 在途 50,000（ETA 06-15），疑为提前开票。建议剔除本期，转待办跟踪。')">处理</button></td></tr>
+              <tr class="warn-row"><td class="mono">JH-INV-0528</td><td class="mono ok">GR-260528 / PO-5115 ✓</td><td class="mono">GD32F103C8T6</td><td>3,000</td><td>3,000</td><td><b class="oos">¥6.95</b></td><td>¥6.80</td><td><span class="badge orange">单价差异</span></td><td>超历史最低价 ¥6.80，需采购确认</td><td><button class="btn xs" onclick="diffModal('JH-INV-0528','单价 ¥6.95 高于 PO 价 ¥6.80。采购备注：含加急费，需主管确认是否认可加价。')">处理</button></td></tr>
+            </tbody>
+          </table>
+          <div class="card-foot">
+            <span class="small muted">匹配字段：供应商单据号 ↔ 收货单 / 采购 PO / MPN / 数量 / 单价 · 其余 26 行一致已折叠</span>
+            <div>
+              <button class="btn sm" onclick="ezExportCSV('AP建议清单-晶汇2026-05',apRows())" title="原型演示导出 CSV；正式系统按确认模板生成 XLSX">导出 AP 建议清单</button>
+              <button class="btn sm primary" onclick="ezToast('已生成 4 条差异待办，指派采购 / 管理人员');ezLog('AP 对账转待办','STMT-AP-2605 · 4 条差异')">差异转待办</button>
+            </div>
+          </div>
+        </div>
+        <div class="banner soft">
+          <b>AP 建议清单</b>：一致行汇总金额 ¥182,340，建议按期付款；差异 4 行暂挂回复供应商。<span class="oos">本期不直接生成 ERP 应付单据或财务凭证；ERP 接口开放后可扩展为草稿单回写（二期）。</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function uploadStmt(){
+  ezModal('上传对账单',`
+    <div class="upload-zone" onclick="ezToast('示例环境：已载入 STMT-AR-2605 / STMT-AP-2605')">
+      <div class="uz-icon">📄</div>
+      <div><b>点击或拖拽上传</b> 客户/供应商对账单（Excel / CSV）</div>
+      <div class="small muted">系统按"单据号 / PO / MPN / 数量 / 单价"做字段映射，支持保存模板</div>
+    </div>
+    <div class="small muted" style="margin-top:8px">字段映射模板：联创科技-月度对账 v2 · 晶汇半导体-发票明细 v1</div>`,
+    [{label:'取消'},{label:'上传并解析',cls:'primary',onClick:c=>{c();ezToast('解析完成：AR 24 行 / AP 31 行');ezLog('上传对账单','AR 24 行 · AP 31 行');}}]);
+}
+function matchStmt(){
+  ezToast('字段匹配完成：48 行匹配 · 7 行差异（数量 2 / 单价 3 / 缺单 2）');
+  ezLog('执行对账匹配','AR+AP 共 55 行');
+}
+function diffModal(no,desc){
+  ezModal('差异处理 · '+no,`
+    <div class="banner warn" style="margin-bottom:10px">${desc}</div>
+    <label class="fld"><span>处理意见（人工记录，留痕）</span><textarea rows="3" placeholder="填写核对结论…"></textarea></label>`,
+    [{label:'暂挂'},{label:'记录并转待办',cls:'primary',onClick:c=>{c();ezToast(no+' 已记录处理意见并转待办');ezLog('对账差异处理',no);}}]);
+}
+function arRows(){return [
+  ['客户单据号','匹配出货单','品名','数量','单价','金额','状态','建议'],
+  ['LC-DN-0518','DO-26051802','控制板V3成品','3000','128.00','384000.00','一致','纳入AR'],
+  ['LC-DN-0522','DO-26052201','控制板V3成品','2000','128.00','256000.00','数量差异','暂挂核对补发'],
+  ['LC-DN-0526','DO-26052601','电源板V2成品','1200','96.50','115800.00','单价差异','暂挂核对调价函'],
+  ['LC-DN-0530','','控制板V3成品','500','128.00','64000.00','缺单','转待办查ERP'],
+  ['LC-DN-0531','DO-26053101','电源板V2成品','800','98.00','78400.00','一致','纳入AR']];}
+function apRows(){return [
+  ['供应商单据号','匹配收货/PO','MPN','数量','单价','金额','状态','建议'],
+  ['JH-INV-0507','GR-260507/PO-5096','STM32F103C8T6','5000','8.20','41000.00','一致','纳入AP'],
+  ['JH-INV-0513','GR-260513/PO-5102','AMS1117-3.3','20000','0.46','9200.00','数量差异','按18500结算'],
+  ['JH-INV-0519','GR-260519/PO-5110','SM04B-SRSS-TB','8000','1.95','15600.00','单价差异','按议价1.88更正'],
+  ['JH-INV-0524','','CL10B104KB8NNNC','50000','0.018','900.00','缺单','剔除本期'],
+  ['JH-INV-0528','GR-260528/PO-5115','GD32F103C8T6','3000','6.95','20850.00','单价差异','主管确认加急费']];}
+function exportList(){
+  const isAP=document.querySelector('.pane[data-pane="ap"].active');
+  if(isAP){ezExportCSV('AP建议清单-晶汇2026-05',apRows());}else{ezExportCSV('AR建议清单-联创2026-05',arRows());}
+  ezLog('导出对账建议清单',isAP?'AP':'AR');
+}
+</script>
+</body>
+</html>

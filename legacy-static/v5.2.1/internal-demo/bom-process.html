@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOM 智能处理 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">BOM 与报价 <span>/</span> <span class="current">BOM 智能处理</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge purple">✦ AI 增强 · 人工确认闭环</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>标准 BOM 上传 · 非模板转标准 · 无 MPN 匹配（描述/规格/封装/客户料号/内部料号/疑似 MPN）· 规则优先级配置 · 候选 MPN 推荐 · 图片/扫描件 OCR · 人工确认修正并记录 · 导出标准 Excel</b>。<span class="oos">EBOM/MBOM、ECN/ECO 全流程为二期。</span></div>
+        <span class="ai-loop-pill">AI 匹配 → 人工确认 → 记录修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">BOM 智能处理</div>
+          <div class="page-desc">Demo 1 · BOM-2606-018（联创科技 · 控制板 V3 · 163 行）</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="resetDemo()">重置 Demo</button>
+          <button class="btn primary" id="next-btn" onclick="nextStep()">开始：上传 BOM</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/boms/import</code> <span class="muted">标准/非模板 Excel</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/boms/ocr</code> <span class="muted">图片/截图/扫描件 → 基础表格</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/boms/:id/match</code> <span class="muted">body: 规则优先级数组</span></div>
+            <div class="ep"><span class="method put">PUT</span><code>/api/v1/boms/:id/lines/:ln/confirm</code> <span class="muted">人工确认/修正，写修正日志</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/boms/:id/export?format=xlsx</code></div>
+          </div>
+          <div>
+            <h4>数据模型</h4>
+            <div class="model mono">
+              BomLine { ref, desc, spec, package, customerPN?, mpn?,<br>
+              &nbsp;&nbsp;matched: { internalPN, mpn, stockQty, opoQty, eta, demandQty },<br>
+              &nbsp;&nbsp;status: MATCHED | CANDIDATE | NEW, candidates[],<br>
+              &nbsp;&nbsp;manualFix?: { before, after, by, at } }<br>
+              MatchRule = [客户料号, 有库存, 低价, 指定品牌, 短LeadTime]
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="stepper" id="stepper">
+        <div class="step"><span class="step-n">Step 1</span><span class="step-t">上传 BOM</span><span class="small muted">标准 / 非模板 / OCR</span></div>
+        <div class="step"><span class="step-n">Step 2</span><span class="step-t">AI 匹配</span><span class="small muted">按规则优先级</span></div>
+        <div class="step"><span class="step-n">Step 3</span><span class="step-t">人工确认 / 修正</span><span class="small muted">记录修正结果</span></div>
+        <div class="step"><span class="step-n">Step 4</span><span class="step-t">导出标准 Excel</span><span class="small muted">固定模板</span></div>
+      </div>
+
+      <!-- Step 1 -->
+      <div class="card" id="panel-1">
+        <div class="card-head"><div class="card-title">① 上传入口</div><div class="card-sub">三种来源最终统一为基础表格，再进入匹配</div></div>
+        <div class="card-body">
+          <div class="grid-3">
+            <div class="upload-zone" onclick="upload('标准模板 BOM')">📄 标准模板 BOM<br><span class="small">Excel / CSV，列名按固定模板</span></div>
+            <div class="upload-zone" onclick="upload('非模板 BOM')">🧩 非模板 BOM 转标准<br><span class="small">AI 列名识别 → 映射到标准模板（需人工确认映射）</span></div>
+            <div class="upload-zone" onclick="upload('图片 / 扫描件')">📷 图片 / 截图 / 扫描件 OCR<br><span class="small">OCR 转基础表格，低置信度单元格标黄待人工修正</span></div>
+          </div>
+          <div class="banner ai" style="margin:14px 0 0">非模板列名映射与 OCR 结果均为 <b>AI 建议</b>，需人工确认后才进入匹配，系统记录每一次修正。</div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="card" id="panel-2" style="display:none">
+        <div class="card-head"><div class="card-title">② 匹配规则优先级</div><div class="card-sub">点击 ↑↓ 调整顺序；匹配引擎按此顺序打分</div></div>
+        <div class="card-body">
+          <div id="rule-list"></div>
+          <div class="divider"></div>
+          <div class="small muted">无 MPN 行将依次使用：客户料号精确匹配 → 内部料号 → 描述/规格/封装语义匹配 → 疑似 MPN 模糊匹配；命中后按上方优先级在多个候选中选优。</div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="card" id="panel-3" style="display:none">
+        <div class="card-head"><div class="card-title">③ 匹配结果（节选 8 / 163 行）</div>
+          <div class="card-sub">带出内部料号 / MPN / 库存 / OPO / ETA / 需求数量</div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <span class="badge green" id="cnt-ok">命中 146</span>
+            <span class="badge purple" id="cnt-cand">候选待确认 9</span>
+            <span class="badge amber" id="cnt-new">待新增 8</span>
+          </div>
+        </div>
+        <div class="card-body flush tbl-scroll">
+          <table class="tbl" id="match-tbl"><thead><tr>
+            <th>位号</th><th>描述 / 规格 / 封装</th><th>客户料号</th><th>内部料号</th><th>MPN</th>
+            <th class="num">库存</th><th class="num">OPO</th><th>ETA</th><th class="num">需求</th><th>状态</th><th>操作</th>
+          </tr></thead><tbody id="match-body"></tbody></table>
+        </div>
+        <div class="card-body" style="border-top:1px solid var(--gray-150)">
+          <b class="small">修正记录（自动留痕）</b>
+          <ul class="fix-log" id="fix-log"><li class="muted">尚无人工修正</li></ul>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="card" id="panel-4" style="display:none">
+        <div class="card-head"><div class="card-title">④ 导出标准 BOM</div></div>
+        <div class="card-body">
+          <div class="banner info">导出固定标准模板 Excel：含匹配结果、确认状态、修正记录列；「待确认/新增」行保留标记，供后续维护主数据。</div>
+          <button class="btn primary" onclick="exportBom()">导出标准 BOM（CSV 演示 / 正式版 Excel）</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+let step=0;
+const RULES=['优先客户料号','优先有库存','优先低价','优先指定品牌','优先短 Lead Time'];
+let rules=[...RULES];
+
+const LINES=[
+ {ref:'U1',desc:'MCU 32bit 72MHz · LQFP48',cpn:'LC-MCU-103',ipn:'EZ-IC-00125',mpn:'STM32F103C8T6',stk:2400,opo:5000,eta:'06-25',need:3000,st:'ok'},
+ {ref:'R23',desc:'电阻 10kΩ ±1% · 0402',cpn:'LC-R-10K-0402',ipn:'EZ-RC-00872',mpn:'RC0402FR-0710KL',stk:85000,opo:0,eta:'—',need:24000,st:'ok'},
+ {ref:'C8',desc:'电容 100nF 50V X7R · 0603',cpn:'LC-C-104-0603',ipn:'EZ-CC-00331',mpn:'GRM188R71H104KA93D',stk:120000,opo:200000,eta:'07-02',need:36000,st:'ok'},
+ {ref:'J2',desc:'连接器 4P 1.0mm 卧贴',cpn:'',ipn:'EZ-CN-00077',mpn:'SM04B-SRSS-TB',stk:0,opo:8000,eta:'07-18',need:3000,st:'ok'},
+ {ref:'U4',desc:'LDO 3.3V 1A · SOT-223',cpn:'',ipn:'',mpn:'',stk:0,opo:0,eta:'—',need:3000,st:'cand',
+   cands:['AMS1117-3.3 (AMS) · 库存 6,000','SPX3819M5-3.3 (MaxLinear) · 低价','XC6206P332MR (Torex) · 短 LT']},
+ {ref:'D5',desc:'TVS 5V SOD-323（描述匹配）',cpn:'',ipn:'',mpn:'',stk:0,opo:0,eta:'—',need:6000,st:'cand',
+   cands:['PESD5V0S1BA (Nexperia) · 客户曾用','SD05C (TI) · 有库存 12,000']},
+ {ref:'Y1',desc:'晶振 8MHz ±20ppm · 3225',cpn:'LC-XTAL-8M',ipn:'',mpn:'',stk:0,opo:0,eta:'—',need:3000,st:'new'},
+ {ref:'L3',desc:'功率电感 4.7uH 2A · 自定义封装',cpn:'',ipn:'',mpn:'',stk:0,opo:0,eta:'—',need:3000,st:'new'},
+];
+
+function upload(kind){
+  if(kind==='图片 / 扫描件'){
+    ezModal('OCR 转换结果（演示）',
+      `<div class="banner ai" style="margin-bottom:12px">OCR 已将扫描件转换为基础表格，<b>3 个低置信度单元格</b>已标黄，请人工修正后继续。</div>
+       <table class="tbl"><thead><tr><th>位号</th><th>描述</th><th>数量</th></tr></thead><tbody>
+       <tr><td>U1</td><td>MCU 32bit LQFP48</td><td>1</td></tr>
+       <tr><td>R23</td><td style="background:var(--amber-50)">10kΩ 04<b style="color:var(--amber)">0?</b>2（置信 78%）</td><td>8</td></tr>
+       <tr><td>C8</td><td>100nF 0603</td><td>12</td></tr></tbody></table>`,
+      [{label:'返回修正'},{label:'确认并继续',cls:'primary',onClick:c=>{c();afterUpload(kind);}}]);
+  } else { afterUpload(kind); }
+}
+function afterUpload(kind){
+  ezToast('已上传：'+kind+' · 解析 163 行');
+  ezLog('上传 BOM',kind+' · BOM-2606-018');
+  step=1; render();
+}
+function renderRules(){
+  document.getElementById('rule-list').innerHTML=rules.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;margin-bottom:6px;background:white">
+      <span class="badge ${i===0?'green':'gray'}">P${i+1}</span><b style="flex:1">${r}</b>
+      <button class="btn sm" ${i===0?'disabled':''} onclick="moveRule(${i},-1)">↑</button>
+      <button class="btn sm" ${i===rules.length-1?'disabled':''} onclick="moveRule(${i},1)">↓</button>
+    </div>`).join('');
+}
+function moveRule(i,d){const t=rules[i];rules[i]=rules[i+d];rules[i+d]=t;renderRules();}
+function renderMatches(){
+  document.getElementById('match-body').innerHTML=LINES.map((l,i)=>{
+    const cls=l.st==='cand'?'':(l.st==='new'?'row-warn':'');
+    let stBadge = l.st==='ok'?'<span class="badge green">已匹配</span>'
+      : l.st==='cand'?'<span class="badge purple">候选待确认</span>'
+      : l.st==='fixed'?'<span class="badge blue">人工修正</span>'
+      : l.st==='confirmed'?'<span class="badge green">人工确认</span>'
+      : '<span class="badge amber">待确认 / 新增</span>';
+    let op='';
+    if(l.st==='cand') op=`<select id="cand-${i}">${l.cands.map(c=>`<option>${c}</option>`).join('')}</select>
+      <button class="btn sm primary" onclick="confirmCand(${i})">确认</button>`;
+    else if(l.st==='new') op=`<button class="btn sm" onclick="markNew(${i})">标记新增</button>`;
+    else if(l.st==='ok') op=`<button class="btn sm" onclick="fixLine(${i})">修正</button>`;
+    else op='—';
+    return `<tr class="${cls}"><td class="mono">${l.ref}</td><td>${l.desc}</td><td class="mono">${l.cpn||'—'}</td>
+      <td class="mono">${l.ipn||'—'}</td><td class="mono">${l.mpn||'—'}</td>
+      <td class="num">${l.stk?l.stk.toLocaleString():'0'}</td><td class="num">${l.opo?l.opo.toLocaleString():'0'}</td>
+      <td>${l.eta}</td><td class="num">${l.need.toLocaleString()}</td><td>${stBadge}</td>
+      <td style="white-space:nowrap">${op}</td></tr>`;
+  }).join('');
+  const ok=LINES.filter(l=>['ok','fixed','confirmed'].includes(l.st)).length;
+  const cand=LINES.filter(l=>l.st==='cand').length;
+  const nw=LINES.filter(l=>l.st==='new').length;
+  document.getElementById('cnt-ok').textContent='命中 '+(146-8+ok);
+  document.getElementById('cnt-cand').textContent='候选待确认 '+(9-2+cand);
+  document.getElementById('cnt-new').textContent='待新增 '+(8-2+nw);
+}
+function logFix(text){
+  const ul=document.getElementById('fix-log');
+  if(ul.querySelector('.muted')) ul.innerHTML='';
+  const li=document.createElement('li');
+  li.textContent=new Date().toLocaleTimeString('zh-CN')+' · 王工(PM) · '+text;
+  ul.prepend(li);
+}
+function confirmCand(i){
+  const sel=document.getElementById('cand-'+i).value;
+  const l=LINES[i];
+  l.mpn=sel.split(' ')[0]; l.ipn='EZ-NEW-'+(1000+i); l.stk=sel.includes('库存')?6000:0; l.st='confirmed';
+  logFix(`位号 ${l.ref}：候选确认为 ${sel}（依据规则 P1=${rules[0]}）`);
+  ezToast('已确认候选 MPN：'+l.mpn,'ai'); ezLog('确认候选 MPN',l.ref+' → '+l.mpn);
+  renderMatches();
+}
+function markNew(i){
+  const l=LINES[i]; l.st='confirmed'; l.ipn='待新增';
+  logFix(`位号 ${l.ref}：无候选，标记为「新增物料」，进入主数据建档待办`);
+  ezToast('已标记为新增物料，进入建档待办','warn');
+  renderMatches();
+}
+function fixLine(i){
+  const l=LINES[i];
+  ezModal('人工修正 · 位号 '+l.ref,
+    `<div class="small muted" style="margin-bottom:8px">当前匹配：${l.ipn} / ${l.mpn}</div>
+     <label class="small">改为 MPN：</label>
+     <input id="fix-mpn" value="${l.mpn}" style="width:100%;border:1px solid var(--gray-300);border-radius:7px;padding:7px 10px;margin-top:4px">`,
+    [{label:'取消'},{label:'保存修正',cls:'primary',onClick:c=>{
+      const v=document.getElementById('fix-mpn').value.trim();
+      if(v && v!==l.mpn){logFix(`位号 ${l.ref}：MPN ${l.mpn} → ${v}（人工修正，已记录）`);l.mpn=v;l.st='fixed';}
+      c(); renderMatches(); ezToast('修正已保存并记录');
+    }}]);
+}
+function exportBom(){
+  const headers=['位号','描述','客户料号','内部料号','MPN','库存','OPO','ETA','需求数量','状态'];
+  const rows=LINES.map(l=>[l.ref,l.desc,l.cpn,l.ipn,l.mpn,l.stk,l.opo,l.eta,l.need,l.st]);
+  ezExportCSV('标准BOM_BOM-2606-018.csv',headers,rows);
+  ezLog('导出标准 BOM','BOM-2606-018');
+  step=4; render();
+}
+function nextStep(){
+  if(step===0){document.querySelector('#panel-1 .upload-zone').focus();ezToast('请选择一种上传方式');return;}
+  if(step===1){step=2;render();return;}
+  if(step===2){
+    ezToast('AI 匹配完成：146 行命中 · 9 行候选 · 8 行待新增','ai');
+    ezLog('执行 BOM 匹配','规则顺序：'+rules.join(' > '));
+    step=3;render();return;
+  }
+  if(step===3){
+    const pending=LINES.some(l=>l.st==='cand'||l.st==='new');
+    if(pending){ezToast('还有待确认/待新增行，请先逐行处理（合同要求人工确认闭环）','warn');return;}
+    step=4;render();return;
+  }
+}
+function render(){
+  ezStepper('#stepper',Math.min(step+1,4));
+  for(let i=1;i<=4;i++) document.getElementById('panel-'+i).style.display=(step+1>=i&&(i!==1||step<1))||i===Math.min(step+1,4)||(step>=2&&i===3&&step===3)?'':'none';
+  document.getElementById('panel-1').style.display=step===0?'':'none';
+  document.getElementById('panel-2').style.display=step===1||step===2?'':'none';
+  document.getElementById('panel-3').style.display=step>=2?'':'none';
+  document.getElementById('panel-4').style.display=step>=3?'':'none';
+  const btn=document.getElementById('next-btn');
+  btn.textContent=['开始：上传 BOM','执行 AI 匹配','执行 AI 匹配','完成确认 → 导出','Demo 完成 ✓'][step]||'下一步';
+  if(step===1) renderRules();
+  if(step>=2) renderMatches();
+}
+function resetDemo(){location.reload();}
+render();
+</script>
+</body>
+</html>

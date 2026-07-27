@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>系统集成 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">基础平台 <span>/</span> <span class="current">系统集成</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge blue">5 个对接通道</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>ERP/MES 数据对接配置：API、中间表、数据库视图、Excel 导入导出、RPA 五通道占位实现</b>。不强制假设甲方 ERP/MES 开放接口——任何回写动作均提供替代路径（Excel 导出 / 中间表 / 待办清单 / RPA）。<span class="oos">深度强一致双向实时同步为二期。</span></div>
+        <span class="ai-loop-pill">通道可配置 · 按客户环境选择</span>
+      </div>
+
+      <div class="banner warn" style="margin:0 0 14px"><b>本页为集成方案和字段映射原型</b>，具体 ERP/MES 版本、接口方式和联调状态<b>待客户 IT 确认</b>。页面所示通道状态、调度与同步记录均为<b>示例配置</b>，不代表已在客户环境启用或联调。</div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">系统集成</div>
+          <div class="page-desc">数据对接配置中心 · 甲方现有金蝶 ERP/MES，具体版本待确认 → 默认建议走中间表 + Excel（待客户 IT 确认）</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="testAll()">全通道连接测试（原型模拟）</button>
+          <button class="btn primary" onclick="ezExportCSV('集成映射配置',mapRows());ezLog('导出映射配置','示例映射')" title="原型演示导出 CSV；正式系统生成 XLSX">导出映射配置（CSV）</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/integration/channels</code> <span class="muted">五通道状态</span></div>
+            <div class="ep"><span class="method put">PUT</span><code>/api/v1/integration/channels/:type/config</code> <span class="muted">通道配置（连接串/目录/调度）</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/integration/channels/:type/test</code> <span class="muted">连接测试</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/integration/mappings</code> <span class="muted">字段映射（ERP 表/视图 ↔ ezPLM 实体）</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/integration/sync-logs</code> <span class="muted">同步日志与失败重试</span></div>
+          </div>
+          <div>
+            <h4>数据模型</h4>
+            <div class="model mono">
+              Channel { type: API|MIDTABLE|DBVIEW|EXCEL|RPA,<br>
+              &nbsp;&nbsp;enabled, config{}, lastTestAt, lastTestOk }<br>
+              Mapping { erpObject, ezEntity, direction: 读|写|双向,<br>
+              &nbsp;&nbsp;channel, fieldMap{}, schedule? }
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="cards-grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));display:grid;gap:14px;margin-bottom:18px">
+        <div class="card chan">
+          <div class="card-head"><div class="card-title">🔌 API 接口</div><span class="badge gray">待确认 · 待授权</span></div>
+          <div class="card-body small">REST/WebService 直连 ERP·MES 开放接口。是否可用、接口方式与字段范围<b>待甲方 IT 确认</b>；接口不可用时改走中间表/视图/Excel/RPA。本通道为<b>示例配置</b>。</div>
+          <div class="card-foot"><button class="btn xs" onclick="cfg('API')">配置</button> <button class="btn xs" onclick="test1('API')">连接测试（模拟）</button></div>
+        </div>
+        <div class="card chan">
+          <div class="card-head"><div class="card-title">🗄️ 中间表</div><span class="badge blue">可选 · 待联调</span></div>
+          <div class="card-body small">建议在客户数据库建 <code class="mono">EZ_SYNC_*</code> 交换表：ezPLM 写入待回写数据，ERP 端定时读取。<b>需 DBA 授权</b>；调度策略与表结构待联调确认。替代：无库权限 → 改走 Excel。</div>
+          <div class="card-foot"><button class="btn xs" onclick="cfg('中间表')">配置</button> <button class="btn xs" onclick="test1('中间表')">连接测试（模拟）</button></div>
+        </div>
+        <div class="card chan">
+          <div class="card-head"><div class="card-title">👁️ 数据库视图</div><span class="badge blue">可选 · 待授权（只读）</span></div>
+          <div class="card-body small">建议 DBA 授权只读视图 <code class="mono">V_EZ_STOCK / V_EZ_PO / V_EZ_WO</code> 拉取库存、PO、工单，不写客户库。<b>需 DBA 授权确认</b>。替代：无视图权限 → 改走 Excel。</div>
+          <div class="card-foot"><button class="btn xs" onclick="cfg('数据库视图')">配置</button> <button class="btn xs" onclick="test1('数据库视图')">连接测试（模拟）</button></div>
+        </div>
+        <div class="card chan">
+          <div class="card-head"><div class="card-title">📊 Excel 导入导出</div><span class="badge green">可选 · 兜底通道</span></div>
+          <div class="card-body small">所有模块均提供固定模板导入与 ERP 可导入格式导出（OPO 差异表、Call 料表、AR/AP 建议清单等）。无接口依赖，作为<b>兜底通道</b>，无论 API/中间表是否可用均可使用。</div>
+          <div class="card-foot"><button class="btn xs" onclick="cfg('Excel')">模板管理</button> <button class="btn xs" onclick="ezToast('Excel 兜底通道无需连接测试')">说明</button></div>
+        </div>
+        <div class="card chan">
+          <div class="card-head"><div class="card-title">🤖 RPA 机器人</div><span class="badge gray">可选 · 待确认</span></div>
+          <div class="card-body small">对无法开接口又不允许动库的场景：RPA 模拟人工把 ezPLM 导出文件录入 ERP 界面（示例：OPO 交期回写采购订单）。是否采用<b>待客户确认</b>；失败转人工待办。</div>
+          <div class="card-foot"><button class="btn xs" onclick="cfg('RPA')">脚本配置</button> <button class="btn xs" onclick="test1('RPA')">试跑（模拟）</button></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">字段映射配置（示例 · 12 条）</div><span class="small muted">ERP 对象 ↔ ezPLM 实体 · 方向 · 走哪个通道 · 均为示例，待联调确认</span></div>
+        <table class="tbl">
+          <thead><tr><th>ERP 对象（示例）</th><th>ezPLM 实体</th><th>方向</th><th>建议通道</th><th>建议调度</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">V_EZ_STOCK（库存视图）</td><td class="mono">Inventory</td><td>读</td><td>数据库视图</td><td>建议每 30 分钟</td><td><span class="badge gray">待联调</span></td></tr>
+            <tr><td class="mono">V_EZ_PO（采购订单视图）</td><td class="mono">PurchasePO / OPOLine</td><td>读</td><td>数据库视图</td><td>建议每 30 分钟</td><td><span class="badge gray">待联调</span></td></tr>
+            <tr><td class="mono">V_EZ_WO（工单视图）</td><td class="mono">WorkOrder</td><td>读</td><td>数据库视图</td><td>建议每 1 小时</td><td><span class="badge gray">待联调</span></td></tr>
+            <tr><td class="mono">EZ_SYNC_OPO_REPLY</td><td class="mono">OpoReply（交期回复）</td><td>写</td><td>中间表</td><td>建议每 30 分钟</td><td><span class="badge gray">待联调</span></td></tr>
+            <tr><td class="mono">采购订单界面（示例）</td><td class="mono">OpoReply（交期回写）</td><td>写</td><td>RPA</td><td>建议每日定时</td><td><span class="badge gray">待确认</span></td></tr>
+            <tr><td class="mono">手工模板 ×7</td><td class="mono">BOM / 报价 / 缺料 / 对账…</td><td>双向</td><td>Excel</td><td>手动</td><td><span class="badge green">可用（兜底）</span></td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">其余 6 条映射（客户/供应商/物料主数据等）已折叠 · 同步失败建议重试后生成待办（具体重试与调度策略待联调确认）</span></div>
+      </div>
+
+      <div class="banner soft">
+        <b>回写策略说明（合同口径）</b>：任一需要写回 ERP/MES 的业务（OPO 交期、价格、对账结果等）均按 <b>Excel 导出 → 中间表 → RPA → API</b> 的可用性顺序提供替代路径，由实施时按客户环境勾选，不以"客户必须开放接口"为前提。
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function cfg(name){
+  ezModal('通道配置 · '+name,`
+    <label class="fld"><span>连接参数 / 目录 / 脚本路径</span><input placeholder="示例环境为占位配置，待客户 IT 确认" value=""></label>
+    <label class="fld"><span>建议调度策略</span><select><option>手动</option><option selected>每 30 分钟（建议）</option><option>每 1 小时</option><option>每日定时</option></select></label>
+    <div class="small muted">本配置为原型示例；实施阶段由双方 IT 联合确认接口方式与联调状态，配置变更记录操作日志。</div>`,
+    [{label:'取消'},{label:'保存（示例）',cls:'primary',onClick:c=>{c();ezToast(name+' 通道示例配置已保存（原型）');ezLog('集成通道配置',name);}}]);
+}
+function test1(name){
+  ezToast(name+' 连接测试为原型模拟，不进行真实连接；真实联调待客户 IT 授权环境后进行','warn');
+  ezLog('集成连接测试（模拟）',name);
+}
+function testAll(){
+  ezToast('原型模拟：各通道连接测试为示意，未进行真实连接；真实联调待客户环境确认','warn');
+  ezLog('全通道连接测试（模拟）','原型示意');
+}
+function mapRows(){return [
+  ['ERP对象(示例)','ezPLM实体','方向','建议通道','建议调度','状态'],
+  ['V_EZ_STOCK','Inventory','读','数据库视图','30分钟','待联调'],
+  ['V_EZ_PO','PurchasePO/OPOLine','读','数据库视图','30分钟','待联调'],
+  ['V_EZ_WO','WorkOrder','读','数据库视图','1小时','待联调'],
+  ['EZ_SYNC_OPO_REPLY','OpoReply','写','中间表','30分钟','待联调'],
+  ['采购订单界面(示例)','OpoReply','写','RPA','每日定时','待确认'],
+  ['手工模板×7','BOM/报价/缺料/对账','双向','Excel','手动','可用(兜底)']];}
+</script>
+</body>
+</html>

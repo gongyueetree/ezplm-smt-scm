@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>基础数据 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">基础平台 <span>/</span> <span class="current">基础数据</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge gray">Excel/CSV 导入导出全覆盖</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>客户、供应商、物料（MPN / 内部料号 / 客户料号）、库存、OPO、ETA、PO、工单</b>基础数据管理 + <b>PM / 采购 / 计划 / 管理 / 供应商</b>五类角色权限 + 操作日志。<span class="oos">客供料收料 / WMS、深度批次治理为二期。</span></div>
+        <span class="ai-loop-pill">所有导入数据可人工校验修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">基础数据</div>
+          <div class="page-desc">主数据可来自 ERP/MES 对接（见 <a href="integration.html" style="text-decoration:underline">系统集成</a>）或 Excel/CSV 导入，不强制假设客户 ERP 开放接口</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="importCur()">导入 Excel/CSV</button>
+          <button class="btn primary" onclick="exportCur()">导出当前表</button>
+        </div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/{customers|suppliers|parts|inventory|opo|po|work-orders}</code></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/parts/import</code> <span class="muted">CSV/Excel，返回校验报告</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/parts/:id/export</code></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/audit-logs?date=…</code></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/auth/login</code> · <code>/api/v1/roles</code></div>
+          </div>
+          <div>
+            <h4>核心实体</h4>
+            <div class="model mono">
+              Part { internalPN, mpn, customerPN[], brand, desc, spec, package, msl }<br>
+              Inventory { internalPN, qty, location, lotNo }<br>
+              CustomerPO { cpoNo, customerId, lines[], dueDate } <span class="muted">// 客户 PO</span><br>
+              PurchasePO { ppoNo, supplierId, lines[], dueDate } <span class="muted">// 采购 PO</span><br>
+              OPOLine { ppoNo, lineNo, mpn, qty, eta, supplierId, status } <span class="muted">// 未结采购订单行</span><br>
+              WorkOrder { woNo, cpoNo, bomId, qty, planStart } <span class="muted">// 工单关联客户 PO</span><br>
+              Role ∈ { PM, BUYER, PLANNER, ADMIN, SUPPLIER }
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="tabs" data-group="md">
+        <button class="tab active" data-pane="t-cust">客户 <span class="tab-count">8</span></button>
+        <button class="tab" data-pane="t-sup">供应商 <span class="tab-count">12</span></button>
+        <button class="tab" data-pane="t-part">物料 / 料号映射 <span class="tab-count">163</span></button>
+        <button class="tab" data-pane="t-inv">库存 <span class="tab-count">96</span></button>
+        <button class="tab" data-pane="t-opo">OPO / ETA <span class="tab-count">41</span></button>
+        <button class="tab" data-pane="t-po">客户 PO <span class="tab-count">15</span></button>
+        <button class="tab" data-pane="t-wo">工单 <span class="tab-count">9</span></button>
+        <button class="tab" data-pane="t-role">用户与角色</button>
+      </div>
+
+      <div class="tab-pane active" data-group="md" id="t-cust"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>客户编码</th><th>名称</th><th>分级</th><th>报价模式</th><th>对账日</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">CUS-001</td><td>联创科技</td><td><span class="badge green">A 类</span></td><td>点数 1.0 + 阶梯折扣</td><td>每月 25 日</td><td><span class="badge green">启用</span></td></tr>
+          <tr><td class="mono">CUS-002</td><td>普瑞电子</td><td><span class="badge blue">B 类</span></td><td>点数 1.15</td><td>每月 30 日</td><td><span class="badge green">启用</span></td></tr>
+          <tr><td class="mono">CUS-003</td><td>新陆智造</td><td><span class="badge gray">C 类</span></td><td>点数 1.3 · 预付</td><td>票到付款</td><td><span class="badge green">启用</span></td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-sup"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>供应商编码</th><th>名称</th><th>主营</th><th>默认 MOQ/SPQ</th><th>门户账号</th><th>OPO 回复率</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">SUP-01</td><td>华芯电子</td><td>MCU / 存储</td><td>1000 / 250</td><td><span class="badge green">已开通</span></td><td>92%</td></tr>
+          <tr><td class="mono">SUP-02</td><td>立讯通泰</td><td>连接器</td><td>500 / 100</td><td><span class="badge green">已开通</span></td><td>88%</td></tr>
+          <tr><td class="mono">SUP-03</td><td>富田被动件</td><td>R/C/L</td><td>10000 / 5000</td><td><span class="badge amber">邮件回填</span></td><td>71%</td></tr>
+          <tr><td class="mono">SUP-04</td><td>晶汇半导体</td><td>分立器件</td><td>3000 / 3000</td><td><span class="badge green">已开通</span></td><td>95%</td></tr>
+        </tbody></table></div></div>
+        <div class="banner warn">供应商<b>准入 / 考核 / PPM / 索赔</b>全流程不在本期范围（二期），本期仅维护基础档案与交期协同所需字段。</div></div>
+
+      <div class="tab-pane" data-group="md" id="t-part"><div class="card"><div class="card-head"><div class="card-title">物料与三方料号映射</div><div class="card-sub">内部料号 ↔ MPN ↔ 客户料号，是 BOM 匹配与追溯的基础</div></div><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>内部料号</th><th>MPN</th><th>品牌</th><th>客户料号</th><th>描述 / 规格 / 封装</th><th>库存</th><th>MSL</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">EZ-IC-00125</td><td class="mono">STM32F103C8T6</td><td>ST</td><td class="mono">LC-MCU-103</td><td>MCU 32bit 72MHz · LQFP48</td><td class="num">2,400</td><td>3</td></tr>
+          <tr><td class="mono">EZ-RC-00872</td><td class="mono">RC0402FR-0710KL</td><td>Yageo</td><td class="mono">LC-R-10K-0402</td><td>电阻 10kΩ ±1% · 0402</td><td class="num">85,000</td><td>—</td></tr>
+          <tr><td class="mono">EZ-CC-00331</td><td class="mono">GRM188R71H104KA93D</td><td>Murata</td><td class="mono">LC-C-104-0603</td><td>电容 100nF 50V X7R · 0603</td><td class="num">120,000</td><td>—</td></tr>
+          <tr><td class="mono">EZ-CN-00077</td><td class="mono">SM04B-SRSS-TB</td><td>JST</td><td class="mono">—</td><td>连接器 4P 1.0mm 卧贴 · SMD</td><td class="num">0</td><td>—</td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-inv"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>内部料号</th><th>批次</th><th>库位</th><th>数量</th><th>呆滞天数</th><th>来源</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">EZ-IC-00125</td><td class="mono">LOT-25C118</td><td>A-03-12</td><td class="num">2,400</td><td>14</td><td>采购 OPO-5102</td></tr>
+          <tr class="row-warn"><td class="mono">EZ-IC-00098</td><td class="mono">LOT-25A007</td><td>A-01-02</td><td class="num">5,600</td><td>197 <span class="badge amber">呆滞</span></td><td>普瑞订单剩余</td></tr>
+          <tr><td class="mono">EZ-RC-00872</td><td class="mono">LOT-26B044</td><td>B-11-05</td><td class="num">85,000</td><td>9</td><td>采购 OPO-5077</td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-opo"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>OPO 行号</th><th>MPN</th><th>供应商</th><th>数量</th><th>ETA</th><th>交期回复</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">OPO-5102-03</td><td class="mono">STM32F103C8T6</td><td>华芯电子</td><td class="num">5,000</td><td>2026-06-25</td><td><span class="badge green">已确认</span></td></tr>
+          <tr class="row-danger"><td class="mono">OPO-5110-01</td><td class="mono">SM04B-SRSS-TB</td><td>立讯通泰</td><td class="num">8,000</td><td>2026-07-18</td><td><span class="badge red">异常 +12 天</span></td></tr>
+          <tr class="row-warn"><td class="mono">OPO-5113-02</td><td class="mono">GRM188R71H104KA93D</td><td>富田被动件</td><td class="num">200,000</td><td>—</td><td><span class="badge amber">未回复</span></td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-po"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>客户 PO</th><th>客户</th><th>产品</th><th>数量</th><th>交期</th><th>关联工单</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">PO-LC-2606-09</td><td>联创科技</td><td>控制板 V3</td><td class="num">3,000</td><td>2026-07-05</td><td class="mono">WO-7741</td></tr>
+          <tr><td class="mono">PO-PR-2605-22</td><td>普瑞电子</td><td>电源模块 PM12</td><td class="num">1,200</td><td>2026-06-28</td><td class="mono">WO-7735</td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-wo"><div class="card"><div class="card-body flush tbl-scroll"><table class="tbl">
+        <thead><tr><th>工单</th><th>客户 PO</th><th>BOM</th><th>数量</th><th>计划上线</th><th>齐料状态</th></tr></thead>
+        <tbody>
+          <tr class="row-danger"><td class="mono">WO-7741</td><td class="mono">PO-LC-2606-09</td><td class="mono">BOM-2606-018</td><td class="num">3,000</td><td>2026-06-22</td><td><span class="badge red">缺料 12 项</span></td></tr>
+          <tr><td class="mono">WO-7735</td><td class="mono">PO-PR-2605-22</td><td class="mono">BOM-2605-011</td><td class="num">1,200</td><td>2026-06-18</td><td><span class="badge green">齐料</span></td></tr>
+        </tbody></table></div></div></div>
+
+      <div class="tab-pane" data-group="md" id="t-role">
+        <div class="grid-2">
+          <div class="card"><div class="card-head"><div class="card-title">角色与权限矩阵</div><div class="card-sub">登录 + RBAC + 操作日志为本期基础平台范围</div></div><div class="card-body flush tbl-scroll"><table class="tbl">
+            <thead><tr><th>模块</th><th>PM</th><th>采购</th><th>计划</th><th>管理</th><th>供应商</th></tr></thead>
+            <tbody>
+              <tr><td>BOM 智能处理</td><td>读写</td><td>只读</td><td>只读</td><td>读写</td><td>—</td></tr>
+              <tr><td>智能报价 / 审批</td><td>发起</td><td>—</td><td>—</td><td>审批</td><td>—</td></tr>
+              <tr><td>物料报价协同</td><td>发起/确认</td><td>填价</td><td>—</td><td>审批</td><td>—</td></tr>
+              <tr><td>采购助手 / 比价</td><td>只读</td><td>读写</td><td>—</td><td>读写</td><td>—</td></tr>
+              <tr><td>OPO 交期协同</td><td>只读</td><td>读写</td><td>只读</td><td>读写</td><td>回填本厂行</td></tr>
+              <tr><td>缺料 / 计划辅助</td><td>只读</td><td>只读</td><td>读写</td><td>读写</td><td>—</td></tr>
+              <tr><td>AR/AP 对账</td><td>—</td><td>AP</td><td>—</td><td>AR/AP</td><td>—</td></tr>
+            </tbody></table></div></div>
+          <div class="card"><div class="card-head"><div class="card-title">用户账号</div></div><div class="card-body flush"><table class="tbl">
+            <thead><tr><th>用户</th><th>角色</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td>王工</td><td><span class="badge green">PM</span></td><td>正常</td></tr>
+              <tr><td>李采</td><td><span class="badge blue">采购</span></td><td>正常</td></tr>
+              <tr><td>钱计</td><td><span class="badge purple">计划</span></td><td>正常</td></tr>
+              <tr><td>赵管</td><td><span class="badge amber">管理</span></td><td>正常</td></tr>
+              <tr><td>华芯-portal</td><td><span class="badge gray">供应商</span></td><td>仅 OPO 回填</td></tr>
+            </tbody></table></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+const TABS={'t-cust':'客户','t-sup':'供应商','t-part':'物料','t-inv':'库存','t-opo':'OPO','t-po':'客户PO','t-wo':'工单','t-role':'用户角色'};
+function curPane(){return document.querySelector('.tab-pane.active').id;}
+function exportCur(){
+  const pane=document.getElementById(curPane());
+  const tbl=pane.querySelector('table');
+  const headers=[...tbl.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+  const rows=[...tbl.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent.trim()));
+  ezExportCSV('基础数据_'+(TABS[curPane()]||'表')+'.csv',headers,rows);
+  ezLog('导出基础数据',TABS[curPane()]);
+}
+function importCur(){
+  ezImportCSV((rows,name)=>{
+    if(!rows){return;}
+    ezModal('导入校验报告 · '+name,
+      `<div class="banner info" style="margin-bottom:12px">共解析 <b>${rows.length-1}</b> 行数据（表头 ${rows[0]?rows[0].length:0} 列）。原型环境仅做格式校验，正式版将执行字段映射、唯一性与外键校验并生成差异报告。</div>
+       <div class="mono small muted">${(rows[0]||[]).join(' | ')}</div>`,
+      [{label:'放弃'},{label:'确认导入',cls:'primary',onClick:(c)=>{c();ezToast('已导入 '+(rows.length-1)+' 行至「'+(TABS[curPane()]||'当前表')+'」（演示）');ezLog('导入基础数据',name);}}]);
+  });
+}
+</script>
+</body>
+</html>

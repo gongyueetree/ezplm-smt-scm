@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>智能报价 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">BOM 与报价 <span>/</span> <span class="current">智能报价</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge amber">3 张待审批报价</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>BOM 导入 → 元器件分类 → 算点 → 报价规则计算 → A/B/C 客户模式 → 折扣模拟 → 报价预览 → 审批 → Excel/PDF 报价单 → 报价历史追溯</b>。分类与算点结果均需人工确认与修正，系统记录修正结果，不承诺 100% 自动正确。</div>
+        <span class="ai-loop-pill">AI 建议 → 人工确认 → 记录修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">智能报价</div>
+          <div class="page-desc">Demo 2 · 联创科技 · 控制板 V3（BOM-2026-0612，来自 BOM 智能处理）</div>
+        </div>
+        <div class="page-actions">
+          <span id="quote-status" class="badge gray" style="align-self:center">草稿</span>
+          <button class="btn" id="btn-import-bom" onclick="importBom()">导入 BOM</button>
+          <button class="btn" id="btn-export-csv" onclick="exportCsv()" title="草稿阶段导出为非正式 CSV；审批通过后导出已批准报价单">导出报价单（CSV）</button>
+          <button class="btn" id="btn-pdf" onclick="exportPdf()">模拟生成 PDF 报价单</button>
+          <button class="btn primary" id="btn-submit" onclick="submitApprove()">提交审批</button>
+          <button class="btn" id="btn-approve" onclick="approveQuote()" style="display:none">管理人员模拟通过</button>
+          <button class="btn" id="btn-revise" onclick="reviseQuote()" style="display:none">创建修订版</button>
+        </div>
+        <div id="lock-note" class="small oos" style="display:none;margin-top:6px">⚠ 报价已进入审批/已批准状态，参数与分类已冻结；如需修改请「创建修订版」回到草稿，原审批快照保留备查。</div>
+      </div>
+
+      <details class="api-drawer">
+        <summary>拟议接口草案（仅供技术设计参考） · 数据模型</summary>
+        <div class="api-body">
+          <div class="small muted" style="margin:0 0 8px;padding:8px 10px;border:1px dashed #d6cdff;border-radius:8px;background:#f6f4ff">拟议接口草案（仅供技术设计参考）：接口路径、字段及返回格式需与后端工程和 ERP/MES 字段映射确认后冻结，不作为本次静态原型验收接口。</div>
+          <div>
+            <h4>REST API</h4>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/quotes</code> <span class="muted">从标准 BOM 创建报价</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/quotes/:id/classify</code> <span class="muted">分类/算点（结果需人工确认）</span></div>
+            <div class="ep"><span class="method put">PUT</span><code>/api/v1/quotes/:id/lines/:lineId</code> <span class="muted">人工修正并记录</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/quotes/:id/simulate</code> <span class="muted">折扣模拟</span></div>
+            <div class="ep"><span class="method post">POST</span><code>/api/v1/quotes/:id/submit</code> <span class="muted">提交审批</span></div>
+            <div class="ep"><span class="method get">GET</span><code>/api/v1/quotes/:id/export?fmt=xlsx|pdf</code></div>
+          </div>
+          <div>
+            <h4>数据模型 / 规则</h4>
+            <div class="model mono">
+              Quote { id, customerId, mode: A|B|C, bomId,<br>
+              &nbsp;&nbsp;lines[], discount, status, approvals[] }<br>
+              价格 = 物料成本 + 点数费(SMT/DIP) + 板费<br>
+              &nbsp;&nbsp;+ 测试费 + 管理费率(按客户模式)
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><div class="kpi-num">3</div><div class="kpi-label">待审批报价</div></div>
+        <div class="kpi"><div class="kpi-num orange" id="kpi-pending-cls">—</div><div class="kpi-label">分类待人工确认行</div></div>
+        <div class="kpi"><div class="kpi-num" id="kpi-price">¥—<span class="kpi-unit">/pcs</span></div><div class="kpi-label" id="kpi-price-label">当前模拟单价</div></div>
+        <div class="kpi"><div class="kpi-num green">18</div><div class="kpi-label">本月已发报价单</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">① 分类与算点（AI 建议 · 需人工确认）</div>
+          <span class="small muted">BOM 86 行 · 节选 5 行 · 黄色 = 置信度低，需人工确认</span>
+          <span style="margin-left:auto" id="cls-state"></span></div>
+        <table class="tbl">
+          <thead><tr><th>位号</th><th>MPN</th><th>AI 分类</th><th>封装/工艺</th><th>算点</th><th>置信度</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody id="cls-body"></tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">合计：SMT 1,284 点 · DIP 36 位 · 修正记录自动留痕并用于模型校准</span>
+          <button class="btn sm" onclick="ezToast('其余 81 行为高置信度（≥95%），已随导入批量确认');ezLog('批量确认分类','81 行')">批量确认高置信度行</button></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><div class="card-title">② 规则计算 · 客户模式</div></div>
+          <div style="padding:14px 16px">
+            <label class="fld"><span>客户模式（A/B/C 报价规则）</span>
+              <select id="mode" onchange="recalc()">
+                <option value="A">A 模式 · 战略客户（管理费 8% · 含测试）</option>
+                <option value="B" selected>B 模式 · 常规客户（管理费 12% · 含测试）</option>
+                <option value="C">C 模式 · 小批量/打样（管理费 18%）</option>
+              </select></label>
+            <table class="tbl">
+              <tbody>
+                <tr><td>物料成本（86 行 · 含损耗 2%）</td><td class="mono" style="text-align:right">¥ 261.40</td></tr>
+                <tr><td>SMT 点数费（1,284 点 × ¥0.018）</td><td class="mono" style="text-align:right">¥ 23.11</td></tr>
+                <tr><td>DIP 插件费（36 位 × ¥0.12）</td><td class="mono" style="text-align:right">¥ 4.32</td></tr>
+                <tr><td>板费 + 钢网分摊</td><td class="mono" style="text-align:right">¥ 18.60</td></tr>
+                <tr><td>功能测试费</td><td class="mono" style="text-align:right">¥ 2.80</td></tr>
+                <tr><td>管理费（<span id="rate">—</span>）</td><td class="mono" style="text-align:right" id="mgmt">¥ —</td></tr>
+                <tr style="font-weight:700"><td>标准单价</td><td class="mono" style="text-align:right" id="std">¥ —</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">③ 折扣模拟</div><span class="badge purple">模拟仅供决策 · 发出前需审批</span></div>
+          <div style="padding:14px 16px">
+            <label class="fld"><span>折扣率：<b id="discLabel">95%</b>（仅对加工费与管理费，不折物料）</span>
+              <input type="range" id="disc" min="80" max="100" value="95" oninput="recalc()" style="width:100%"></label>
+            <table class="tbl">
+              <tbody>
+                <tr><td>折后单价</td><td class="mono" style="text-align:right;font-weight:700" id="final">¥ —</td></tr>
+                <tr><td>订单金额（×3,000 pcs）</td><td class="mono" style="text-align:right" id="total">¥ —</td></tr>
+                <tr><td>毛利率（成本基线：物料+加工，口径待甲方确认）</td><td class="mono" style="text-align:right" id="gm">—</td></tr>
+              </tbody>
+            </table>
+            <div class="banner warn" style="margin-top:10px" id="gmWarn" hidden>毛利率低于公司红线 15%，提交后将由管理人员重点审批。</div>
+            <div class="small muted" style="margin-top:8px">当前报价参数为<b>原型示例</b>（管理费按"物料+加工费"计、折扣仅作用于加工费与管理费、A/B/C 费率、毛利成本基线），最终以<b>甲方确认的报价规则表</b>为准。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">④ 报价历史（可追溯）</div></div>
+        <table class="tbl">
+          <thead><tr><th>报价单号</th><th>客户</th><th>产品</th><th>模式</th><th>折扣</th><th>单价</th><th>状态</th><th>审批人</th><th>导出</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">QT-26019</td><td>联创科技</td><td>控制板 V3 ×3,000</td><td>B</td><td id="h-disc">95%</td><td class="mono" id="h-price">¥—</td><td id="h-status"><span class="badge gray">草稿</span></td><td id="h-approver" class="muted">—</td><td id="h-export"><span class="muted">审批后可导出</span></td></tr>
+            <tr><td class="mono">QT-26018</td><td>联创科技</td><td>电源板 V2 ×1,200</td><td>B</td><td>97%</td><td class="mono">¥186.20</td><td><span class="badge green">已发出</span></td><td>管理人员</td><td><button class="btn xs" onclick="ezToast('原型演示：模拟导出 CSV；正式系统按确认模板生成 XLSX / PDF')">导出</button></td></tr>
+            <tr><td class="mono">QT-26015</td><td>明远电子</td><td>采集模块 V1 ×800</td><td>C</td><td>100%</td><td class="mono">¥96.80</td><td><span class="badge green">已发出</span></td><td>管理人员</td><td><button class="btn xs" onclick="ezToast('原型演示：模拟导出 CSV；正式系统按确认模板生成 XLSX / PDF')">导出</button></td></tr>
+            <tr><td class="mono">QT-26012</td><td>联创科技</td><td>控制板 V3 ×500 打样</td><td>C</td><td>100%</td><td class="mono">¥412.00</td><td><span class="badge gray">已失效（被 QT-26019 替代）</span></td><td>管理人员</td><td><button class="btn xs" onclick="ezToast('历史版本仅可查看')">查看</button></td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">每张报价单保留：BOM 版本、分类修正记录、规则参数、折扣、审批轨迹 — 可全程追溯。<b>导出口径</b>：原型演示导出 CSV；正式系统在审批完成后按双方确认模板生成 XLSX 与 PDF。</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+const COST={mat:261.40,smt:23.11,dip:4.32,board:18.60,test:2.80};
+const RATES={A:0.08,B:0.12,C:0.18};
+const QTY=3000;
+
+// —— 分类行状态数组（节选 5 行；其余 81 行为高置信度，导入时已确认）——
+const quoteLines=[
+  {ref:'U1',mpn:'STM32F103C8T6',cls:'IC-MCU',pkg:'LQFP48 · SMT',points:'48 点',conf:99,status:'CONFIRMED'},
+  {ref:'R23-R46',mpn:'RC0402FR-0710KL',cls:'R-Chip',pkg:'0402 · SMT',points:'24 点',conf:99,status:'CONFIRMED'},
+  {ref:'J2',mpn:'SM04B-SRSS-TB',cls:'连接器',pkg:'SMT 卧贴 · <b class="oos">疑似异形点</b>',points:'2 点 → 建议 4 点',conf:71,status:'PENDING'},
+  {ref:'T1',mpn:'EE16 变压器',cls:'磁性件',pkg:'<b class="oos">DIP · 需治具？</b>',points:'1 位 → 待定',conf:64,status:'PENDING'},
+  {ref:'J5',mpn:'DC-005 电源座',cls:'连接器',pkg:'DIP',points:'3 位',conf:97,status:'CONFIRMED'},
+];
+// 报价状态机：DRAFT → PENDING_APPROVAL → APPROVED / REJECTED
+let quoteStatus='DRAFT';
+const STATUS_LABEL={DRAFT:'草稿',PENDING_APPROVAL:'审批中 · 管理人员',APPROVED:'已批准',REJECTED:'已退回',EXPIRED:'已失效'};
+const STATUS_BADGE={DRAFT:'gray',PENDING_APPROVAL:'amber',APPROVED:'green',REJECTED:'red',EXPIRED:'gray'};
+
+function clsBadge(s){return s==='CONFIRMED'?'<span class="badge green">已确认</span>':s==='CORRECTED'?'<span class="badge green">已修正</span>':'<span class="badge orange">待人工确认</span>';}
+function pendingClsCount(){return quoteLines.filter(l=>l.status==='PENDING').length;}
+function clsAllDone(){return quoteLines.every(l=>l.status==='CONFIRMED'||l.status==='CORRECTED');}
+
+function renderCls(){
+  document.getElementById('cls-body').innerHTML=quoteLines.map(l=>{
+    const rowCls=l.status==='PENDING'?'warn-row':'';
+    const btn=l.status==='PENDING'
+      ? `<button class="btn xs primary" onclick="fixCls('${l.ref}')">确认/修正</button>`
+      : `<button class="btn xs" onclick="fixCls('${l.ref}')">修正</button>`;
+    return `<tr class="${rowCls}"><td class="mono">${l.ref}</td><td class="mono">${l.mpn}</td><td>${l.cls}</td>
+      <td>${l.pkg}</td><td class="mono">${l.points}</td><td class="mono">${l.conf}%</td>
+      <td>${clsBadge(l.status)}</td><td>${btn}</td></tr>`;
+  }).join('');
+  const n=pendingClsCount();
+  document.getElementById('kpi-pending-cls').textContent=n;
+  document.getElementById('cls-state').innerHTML = n>0
+    ? `<span class="badge orange">${n} 行分类待人工确认</span>`
+    : `<span class="badge green">分类已全部确认</span>`;
+}
+
+function setQuoteInputsLocked(locked){
+  ['mode','disc'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=locked;});
+  // 锁定时分类"修正"按钮禁用
+  document.querySelectorAll('#cls-body button').forEach(b=>b.disabled=locked);
+  const ib=document.getElementById('btn-import-bom'); if(ib) ib.disabled=locked;
+  const lk=document.getElementById('lock-note');
+  if(lk) lk.style.display=locked?'':'none';
+}
+function renderStatus(){
+  const badge=`<span class="badge ${STATUS_BADGE[quoteStatus]}">${STATUS_LABEL[quoteStatus]}</span>`;
+  document.getElementById('quote-status').outerHTML=`<span id="quote-status" class="badge ${STATUS_BADGE[quoteStatus]}" style="align-self:center">${STATUS_LABEL[quoteStatus]}</span>`;
+  document.getElementById('h-status').innerHTML=badge;
+  document.getElementById('h-approver').textContent = quoteStatus==='APPROVED'?'管理人员':(quoteStatus==='PENDING_APPROVAL'?'—（待审）':'—');
+  const submit=document.getElementById('btn-submit');
+  const approve=document.getElementById('btn-approve');
+  const pdf=document.getElementById('btn-pdf');
+  const exp=document.getElementById('btn-export-csv');
+  const revise=document.getElementById('btn-revise');
+  submit.style.display = quoteStatus==='DRAFT'?'':'none';
+  approve.style.display = quoteStatus==='PENDING_APPROVAL'?'':'none';
+  // 退回或已批准后提供"创建修订版"动作（回到 DRAFT 并解冻）
+  if(revise) revise.style.display = (quoteStatus==='REJECTED'||quoteStatus==='APPROVED')?'':'none';
+  pdf.disabled = quoteStatus!=='APPROVED';
+  pdf.title = quoteStatus==='APPROVED'?'生成正式 PDF 报价单（模拟）':'审批通过后才能生成正式 PDF 报价单';
+  exp.textContent = quoteStatus==='APPROVED'?'导出已批准报价单（CSV）':'导出草稿报价（CSV · 非正式）';
+  document.getElementById('h-export').innerHTML = quoteStatus==='APPROVED'
+    ? '<button class="btn xs" onclick="exportCsv()">CSV / PDF</button>'
+    : '<span class="muted">审批后可导出</span>';
+  // 提交审批后冻结所有报价参数与分类修改
+  setQuoteInputsLocked(quoteStatus==='PENDING_APPROVAL'||quoteStatus==='APPROVED');
+}
+
+let submittedSnapshot=null;   // 提交审批时冻结
+let approvedSnapshot=null;    // 审批通过时冻结
+function computeQuote(mode,d){
+  const proc=COST.smt+COST.dip+COST.board+COST.test;
+  const mgmt=(COST.mat+proc)*RATES[mode];
+  const std=COST.mat+proc+mgmt;
+  const fin=COST.mat+(proc+mgmt)*d;
+  const total=fin*QTY;
+  const costBase=COST.mat+proc;
+  const gm=(fin-costBase)/fin*100;
+  return {mode,d,discPct:Math.round(d*100)+'%',proc,mgmt,std,fin,total,gm};
+}
+function recalc(){
+  const mode=document.getElementById('mode').value;
+  const d=document.getElementById('disc').value/100;
+  const q=computeQuote(mode,d);
+  document.getElementById('discLabel').textContent=q.discPct;
+  document.getElementById('rate').textContent=Math.round(RATES[mode]*100)+'%';
+  document.getElementById('mgmt').textContent='¥ '+q.mgmt.toFixed(2);
+  document.getElementById('std').textContent='¥ '+q.std.toFixed(2);
+  document.getElementById('final').textContent='¥ '+q.fin.toFixed(2);
+  document.getElementById('total').textContent='¥ '+Math.round(q.total).toLocaleString();
+  document.getElementById('gm').textContent=q.gm.toFixed(1)+'%';
+  document.getElementById('gmWarn').hidden=q.gm>=15;
+  document.getElementById('kpi-price').innerHTML='¥'+q.fin.toFixed(2)+'<span class="kpi-unit">/pcs</span>';
+  document.getElementById('kpi-price-label').textContent='当前模拟单价（'+mode+' 模式 · '+q.discPct+'）';
+  document.getElementById('h-price').textContent='¥'+q.fin.toFixed(2);
+  document.getElementById('h-disc').textContent=q.discPct;
+}
+
+function importBom(){
+  ezModal('导入 BOM',`
+    <div class="upload-zone" onclick="ezToast('已载入 BOM-2026-0612（来自 BOM 智能处理 · 86 行已确认）')">
+      <div class="uz-icon">📥</div><div><b>选择标准 BOM</b>（BOM 智能处理导出 / Excel 上传）</div>
+      <div class="small muted">仅接受已完成人工确认的标准 BOM</div></div>`,
+    [{label:'取消'},{label:'导入',cls:'primary',onClick:c=>{c();ezToast('BOM 已导入，分类算点完成，'+pendingClsCount()+' 行待人工确认');ezLog('报价导入 BOM','BOM-2026-0612');}}]);
+}
+
+function fixCls(ref){
+  const l=quoteLines.find(x=>x.ref===ref);
+  if(!l) return;
+  const m=ezModal('分类/算点 人工确认 · '+ref,`
+    <div class="small muted" style="margin-bottom:8px">AI 建议分类：<b>${l.cls}</b> · 算点 <b>${l.points}</b> · 置信度 ${l.conf}%</div>
+    <label class="fld"><span>分类（确认或修正）</span><select id="fc-cls"><option${l.cls==='连接器'?' selected':''}>连接器</option><option${l.cls==='IC-MCU'?' selected':''}>IC-MCU</option><option${l.cls==='磁性件'?' selected':''}>磁性件</option><option>其他</option></select></label>
+    <label class="fld"><span>算点（人工确认/修正值）</span><input id="fc-pts" type="number" value="4"></label>
+    <label class="fld"><span>修正原因（修改分类/算点时必填，留痕）</span><input id="fc-reason" placeholder="如：异形件按 2 倍点数 / 需治具…"></label>`,
+    [{label:'取消'},
+     {label:'确认（采纳 AI 建议）',onClick:close=>{ l.status='CONFIRMED'; l.confirmedBy='王 PM'; l.confirmedAt=now(); close(); renderCls(); ezToast(ref+' 已人工确认'); ezLog('报价分类人工确认',ref); }},
+     {label:'记录修正',cls:'primary',onClick:close=>{
+        const reason=(m.el.querySelector('#fc-reason').value||'').trim();
+        if(!reason){ ezToast('修正原因必填','warn'); return; }
+        l.cls=m.el.querySelector('#fc-cls').value;
+        l.points=m.el.querySelector('#fc-pts').value+' 点（人工修正）';
+        l.status='CORRECTED'; l.correctionReason=reason; l.confirmedBy='王 PM'; l.confirmedAt=now();
+        close(); renderCls(); ezToast(ref+' 已修正并留痕'); ezLog('报价分类人工修正',ref+' · '+reason);
+     }}]);
+}
+
+function now(){return new Date().toISOString().slice(0,16).replace('T',' ');}
+
+function submitApprove(){
+  if(quoteStatus!=='DRAFT'){ ezToast('当前状态（'+STATUS_LABEL[quoteStatus]+'）不可重复提交','warn'); return; }
+  if(!clsAllDone()){
+    ezToast('仍有 '+pendingClsCount()+' 行分类待人工确认，需全部确认后才能提交审批','warn');
+    return;
+  }
+  ezModal('提交审批 · QT-26019',`
+    <div class="banner info" style="margin-bottom:10px">${document.getElementById('mode').value} 模式 · 折扣 ${document.getElementById('discLabel').textContent} · 单价 ${document.getElementById('final').textContent} · 审批链：PM 发起 → 管理人员审批</div>
+    <div class="small muted" style="margin-bottom:8px">提交后将冻结报价参数与分类，审批人看到的是此刻的版本快照。</div>
+    <label class="fld"><span>备注</span><input placeholder="给审批人的说明…"></label>`,
+    [{label:'取消'},{label:'提交',cls:'primary',onClick:close=>{
+      const mode=document.getElementById('mode').value, d=document.getElementById('disc').value/100;
+      const q=computeQuote(mode,d);
+      submittedSnapshot={...q, materialCost:COST.mat, quoteLines:JSON.parse(JSON.stringify(quoteLines)),
+        submittedBy:'王 PM', submittedAt:now(), revisionNo:(submittedSnapshot?submittedSnapshot.revisionNo+1:1)};
+      quoteStatus='PENDING_APPROVAL'; close(); renderStatus();
+      ezToast('QT-26019 已提交管理人员审批（参数已冻结为提交快照 ¥'+q.fin.toFixed(2)+'）'); ezLog('提交报价审批','QT-26019 快照 ¥'+q.fin.toFixed(2));
+    }}]);
+}
+
+function approveQuote(){
+  if(quoteStatus!=='PENDING_APPROVAL') return;
+  const s=submittedSnapshot||{};
+  ezModal('管理人员审批 · QT-26019',`
+    <div class="banner info" style="margin-bottom:10px">审批对象为<b>提交快照</b>：${s.mode} 模式 · 折扣 ${s.discPct} · 单价 ¥${(s.fin||0).toFixed(2)} · 毛利率 ${(s.gm||0).toFixed(1)}%（成本基线口径待甲方确认）</div>
+    <label class="fld"><span>退回原因（退回时填写）</span><input id="rej-reason" placeholder="如：折扣超授权、需补充工程费…"></label>
+    <div class="small muted">审批针对快照；通过后方可生成正式 PDF / 导出已批准报价单。</div>`,
+    [{label:'退回',onClick:close=>{
+        const reason=(document.getElementById('rej-reason').value||'').trim()||'未填写原因';
+        quoteStatus='REJECTED'; rejectInfo={rejectedBy:'管理人员',rejectedAt:now(),rejectReason:reason};
+        close(); renderStatus(); ezToast('报价已退回 PM：'+reason); ezLog('报价审批','QT-26019 退回 · '+reason);
+     }},
+     {label:'模拟通过',cls:'primary',onClick:close=>{
+        approvedSnapshot={...submittedSnapshot, approvedBy:'管理人员', approvedAt:now()};
+        quoteStatus='APPROVED'; close(); renderStatus();
+        ezToast('QT-26019 已批准（锁定 ¥'+approvedSnapshot.fin.toFixed(2)+'）'); ezLog('报价审批','QT-26019 通过 ¥'+approvedSnapshot.fin.toFixed(2));
+     }}]);
+}
+let rejectInfo=null;
+
+// 退回 / 已批准后创建修订版：回到 DRAFT 并解冻，版本号 +1
+function reviseQuote(){
+  if(quoteStatus!=='REJECTED' && quoteStatus!=='APPROVED') return;
+  const base=approvedSnapshot||submittedSnapshot;
+  const rev=(base?base.revisionNo:1)+1;
+  ezModal('创建修订版 · QT-26019',`
+    <div class="banner info" style="margin-bottom:10px">${quoteStatus==='REJECTED'?('退回原因：'+(rejectInfo?rejectInfo.rejectReason:'—')):'基于已批准版本创建修订'}</div>
+    <div class="small muted">将生成修订版 R${rev}，回到草稿状态、解冻参数；原审批快照保留备查，不被覆盖。</div>`,
+    [{label:'取消'},{label:'创建修订版 R'+rev,cls:'primary',onClick:close=>{
+      quoteStatus='DRAFT'; close(); renderStatus();
+      ezToast('已创建修订版 R'+rev+'，可修改后重新提交审批'); ezLog('创建报价修订版','QT-26019 R'+rev);
+    }}]);
+}
+
+function exportCsv(){
+  const approved = quoteStatus==='APPROVED';
+  const name = approved ? '报价单-QT-26019-已批准' : '报价单-QT-26019-草稿非正式';
+  ezExportCSV(name, quoteRows());
+  ezLog('导出报价单 CSV', name);
+}
+
+function exportPdf(){
+  if(quoteStatus!=='APPROVED'){ ezToast('报价审批通过后才能生成正式 PDF 报价单','warn'); return; }
+  ezToast('模拟生成正式 PDF 报价单（按已批准快照 ¥'+approvedSnapshot.fin.toFixed(2)+'；原型不产生真实文件）');
+  ezLog('模拟生成正式 PDF 报价单','QT-26019 ¥'+approvedSnapshot.fin.toFixed(2));
+}
+
+function quoteRows(){
+  // 已批准用 approvedSnapshot；审批中用 submittedSnapshot；草稿用实时值
+  const snap = quoteStatus==='APPROVED'?approvedSnapshot : (quoteStatus==='PENDING_APPROVAL'?submittedSnapshot : null);
+  const proc=COST.smt+COST.dip+COST.board+COST.test;
+  const mode = snap? snap.mode : document.getElementById('mode').value;
+  const mgmt = snap? snap.mgmt.toFixed(2) : document.getElementById('mgmt').textContent.replace('¥ ','');
+  const disc = snap? snap.discPct : document.getElementById('discLabel').textContent;
+  const fin  = snap? snap.fin.toFixed(2) : document.getElementById('final').textContent.replace('¥ ','');
+  const total= snap? Math.round(snap.total).toLocaleString() : document.getElementById('total').textContent.replace('¥ ','');
+  const ver  = snap? ('R'+snap.revisionNo) : '草稿';
+  return [
+    ['报价单号','客户','产品','数量','模式','物料成本','加工费','管理费','折扣','单价','金额','状态','版本'],
+    ['QT-26019','联创科技','控制板V3',String(QTY),mode,'261.40',proc.toFixed(2),mgmt,disc,fin,total,STATUS_LABEL[quoteStatus],ver]];
+}
+
+renderCls();
+recalc();
+renderStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>交付 · 培训 · 验收 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">基础平台 <span>/</span> <span class="current">交付 · 培训 · 验收</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge gray">合同附件一 · 本期交付</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text"><b>培训（用户操作一次 + 管理员配置一次）→ 用户操作说明 / 部署配置说明 → 字段映射表 → 数据模板 → 客户待提供资料 → UAT 演示场景 → 验收</b>。本页汇总合同要求的培训、文档、模板与验收说明。</div>
+        <span class="ai-loop-pill">交付清单 · 双方确认</span>
+      </div>
+
+      <div class="banner warn" style="margin:0 0 16px"><b>当前为静态高保真原型</b>，用于确认页面、字段、流程和范围，<b>不代表后端、接口、邮件和文件生成已经全部完成</b>。正式系统能力以合同附件一与联调结果为准。</div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">交付 · 培训 · 验收</div>
+          <div class="page-desc">培训计划 · 交付文档 · 数据模板 · 客户待提供资料 · UAT 场景</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn primary" onclick="exportAll()" title="原型演示导出 CSV；正式系统提供 XLSX 模板包。部分浏览器会拦截一次点击多文件下载，如被拦截请允许或逐个下载">下载全部模板（CSV）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">① 培训计划</div><span class="small muted">合同含两场培训</span></div>
+        <table class="tbl">
+          <thead><tr><th>场次</th><th>对象</th><th>内容</th><th>形式 / 时长</th></tr></thead>
+          <tbody>
+            <tr><td>用户操作培训 ×1</td><td>PM / 采购 / 计划 / 管理人员</td><td>BOM 处理、报价、物料报价协同、采购助手、OPO、缺料/Call 料、对账、追溯、计划辅助的日常操作与人工确认闭环</td><td>远程为主；如需现场培训，差旅及现场服务另行确认。时长由双方按培训内容安排</td></tr>
+            <tr><td>管理员配置培训 ×1</td><td>客户 IT / 系统管理员</td><td>账号与角色权限、业务参数、系统集成通道与字段映射配置、操作日志审计</td><td>远程为主；如需现场培训，差旅及现场服务另行确认。时长由双方按培训内容安排</td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">培训材料随正式交付提供；培训后由双方签署培训确认。</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">② 交付文档</div></div>
+        <table class="tbl">
+          <thead><tr><th>文档</th><th>内容摘要</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td>用户操作说明</td><td>各模块操作步骤、AI 输出的人工确认/修正/留痕流程</td><td><span class="badge blue">随正式交付</span></td></tr>
+            <tr><td>部署及配置说明</td><td>环境要求、安装部署、参数与角色初始化、备份策略</td><td><span class="badge blue">随正式交付</span></td></tr>
+            <tr><td>字段映射表</td><td>ERP/MES 对象 ↔ ezPLM 实体字段对应（见下表，待联调确认）</td><td><span class="badge gray">待联调确认</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">③ 字段映射表（示例 · 待客户 IT 与联调确认）</div></div>
+        <table class="tbl">
+          <thead><tr><th>ERP/MES 对象（示例）</th><th>ezPLM 实体</th><th>关键字段对应（示例）</th><th>方向</th><th>建议通道</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">库存表 / V_EZ_STOCK</td><td class="mono">Inventory</td><td>物料编码↔internalPN，数量↔qty，仓位↔location，批次↔lotNo</td><td>读</td><td>视图 / 中间表 / Excel</td></tr>
+            <tr><td class="mono">采购订单 / V_EZ_PO</td><td class="mono">PurchasePO / OPOLine</td><td>采购单号↔ppoNo，行号↔lineNo，料号↔mpn，需求日↔needDate</td><td>读 / 写回</td><td>视图 + 中间表 / Excel / RPA</td></tr>
+            <tr><td class="mono">销售订单</td><td class="mono">CustomerPO</td><td>客户单号↔cpoNo，客户↔customerId，交期↔dueDate</td><td>读</td><td>视图 / Excel</td></tr>
+            <tr><td class="mono">工单 / V_EZ_WO</td><td class="mono">WorkOrder</td><td>工单号↔woNo，关联客户单↔cpoNo，数量↔qty</td><td>读</td><td>视图 / Excel</td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">具体表名、字段与方向以双方 IT 联调确认后冻结为准。详见<a href="integration.html">系统集成</a>。</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">④ 数据模板</div><span class="small muted">原型导出 CSV；正式系统按双方确认模板生成 XLSX</span></div>
+        <table class="tbl">
+          <thead><tr><th>模板</th><th>用途</th><th>下载</th></tr></thead>
+          <tbody>
+            <tr><td>BOM 模板</td><td>标准 BOM 上传 / AI 匹配输入</td><td><button class="btn xs" onclick="dl('BOM模板',['位号','MPN','描述','规格','封装','客户料号','内部料号','数量'])">下载（CSV）</button></td></tr>
+            <tr><td>报价模板</td><td>报价单导出字段</td><td><button class="btn xs" onclick="dl('报价模板',['报价单号','客户','产品','数量','模式','物料成本','加工费','管理费','折扣','单价','金额'])">下载（CSV）</button></td></tr>
+            <tr><td>物料报价模板</td><td>PM 上传物料报价需求 / 采购填价</td><td><button class="btn xs" onclick="dl('物料报价模板',['MPN','描述','需求数量','库存','OPO','Going to Buy','单价(采购填)','MPN确认','备注'])">下载（CSV）</button></td></tr>
+            <tr><td>OPO 模板</td><td>供应商交期回填</td><td><button class="btn xs" onclick="dl('OPO模板',['采购PO','行号','MPN','数量','需求日','回复ETA','回复数量','备注'])">下载（CSV）</button></td></tr>
+            <tr><td>AR/AP 对账模板</td><td>客户 / 供应商对账单上传</td><td><button class="btn xs" onclick="dl('AR-AP对账模板',['对账单号','类型(AR/AP)','单据号','关联PO','MPN','数量','单价','金额','差异类型'])">下载（CSV）</button></td></tr>
+            <tr><td>Call 料表模板</td><td>缺料 Call 料导出</td><td><button class="btn xs" onclick="dl('Call料表模板',['工单','MPN','缺料数量','供应商','ETA','预计齐料时间','联系动作'])">下载（CSV）</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">⑤ 客户待提供资料</div><span class="badge orange">需甲方配合</span></div>
+        <table class="tbl">
+          <thead><tr><th>项目</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>ERP/MES 版本与接口资料</td><td>现有金蝶 ERP/MES 具体版本、是否开放 API、数据库访问与 RPA 可行性</td></tr>
+            <tr><td>测试账号与权限</td><td>联调用测试库 / 测试账号、只读视图或中间表授权</td></tr>
+            <tr><td>样例数据</td><td>样例 BOM、客户 PO、采购 PO、工单、库存、OPO、ETA</td></tr>
+            <tr><td>业务规则</td><td>报价规则（A/B/C）、采购阈值与历史最低价口径、对账规则、各模块审批规则</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">⑥ UAT 演示场景（验收用例）</div></div>
+        <table class="tbl">
+          <thead><tr><th>#</th><th>场景</th><th>对应模块</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>BOM 上传 → AI 匹配 → 人工确认 → 导出标准 BOM</td><td><a href="bom-process.html">BOM 智能处理</a></td></tr>
+            <tr><td>2</td><td>BOM → 报价规则计算 → 折扣模拟 → 审批 → 报价单（Excel/PDF）</td><td><a href="quote.html">智能报价</a></td></tr>
+            <tr><td>3</td><td>PM 上传物料报价需求 → 采购填价 → 低价提醒 → PM 确认 → 主管审批 → 下载结果表</td><td><a href="material-quote.html">物料报价与采购协同</a></td></tr>
+            <tr><td>4</td><td>OPO 导入 → 供应商回复 → 匹配 → 交期差异 / 异常清单 → 导出</td><td><a href="opo.html">OPO 交期协同</a></td></tr>
+            <tr><td>5</td><td>缺料单导入 → ETA 齐料计算 → Call 料表 → 供应商邮件内容</td><td><a href="shortage.html">缺料分析与 Call 料表</a></td></tr>
+            <tr><td>6</td><td>客户 / 供应商对账单上传 → 字段匹配 → AR/AP 建议清单</td><td><a href="ar-ap.html">AR/AP 对账</a></td></tr>
+            <tr><td>7</td><td>一颗料 / 工单 / 采购 PO 的基础追溯查询</td><td><a href="trace.html">物料追溯</a></td></tr>
+          </tbody>
+        </table>
+        <div class="card-foot"><span class="small muted">UAT 通过后由双方签署验收。验收范围严格以合同附件一为准；附件一之外的需求见<a href="phase2.html">二期规划 / 变更需求池</a>。</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function dl(name,header){ezExportCSV(name+'.csv',header,[header.map(()=>'')]);ezLog('下载模板',name);}
+function exportAll(){
+  // 逐个真实下载各模板（每个一份 CSV）。注：部分浏览器会拦截"一次点击触发多个下载"，
+  // 如被拦截请允许本站点多文件下载，或逐个点击上方各模板按钮；正式系统提供打包 ZIP / 多 Sheet XLSX。
+  const templates=[
+    ['BOM模板',['位号','MPN','描述','规格','封装','客户料号','内部料号','数量']],
+    ['报价模板',['报价单号','客户','产品','数量','模式','物料成本','加工费','管理费','折扣','单价','金额']],
+    ['物料报价模板',['MPN','描述','需求数量','库存','OPO','MOQ','SPQ','Going to Buy','单价(采购填)','MPN确认','备注']],
+    ['OPO模板',['采购PO','行号','MPN','数量','需求日','回复ETA','回复数量','备注']],
+    ['AR-AP对账模板',['对账单号','类型(AR/AP)','单据号','关联PO','MPN','数量','单价','金额','差异类型']],
+    ['Call料表模板',['工单','MPN','缺料数量','供应商','ETA','预计齐料时间','联系动作']],
+  ];
+  templates.forEach((t,i)=>setTimeout(()=>ezExportCSV(t[0]+'.csv',t[1],[t[1].map(()=>'')]), i*250));
+  ezToast('正在逐个下载 '+templates.length+' 份模板（原型 CSV；正式系统提供 XLSX 模板包）');
+  ezLog('下载全部模板',templates.length+' 份');
+}
+</script>
+</body>
+</html>

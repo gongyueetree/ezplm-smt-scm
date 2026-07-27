@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工作台 · ezPLM 本期交付</title>
+<link rel="stylesheet" href="contract.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="ez-sidebar-mount"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-breadcrumb">总览 <span>/</span> <span class="current">工作台</span></div>
+      <div class="topbar-spacer"></div>
+      <span class="badge gray">合同附件一 · 本期交付范围视图</span>
+    </div>
+    <div class="content">
+
+      <div class="scope-strip">
+        <span class="scope-tag">本期范围</span>
+        <div class="scope-text">工作台仅展示<b>附件一约定的待办与指标</b>，不展示超范围承诺。超范围设想统一进入 <a href="phase2.html" style="text-decoration:underline;font-weight:600">二期规划 / 变更需求池</a>。</div>
+        <span class="ai-loop-pill">AI 建议 → 人工确认 → 记录修正</span>
+      </div>
+
+      <div class="page-head">
+        <div>
+          <div class="page-title">工作台</div>
+          <div class="page-desc">乾创电子 · 王工（PM 经理）· 2026-06-12 周五</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="ezToast('已刷新各模块待办计数')">刷新</button>
+          <button class="btn primary" onclick="document.getElementById('demo-index').scrollIntoView({behavior:'smooth'})">7 个端到端 Demo</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <a class="kpi ai" href="bom-process.html"><div class="kpi-label">待确认 BOM</div><div class="kpi-value">4</div><div class="kpi-foot">AI 匹配完成 · 等待人工确认</div></a>
+        <a class="kpi warn" href="bom-process.html"><div class="kpi-label">未匹配物料</div><div class="kpi-value">17</div><div class="kpi-foot">含 9 项候选 MPN 待确认/新增</div></a>
+        <a class="kpi" href="quote.html"><div class="kpi-label">待审批报价</div><div class="kpi-value">3</div><div class="kpi-foot">B 类客户 ×2 · C 类 ×1</div></a>
+        <a class="kpi warn" href="material-quote.html"><div class="kpi-label">待采购确认价格</div><div class="kpi-value">6</div><div class="kpi-foot">其中 2 项高于历史最低价</div></a>
+        <a class="kpi danger" href="opo.html"><div class="kpi-label">OPO 未回复数量</div><div class="kpi-value">23</div><div class="kpi-foot">涉及 5 家供应商 · 距双周截止 2 天</div></a>
+        <a class="kpi danger" href="opo.html"><div class="kpi-label">异常交期数量</div><div class="kpi-value">8</div><div class="kpi-foot">回复 ETA 晚于需求日 ≥ 7 天</div></a>
+        <a class="kpi danger" href="shortage.html"><div class="kpi-label">缺料工单数量</div><div class="kpi-value">5</div><div class="kpi-foot">最早齐料 06-19 · 2 单需 Call 料</div></a>
+        <a class="kpi ai" href="procurement.html"><div class="kpi-label">呆滞料提醒数量</div><div class="kpi-value">11</div><div class="kpi-foot">同 MPN 可内部调用，避免重复采购</div></a>
+        <a class="kpi" href="ar-ap.html"><div class="kpi-label">待处理 AR/AP 对账单</div><div class="kpi-value">2</div><div class="kpi-foot">AR ×1 · AP ×1 · 共 14 行差异</div></a>
+        <a class="kpi" href="#oplog" onclick="event.preventDefault();document.getElementById('oplog').scrollIntoView({behavior:'smooth'})"><div class="kpi-label">今日操作日志</div><div class="kpi-value" id="kpi-log">12</div><div class="kpi-foot">登录 / 导入 / 确认 / 审批</div></a>
+      </div>
+
+      <div class="grid-2">
+        <div class="card" id="demo-index">
+          <div class="card-head"><div class="card-title">端到端 Demo 流程（验收口径）</div><div class="card-sub">每条均含示例数据，可直接演示</div></div>
+          <div class="card-body flush"><table class="tbl">
+            <tr><td>1</td><td>BOM 上传 → AI 匹配 → 人工确认 → 导出标准 BOM</td><td><a class="btn sm primary" href="bom-process.html">进入</a></td></tr>
+            <tr><td>2</td><td>BOM → 报价规则计算 → 折扣模拟 → 审批 → Excel/PDF 报价单</td><td><a class="btn sm primary" href="quote.html">进入</a></td></tr>
+            <tr><td>3</td><td>PM 上传需求 → 采购填价 → 历史低价提醒 → PM 确认 → 主管审批 → 结果表</td><td><a class="btn sm primary" href="material-quote.html">进入</a></td></tr>
+            <tr><td>4</td><td>OPO 导入 → 供应商回复 → 匹配 → 异常交期报表 → 导出</td><td><a class="btn sm primary" href="opo.html">进入</a></td></tr>
+            <tr><td>5</td><td>缺料单导入 → ETA 齐料计算 → Call 料表 → 供应商邮件</td><td><a class="btn sm primary" href="shortage.html">进入</a></td></tr>
+            <tr><td>6</td><td>对账单上传 → 字段匹配 → AR/AP 建议清单</td><td><a class="btn sm primary" href="ar-ap.html">进入</a></td></tr>
+            <tr><td>7</td><td>一颗料 / 工单 / 采购 PO 的基础追溯查询</td><td><a class="btn sm primary" href="trace.html">进入</a></td></tr>
+          </table></div>
+        </div>
+
+        <div class="card" id="oplog">
+          <div class="card-head"><div class="card-title">今日操作日志</div><div class="card-sub">用户登录、角色权限变更、关键业务操作留痕</div>
+            <div style="margin-left:auto"><button class="btn sm" onclick="exportLog()">导出 CSV</button></div></div>
+          <div class="card-body flush tbl-scroll"><table class="tbl" id="log-tbl">
+            <thead><tr><th>时间</th><th>用户 / 角色</th><th>操作</th><th>对象</th></tr></thead>
+            <tbody>
+              <tr><td>09:02</td><td>王工 / PM</td><td>登录系统</td><td>—</td></tr>
+              <tr><td>09:15</td><td>王工 / PM</td><td>上传 BOM</td><td>BOM-2606-018（联创·控制板 V3）</td></tr>
+              <tr><td>09:16</td><td>系统 / AI</td><td>BOM 匹配完成</td><td>146/163 行命中 · 17 行待确认</td></tr>
+              <tr><td>09:41</td><td>王工 / PM</td><td>人工修正匹配</td><td>R23 → 0402 1% 替换为客户料号优先项（已记录）</td></tr>
+              <tr><td>10:05</td><td>李采 / 采购</td><td>填写物料报价</td><td>MQ-2606-007 · 6 项，2 项触发低价提醒</td></tr>
+              <tr><td>10:30</td><td>赵管 / 管理</td><td>审批通过</td><td>报价单 QT-2606-031（B 类 · 折扣 3%）</td></tr>
+              <tr><td>11:12</td><td>系统 / 定时</td><td>双周 OPO 催复邮件</td><td>5 家供应商 · 23 行未回复</td></tr>
+              <tr><td>13:40</td><td>供应商-华芯</td><td>门户回填交期</td><td>OPO-5102 · 9 行 · 2 行异常</td></tr>
+              <tr><td>14:02</td><td>王工 / PM</td><td>导出 Call 料表</td><td>WO-7741 · 12 行缺料</td></tr>
+              <tr><td>14:33</td><td>钱计 / 计划</td><td>确认工时</td><td>WO-7741 预计 36.5 H（人工 +1.5H）</td></tr>
+              <tr><td>15:10</td><td>李采 / 采购</td><td>上传 AP 对账单</td><td>华芯 5 月对账 · 62 行 · 差异 6 行</td></tr>
+              <tr><td>16:20</td><td>赵管 / 管理</td><td>角色权限调整</td><td>新增"供应商"角色账号 ×2（轻量门户）</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script src="contract.js"></script>
+<script src="nav-contract.js"></script>
+<script>
+/* 脚本加载兜底：若 contract.js 未成功加载（例如浏览器缓存了旧版、或文件不在同一目录），
+   给出可见提示，避免"按钮点了没反应"却不知原因。 */
+(function(){
+  if (typeof window.ezModal !== 'function' || typeof window.ezToast !== 'function') {
+    var b=document.createElement('div');
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;padding:10px 16px;font:14px/1.5 system-ui,sans-serif;text-align:center';
+    b.innerHTML='⚠ 页面脚本（contract.js）未正确加载，按钮功能不可用。请确认 contract.js 与本页在同一文件夹，并强制刷新（Ctrl/Cmd+Shift+R）清除缓存；如仍异常，建议用本地服务器打开（如 VS Code Live Server 或 <code>python -m http.server</code>）。';
+    document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(b);});
+    if(document.body) document.body.appendChild(b);
+  }
+})();
+</script>
+<script>
+function exportLog(){
+  const rows=[...document.querySelectorAll('#log-tbl tbody tr')].map(tr=>[...tr.children].map(td=>td.textContent));
+  ezExportCSV('操作日志_2026-06-12.csv',['时间','用户/角色','操作','对象'],rows);
+}
+</script>
+</body>
+</html>
