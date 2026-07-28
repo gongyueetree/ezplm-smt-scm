@@ -21,6 +21,9 @@ const DEMO_USERS: { email: string; name: string; role: RoleName }[] = [
 ];
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("演示种子禁止在 production 环境执行(演示口令仅限本地/预览)");
+  }
   const password = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
   const passwordHash = await hashPassword(password);
 

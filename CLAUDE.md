@@ -37,6 +37,9 @@
 - **诚实 UI**:禁止"已发送/已生成/已联调"类虚假完成态;邮件=预览/模拟发送;集成状态只用 待确认/待授权/待联调/示例配置;比价页显示数据更新时间而非暗示实时。
 - **角色**:PM / PROCUREMENT / ENGINEERING / MANAGEMENT / SUPPLIER;审批人必须存在于角色模型(无"销售主管/总经理/品质")。
 
+## 数据访问约定(PR2 评审新增,2026-07-27)
+- 自 PR3 起,所有业务查询/写入必须经 `lib/server/tenant-scope.ts` 的 `tenantWhere`/`tenantData`/`assertTenantScopedMutation` 守卫;Provider 与业务代码不得绕过直接拼 where。
+
 ## PR 工作纪律
 - 按 SPEC 第十九节 PR1–PR9 顺序;**一个会话只做一个 PR**;完成后停下,给出:测试结果、Preview URL(或本地验证说明)、已完成/未完成清单,等人类确认后才可进入下一个 PR。
 - 每个 PR 必须通过:`pnpm lint && pnpm typecheck && pnpm test && pnpm build && prisma validate`(涉及 UI 流程的 PR 另跑 `pnpm test:e2e`)。

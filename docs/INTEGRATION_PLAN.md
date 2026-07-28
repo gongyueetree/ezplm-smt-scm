@@ -182,5 +182,7 @@ PR9  Playwright 全量 E2E + 双轨部署(Vercel + Docker→国内)+ 文档
 
 | 日期 | 偏差 | 决策 | 影响 |
 |---|---|---|---|
+| 2026-07-27 | **Prisma 版本固定 7.9.0**:7.9.1 的引擎依赖(@prisma/fetch-engine)npmmirror 未同步,国内镜像无法安装 | 固定 prisma / @prisma/client / @prisma/adapter-pg = 7.9.0;镜像同步后评估升级 | 客户生产走国内主机,镜像可安装性为硬需求;升级前需复测 migrate/generate |
+| 2026-07-27 | **GitHub 账号 eehubio suspended**:push 与 Vercel Preview 阻塞 | 阻塞期间每个 PR 完成时 `git bundle create --all` 备份到仓库外;push 恢复后先 `git fetch` 核对远端再推 | 本地 feature/nextjs-agent-v1 为唯一副本;Preview URL 暂无法提供,以本地验证代替 |
 | 2026-07-27 | **SPEC 级缺口备案(评审备案 F)**:SPEC §4 的 43 模型不含工单/齐料需求数据,但 §2 路由含 /shortage、/kitting | PR8 前需决策:新增只读缓存表(如 WorkOrderDemandSnapshot)还是经 Provider 实时取;数据主权归 ezPLM/ERP 侧不变;现阶段不加表 | /shortage、/kitting 页面在数据来源决策前只能做占位/导入形态;GTB 的"需求"输入暂以导入或人工录入为准 |
 | 2026-07-27 | **旧 NestJS V15 schema.prisma 不可得**:`reference/nestjs-v15/` 始终为空,经人工确认旧后端文件永久缺失(评审方 2026-07-27 确认) | 决策 1 中"NestJS schema 合并对照"路径作废;**SPEC §4 的 43 模型为唯一 schema 基线**;`docs/SCHEMAMERGEMAP.md` 由合并对照表改为 BASELINE 落库核对表 | PR1 交付项第 6 项(合并对照表)范围变更为"SPEC §4 落库核对表";第二节迁移地图中"NestJS V15 Prisma schema(42 表)→ 合并进新 schema"一行失效;NestJS service 业务规则仍按原计划以 CLAUDE.md 领域规则 + 静态原型逻辑为准直译,不再参考旧代码 |

@@ -1,4 +1,27 @@
-# ezPLM PC 端原型 · Vercel 部署包（v8.2 · 首页即工作台 · 内部测试）
+# ezPLM AI 供应链协同(Next.js 全栈)
+
+> 本仓库已重构为 Next.js 全栈系统(PR1+)。工作约束见 `CLAUDE.md`,规范见 `docs/SPEC.md`。
+> 以下"PC 端原型"章节描述的是 `legacy-static/` 中的静态原型,仅作视觉参考,禁止修改。
+
+## 本地开发
+
+```bash
+pnpm install
+pnpm db:start      # 本地 PostgreSQL(Homebrew postgresql@17,端口 5433,数据在 .pgdata/)
+pnpm db:migrate    # 应用 migration
+pnpm db:seed       # 演示种子(五角色账号)
+pnpm dev
+```
+
+⚠ **演示账号与口令(demo1234)仅限本地/预览环境**:种子脚本在 `NODE_ENV=production` 下拒绝执行;生产环境必须走正式的用户开通流程。
+
+质量门禁:`pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:validate`(UI 流程另跑 `pnpm test:e2e`)。
+
+---
+
+# 以下为旧静态原型说明(legacy-static/,仅参考)
+
+# ezPLM PC 端原型 · Vercel 部署包(v8.2 · 首页即工作台 · 内部测试)
 
 > v8.1 结构调整：BOM 管理页右上角仅保留「新建 BOM」入口（Excel 导入 / 图片 PDF 上传 / 参考 BOM / 手工 四种方式收敛到弹窗内，确认后进入智能匹配流程）；左侧导航移除重复的「BOM 智能导入」项，`bom-smart-import.html` 保留为新建 BOM 的流程落地页（RFQ「去识别」、工作台待办等深链仍指向它）。
 
