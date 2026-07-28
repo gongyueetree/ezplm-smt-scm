@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.github
+.pgdata
+.storage
+.env
+.env.*
+!.env.example
+legacy-static
+reference
+docs
+playwright-report
+test-results
+tests
+*.bundle
+*.log

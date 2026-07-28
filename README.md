@@ -15,7 +15,34 @@ pnpm dev
 
 ⚠ **演示账号与口令(demo1234)仅限本地/预览环境**:种子脚本在 `NODE_ENV=production` 下拒绝执行;生产环境必须走正式的用户开通流程。
 
-质量门禁:`pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:validate`(UI 流程另跑 `pnpm test:e2e`)。
+质量门禁(SPEC §18,CI 每次 push 全跑):
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm db:validate && pnpm test:e2e
+```
+
+## 部署
+
+双轨交付(见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
+
+- **Vercel**(region `sin1`)= 团队开发 / PR Preview / 内部演示;
+- **Docker**(同一份代码)= 客户 UAT 与生产,部署到国内主机 —— `*.vercel.app` 在大陆访问不稳定。
+
+```bash
+docker compose -f docker-compose.local.yml up --build   # 本地一体验证
+docker build -t ezplm-scm:1.0.0 .                        # 生产镜像
+docker build --build-arg NEXT_PUBLIC_BASE_PATH=/scm .    # 子路径反代形态
+```
+
+## 外部集成现状(如实)
+
+| 集成 | 状态 |
+|---|---|
+| DigiKey / Mouser | 已联调(2026-07-27 由用户执行 `pnpm smoke:external` 验证) |
+| ezPLM 只读 API | 待联调 —— 走 Mock,页面标注「示例数据」 |
+| Claude(QuoteAgent) | 待接入 —— 无 Key 时用本地规则建议,UI 标注「未接入模型」 |
+| 邮件发送(催办/对账) | 未接入 —— 只生成记录,不发送 |
+| ERP 回写 | 替代路径 —— 生成可导入 XLSX + IntegrationJob 登记;RPA/API 直写属二期 |
 
 ---
 

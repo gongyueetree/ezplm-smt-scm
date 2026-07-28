@@ -1,0 +1,64 @@
+# ============================================================
+# 本地/私有化一体验证:PostgreSQL + 应用镜像
+#
+#   docker compose -f docker-compose.local.yml up --build
+#   打开 http://localhost:3000
+#
+# ⚠ 本文件用于本地与 UAT 验证。生产部署请:
+#   - 使用外部托管 PostgreSQL(国内 RDS),不要用容器内数据库;
+#   - AUTH_SECRET / CRON_SECRET 换成强随机值并经密钥管理下发;
+#   - .storage 改挂持久卷或换用对象存储。
+# ============================================================
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ezplm_scm
+      # 与 scripts/dev-db.sh 同因:非 C locale 在部分环境会导致 postmaster 启动异常
+      LANG: C
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ezplm_scm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      args:
+        # 子路径部署示例:NEXT_PUBLIC_BASE_PATH: /scm
+        NEXT_PUBLIC_BASE_PATH: ""
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ezplm_scm
+      # ⚠ 演示值:生产必须替换为强随机值
+      AUTH_SECRET: change-me-in-production
+      FILE_STORAGE_PROVIDER: local
+      FILE_STORAGE_DIR: /app/.storage
+      # 外部集成:未配置时系统走 Mock 并在页面如实标注
+      # EZPLM_API_BASE_URL: ""
+      # EZPLM_API_KEY: ""
+      # DIGIKEY_CLIENT_ID: ""
+      # DIGIKEY_CLIENT_SECRET: ""
+      # MOUSER_API_KEY: ""
+      # ANTHROPIC_API_KEY: ""
+      # 未配置 CRON_SECRET 时催办接口拒绝运行(503)
+      # CRON_SECRET: ""
+    ports:
+      - "3000:3000"
+    volumes:
+      - storage:/app/.storage
+
+volumes:
+  pgdata:
+  storage:

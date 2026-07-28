@@ -1,0 +1,94 @@
+name: CI
+
+# SPEC §18:每个 PR 必须运行 lint / typecheck / test / test:e2e / build / prisma validate
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ezplm_scm_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ezplm_scm_ci
+      AUTH_SECRET: ci-only-secret-not-for-production
+      FILE_STORAGE_PROVIDER: local
+      # 不注入任何三方 Key:CI 全程走 Mock,
+      # 这也顺带验证"无 Key 时系统仍可完整运行且如实标注"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: prisma generate
+        run: pnpm exec prisma generate
+
+      - name: prisma validate
+        run: pnpm db:validate
+
+      - name: lint
+        run: pnpm lint
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: unit tests
+        run: pnpm test
+
+      - name: build
+        run: pnpm build
+
+      - name: apply migrations
+        run: pnpm exec prisma migrate deploy
+
+      - name: install playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: e2e tests
+        run: pnpm test:e2e
+
+      - name: upload playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # 验证"一套代码两种交付"的第二条:standalone 镜像可构建
+      - name: build docker image
+        run: docker build -t ezplm-scm:ci .
+      - name: build with basePath (子路径反代形态)
+        run: docker build --build-arg NEXT_PUBLIC_BASE_PATH=/scm -t ezplm-scm:ci-scm .
