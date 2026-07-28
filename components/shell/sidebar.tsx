@@ -18,6 +18,11 @@ function NavItem({ route, child = false }: { route: AppRoute; child?: boolean })
     >
       {route.icon ? <NavIcon name={route.icon} /> : null}
       <span>{route.label}</span>
+      {route.implemented === false ? (
+        <span className="nav-pending" title={`待实现 · 计划 ${route.plannedPr}`}>
+          待实现
+        </span>
+      ) : null}
       {route.ai ? <span className="ai-dot" title="AI 增强 · 人工确认闭环" /> : null}
     </Link>
   );

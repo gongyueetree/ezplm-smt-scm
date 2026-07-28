@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { unimplementedRoutes } from "@/lib/routes";
 
 /**
  * PR1/PR2 Shell + RBAC 冒烟(SPEC §17 第 8 项:角色切换后菜单和权限变化)。
@@ -93,13 +94,17 @@ test("子页面返回上一层按钮可用(工程角色)", async ({ page }) => {
 });
 
 test("占位页如实标注待实现状态(诚实 UI)", async ({ page }) => {
-  // ⚠ 维护提示:本用例必须指向**仍在用 ModulePlaceholder 的路由**。
-  // 每当该模块落地,请改指向另一个占位路由(查找方式:grep -l ModulePlaceholder app/**/page.tsx)。
-  // 历史:PR7 前指向 /quotes,PR8 前指向 /inventory,均随模块落地而失效。
-  await login(page, "procurement@demo.ezplm.cn");
-  await page.goto("/shortage");
-  await expect(page.locator(".banner")).toContainText("待实现");
-  await expect(page.locator(".banner")).toContainText("PR8");
+  // 路由是否已实现由 lib/routes.ts 的 implemented 字段单一真源决定,
+  // 用例从配置读取而非硬编码 —— 此前硬编码导致每次模块落地就失效(/quotes → /inventory → /shortage)。
+  const pending = unimplementedRoutes();
+  test.skip(pending.length === 0, "所有模块均已实现,无占位页可验证");
+
+  await login(page, "management@demo.ezplm.cn");
+  for (const route of pending) {
+    await page.goto(route.path);
+    await expect(page.locator(".banner"), `${route.path} 应标注待实现`).toContainText("待实现");
+    await expect(page.locator(".banner")).toContainText(route.plannedPr.split("/")[0]);
+  }
 });
 
 test("登录/退出生成 AuditLog(经 /api 无会话 401 佐证鉴权链路)", async ({ page, request }) => {

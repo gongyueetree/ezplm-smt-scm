@@ -31,6 +31,12 @@ export interface AppRoute {
   ai?: boolean;
   /** 该模块计划落地的 PR(诚实 UI:占位页如实标注) */
   plannedPr: string;
+  /**
+   * 是否已实现。**唯一真源**:占位页(ModulePlaceholder)与"待实现"标注都以此为准,
+   * E2E 也从这里取仍未实现的路由,避免每次模块落地就要手改测试。
+   * 缺省视为已实现。
+   */
+  implemented?: boolean;
   /** 占位页说明 */
   desc: string;
   /**
@@ -147,6 +153,7 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         path: "/procurement/orders",
+        implemented: false,
         label: "采购订单",
         icon: "cart",
         plannedPr: "PR6/PR8",
@@ -168,6 +175,7 @@ export const NAV_SECTIONS: NavSection[] = [
     routes: [
       {
         path: "/reconciliation",
+        implemented: false,
         label: "AR/AP 对账",
         icon: "ledger",
         plannedPr: "PR8",
@@ -214,6 +222,11 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+/** 仍未实现的路由(占位页 + "待实现"标注的唯一真源) */
+export function unimplementedRoutes(): AppRoute[] {
+  return flattenRoutes().filter((r) => r.implemented === false);
+}
 
 /** 展平全部路由(含子路由) */
 export function flattenRoutes(sections: NavSection[] = NAV_SECTIONS): AppRoute[] {

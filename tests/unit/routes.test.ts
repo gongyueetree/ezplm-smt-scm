@@ -6,6 +6,7 @@ import {
   findRoute,
   flattenRoutes,
   parentPath,
+  unimplementedRoutes,
 } from "@/lib/routes";
 
 /** SPEC §2 要求的 15 条基础路由 */
@@ -91,5 +92,40 @@ describe("findRoute / parentPath / breadcrumbFor", () => {
     expect(crumbs[0].path).toBe("/");
     expect(crumbs[crumbs.length - 1].path).toBe("/bom/import");
     expect(crumbs.map((c) => c.path)).toEqual(["/", "/bom", "/bom/import"]);
+  });
+});
+
+describe("implemented 标记与实际页面一致(防配置与代码脱节)", () => {
+  it("未实现路由的集合与仍在用 ModulePlaceholder 的页面一一对应", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const appDir = path.resolve(__dirname, "../../app/(app)");
+
+    /** 递归找出所有 page.tsx 里引用了 ModulePlaceholder 的路由路径 */
+    const placeholderPaths: string[] = [];
+    const walk = (dir: string, segments: string[]) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          walk(path.join(dir, entry.name), [...segments, entry.name]);
+        } else if (entry.name === "page.tsx") {
+          const src = fs.readFileSync(path.join(dir, entry.name), "utf8");
+          if (src.includes("ModulePlaceholder")) {
+            placeholderPaths.push("/" + segments.join("/"));
+          }
+        }
+      }
+    };
+    walk(appDir, []);
+
+    const configured = unimplementedRoutes()
+      .map((r) => r.path)
+      .sort();
+    expect(placeholderPaths.sort()).toEqual(configured);
+  });
+
+  it("未实现路由都带 plannedPr,便于占位页如实告知落地计划", () => {
+    for (const r of unimplementedRoutes()) {
+      expect(r.plannedPr).toMatch(/^PR\d/);
+    }
   });
 });
