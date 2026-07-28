@@ -153,6 +153,51 @@ async function main() {
     },
   });
 
+  // 示例 OPO 行(演示交期协同;真实数据由 ERP/采购订单同步产生)
+  const supA = await prisma.supplier.findUniqueOrThrow({
+    where: { tenantId_code: { tenantId: tenant.id, code: "SUP-A" } },
+  });
+  const day = 86_400_000;
+  const opoSeed = [
+    // 未回复 + ETA 在 3 天内 → 会进催办队列
+    { poNo: "PO-2026-001", lineNo: 1, mpn: "STM32F103C8T6", qtyOrdered: 1000, qtyOpen: 1000, promiseIn: 3, needIn: 20 },
+    // 承诺晚于需求 → error
+    { poNo: "PO-2026-001", lineNo: 2, mpn: "GRM188R71H104KA93D", qtyOrdered: 5000, qtyOpen: 5000, promiseIn: 40, needIn: 20 },
+    // 正常
+    { poNo: "PO-2026-002", lineNo: 1, mpn: "RC0603FR-0710KL", qtyOrdered: 20000, qtyOpen: 8000, promiseIn: 10, needIn: 30 },
+  ];
+  // 演示回复重置:seed 是幂等的,回复若跨运行累积会让演示与 E2E 状态漂移
+  const seededPoNos = [...new Set(opoSeed.map((o) => o.poNo))];
+  const seededLines = await prisma.oPOLine.findMany({
+    where: { tenantId: tenant.id, poNo: { in: seededPoNos } },
+    select: { id: true },
+  });
+  if (seededLines.length > 0) {
+    await prisma.oPOReply.deleteMany({
+      where: { tenantId: tenant.id, opoLineId: { in: seededLines.map((l) => l.id) } },
+    });
+  }
+
+  for (const o of opoSeed) {
+    const now = Date.now();
+    await prisma.oPOLine.upsert({
+      where: { tenantId_poNo_lineNo: { tenantId: tenant.id, poNo: o.poNo, lineNo: o.lineNo } },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        poNo: o.poNo,
+        lineNo: o.lineNo,
+        supplierId: supA.id,
+        mpn: o.mpn,
+        qtyOrdered: o.qtyOrdered,
+        qtyOpen: o.qtyOpen,
+        currency: "CNY",
+        promiseDate: new Date(now + o.promiseIn * day),
+        needDate: new Date(now + o.needIn * day),
+      },
+    });
+  }
+
   const admin = await prisma.user.findUniqueOrThrow({
     where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.ezplm.cn" } },
   });

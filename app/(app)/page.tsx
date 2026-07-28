@@ -9,6 +9,8 @@ import {
   primaryRole,
 } from "@/lib/rbac";
 import { getSession } from "@/lib/server/session";
+import { getManagementSnapshot } from "@/lib/server/repositories/management";
+import { ManagementBoard } from "./management-board";
 
 /**
  * 角色化工作台骨架(SPEC §3 / §16)。
@@ -20,6 +22,24 @@ export default async function WorkbenchPage() {
 
   if (!role) {
     return <Banner tone="warn">当前账号未分配角色,请联系管理员在系统设置中分配。</Banner>;
+  }
+
+  // 管理工作台:KPI 由明细派生,已接入真实数据(SPEC §16)
+  if (role === "MANAGEMENT") {
+    const snapshot = await getManagementSnapshot(session.tenantId, new Date().toISOString());
+    return (
+      <div>
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{WORKBENCH_TITLES[role]}</h1>
+            <p className="page-desc">
+              {session.name} · {ROLE_LABELS[role]} · 搜索范围:{SEARCH_SCOPES[role].join(" / ")}
+            </p>
+          </div>
+        </div>
+        <ManagementBoard snapshot={snapshot} />
+      </div>
+    );
   }
 
   return (

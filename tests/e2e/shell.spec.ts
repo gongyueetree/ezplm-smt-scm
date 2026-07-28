@@ -93,9 +93,11 @@ test("子页面返回上一层按钮可用(工程角色)", async ({ page }) => {
 });
 
 test("占位页如实标注待实现状态(诚实 UI)", async ({ page }) => {
-  // 指向仍未实现的模块;/quotes 已在 PR7 落地,不再是占位页
+  // ⚠ 维护提示:本用例必须指向**仍在用 ModulePlaceholder 的路由**。
+  // 每当该模块落地,请改指向另一个占位路由(查找方式:grep -l ModulePlaceholder app/**/page.tsx)。
+  // 历史:PR7 前指向 /quotes,PR8 前指向 /inventory,均随模块落地而失效。
   await login(page, "procurement@demo.ezplm.cn");
-  await page.goto("/inventory");
+  await page.goto("/shortage");
   await expect(page.locator(".banner")).toContainText("待实现");
   await expect(page.locator(".banner")).toContainText("PR8");
 });
