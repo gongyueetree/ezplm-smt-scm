@@ -75,6 +75,12 @@ describe("kicad-symbol:原理图符号", () => {
     expect(inPin.x + inPin.length).toBeCloseTo(-5.08, 6);
   });
 
+  it("图元包在 data-zoom-layer 里 —— 缩放交给 SVG 变换,避免位图放大发糊", () => {
+    const svg = renderSymbolSvg(sym);
+    expect(svg).toContain('<g data-zoom-layer="1">');
+    expect(svg.endsWith("</g></svg>")).toBe(true);
+  });
+
   it("渲染 SVG:Y 轴翻转(KiCad 向上 → SVG 向下)", () => {
     const svg = renderSymbolSvg(sym);
     expect(svg.startsWith("<svg")).toBe(true);
@@ -112,6 +118,12 @@ describe("kicad-footprint:PCB 封装", () => {
     const th = fp.pads.find((p) => p.number === "2")!;
     expect(th.type).toBe("thru_hole");
     expect(th.drill).toBe(0.6);
+  });
+
+  it("图元同样包在 data-zoom-layer 里", () => {
+    const svg = renderFootprintSvg(fp);
+    expect(svg).toContain('<g data-zoom-layer="1">');
+    expect(svg.endsWith("</g></svg>")).toBe(true);
   });
 
   it("渲染 SVG:Y 轴不翻转(pcbnew 与 SVG 同向)", () => {

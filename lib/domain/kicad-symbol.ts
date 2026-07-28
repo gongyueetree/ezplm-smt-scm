@@ -271,10 +271,13 @@ export function renderSymbolSvg(sym: ParsedSymbol): string {
     }
   }
 
+  // 图元包进 data-zoom-layer:缩放由 SVG 自己的 <g transform> 承担,
+  // 而不是对整块 DOM 做 CSS transform —— 后者会把图层先栅格化再放大,字和线都会糊。
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(minX)} ${fmt(minY)} ${fmt(w)} ${fmt(h)}"`,
     ` role="img" aria-label="${esc(sym.name)} 原理图符号" style="width:100%;height:auto;max-height:520px">`,
+    `<g data-zoom-layer="1">`,
     parts.join(""),
-    `</svg>`,
+    `</g></svg>`,
   ].join("");
 }

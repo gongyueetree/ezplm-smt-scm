@@ -95,12 +95,19 @@ test("在线预览:符号与封装可缩放、拖动、双击复位,且滚轮不
   const card = page.locator(".card", { hasText: "原理图符号与 PCB 封装" });
   const viewport = card.locator(".svg-viewport").first();
   await expect(viewport).toBeVisible({ timeout: 120_000 });
-  const inner = card.locator(".svg-viewport-inner").first();
-  const transform = () => inner.evaluate((el) => (el as HTMLElement).style.transform);
+  // 关键:变换必须写在 SVG 自己的 <g data-zoom-layer> 上,而不是外层 DOM 的 CSS transform
+  // —— 后者会把图层先栅格化再放大,放大后引脚名发糊。
+  const zoomLayer = card.locator("[data-zoom-layer]").first();
+  await expect(zoomLayer).toHaveCount(1);
+  const transform = () => zoomLayer.getAttribute("transform");
+  const cssTransform = () =>
+    card.locator(".svg-viewport-inner").first().evaluate((el) => getComputedStyle(el).transform);
 
   // 按钮缩放
   await card.getByRole("button", { name: /^放大/ }).first().click();
   await expect.poll(transform).toContain("scale(1.3)");
+  // 外层 DOM 不得出现缩放,否则又回到位图放大
+  expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(await cssTransform());
 
   await card.getByRole("button", { name: /^缩小/ }).first().click();
   await expect.poll(transform).toContain("scale(1)");
@@ -117,11 +124,11 @@ test("在线预览:符号与封装可缩放、拖动、双击复位,且滚轮不
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 30, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(transform).not.toContain("translate(0px, 0px)");
+  await expect.poll(transform).not.toContain("translate(0 0)");
 
   // 双击复位
   await viewport.dblclick();
-  await expect.poll(transform).toBe("translate(0px, 0px) scale(1)");
+  await expect.poll(transform).toBe("translate(0 0) scale(1)");
 });
 
 test("3D 模型:提供在线预览入口与源文件下载,且说明体积代价", async ({ page }) => {

@@ -285,6 +285,8 @@ a { color: inherit; text-decoration: none; }
   position: relative; overflow: hidden; touch-action: none;
   border: 1px solid var(--gray-200); border-radius: 8px; background: var(--gray-50);
 }
-.svg-viewport-inner { transform-origin: 0 0; width: 100%; height: 100%; }
+/* 缩放写在 SVG 自己的 <g> 上(见 svg-viewport.tsx),这里不做任何 CSS transform ——
+   对 DOM 块做 transform:scale 会先栅格化再放大,放大后文字发糊 */
+.svg-viewport-inner { width: 100%; height: 100%; }
 .svg-viewport-inner > svg { width: 100%; height: 100%; max-height: none; display: block; }
 

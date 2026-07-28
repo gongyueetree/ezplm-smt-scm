@@ -263,11 +263,13 @@ export function renderFootprintSvg(fp: ParsedFootprint): string {
     }
   }
 
+  // data-zoom-layer 的作用见 kicad-symbol.ts:缩放走 SVG 变换,保证矢量清晰
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(minX)} ${fmt(minY)} ${fmt(maxX - minX)} ${fmt(
       maxY - minY,
     )}" role="img" aria-label="${esc(fp.name)} PCB 封装" style="width:100%;height:auto;max-height:420px">`,
+    `<g data-zoom-layer="1">`,
     parts.join(""),
-    `</svg>`,
+    `</g></svg>`,
   ].join("");
 }
