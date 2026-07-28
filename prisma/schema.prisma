@@ -883,6 +883,28 @@ model SupplierQuoteLine {
   @@index([tenantId, bomLineId])
 }
 
+/// 采购策略阈值(Backlog B3)。
+/// ⚠ SPEC §4 的 43 模型之外的增量:异常判定阈值原先是页面内常量,
+/// 需按租户持久化才能作为正式风控依据;阈值口径本身仍待业务确认。
+model ProcurementPolicy {
+  id              String   @id @default(cuid())
+  tenantId        String
+  /// 比价基准币种(异币种报价即为异常)
+  currency        String   @default("CNY")
+  /// 价格线:单价高于此值判为异常;null = 不校验
+  maxUnitPrice    Decimal? @db.Decimal(18, 6)
+  /// 交期线:天数高于此值判为异常;null = 不校验
+  maxLeadTimeDays Int?
+  /// 口径是否经业务确认;未确认时 UI 必须标注"演示阈值,非正式风控"
+  confirmedByBusiness Boolean @default(false)
+  updatedById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// 每租户一条生效策略
+  @@unique([tenantId])
+}
+
 /// PM 端采购申请单(整合方案 3.2;GTB 核算 + 同 MPN 呆滞提示)
 model PurchaseRequest {
   id            String                @id @default(cuid())

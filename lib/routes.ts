@@ -130,6 +130,22 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["PROCUREMENT"],
       },
       {
+        path: "/procurement/request",
+        label: "采购申请单",
+        icon: "handshake",
+        plannedPr: "PR6",
+        desc: "PM 视角:按 GTB 核算采购量并提交采购;同 MPN 呆滞库存提示。",
+        roles: ["PM", "PROCUREMENT"],
+      },
+      {
+        path: "/procurement/suppliers",
+        label: "供应商与采购策略",
+        icon: "db",
+        plannedPr: "PR6",
+        desc: "供应商预设(MOQ/LT/多阶价格)与异常判定阈值维护。",
+        roles: ["PROCUREMENT"],
+      },
+      {
         path: "/procurement/orders",
         label: "采购订单",
         icon: "cart",

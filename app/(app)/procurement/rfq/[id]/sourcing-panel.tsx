@@ -53,21 +53,34 @@ interface RankedView {
   };
 }
 
-const THRESHOLDS = { currency: "CNY", maxUnitPrice: "10", maxLeadTimeDays: 30 };
+interface PolicyView {
+  currency: string;
+  maxUnitPrice: string | null;
+  maxLeadTimeDays: number | null;
+  confirmedByBusiness: boolean;
+  isFallback: boolean;
+}
 
 export function SourcingPanel({
   procurementRfqId,
   lines,
   suppliers,
+  policy,
   canSubmit,
   alreadySubmitted,
 }: {
   procurementRfqId: string;
   lines: QuoteLine[];
   suppliers: { id: string; code: string; name: string }[];
+  policy: PolicyView;
   canSubmit: boolean;
   alreadySubmitted: boolean;
 }) {
+  const THRESHOLDS = {
+    currency: policy.currency,
+    maxUnitPrice: policy.maxUnitPrice,
+    maxLeadTimeDays: policy.maxLeadTimeDays,
+  };
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
@@ -112,8 +125,8 @@ export function SourcingPanel({
       fd.append("file", file);
       fd.append("supplierId", supplierId);
       fd.append("currency", THRESHOLDS.currency);
-      fd.append("maxUnitPrice", THRESHOLDS.maxUnitPrice);
-      fd.append("maxLeadTimeDays", String(THRESHOLDS.maxLeadTimeDays));
+      if (THRESHOLDS.maxUnitPrice) fd.append("maxUnitPrice", THRESHOLDS.maxUnitPrice);
+      if (THRESHOLDS.maxLeadTimeDays !== null) fd.append("maxLeadTimeDays", String(THRESHOLDS.maxLeadTimeDays));
       const res = await fetch(`/api/procurement/rfq/${procurementRfqId}/quotes`, {
         method: "POST",
         body: fd,
@@ -263,9 +276,17 @@ export function SourcingPanel({
           </button>
         </div>
         <p className="small muted" style={{ marginTop: 10 }}>
-          价格线 {THRESHOLDS.currency} {THRESHOLDS.maxUnitPrice} · 交期线{" "}
-          {THRESHOLDS.maxLeadTimeDays} 天(演示阈值;正式阈值由采购策略维护)。
-          导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
+          价格线 {THRESHOLDS.currency} {THRESHOLDS.maxUnitPrice ?? "未设"} · 交期线{" "}
+          {THRESHOLDS.maxLeadTimeDays ?? "未设"} 天
+          {policy.confirmedByBusiness ? (
+            <Badge tone="green">口径已业务确认</Badge>
+          ) : (
+            <Badge tone="amber">
+              {policy.isFallback ? "未配置,使用兜底值" : "口径待业务确认"} · 非正式风控
+            </Badge>
+          )}
+          。导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
+          阈值在<a href="/procurement/suppliers">「供应商与采购策略」</a>维护。
         </p>
         {degraded.length > 0 ? (
           <div className="banner warn" style={{ marginTop: 10 }}>

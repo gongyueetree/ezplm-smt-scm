@@ -13,6 +13,8 @@ import {
   type QuoteStatusValue,
 } from "@/lib/domain/quote-status";
 import { getQuoteVersion } from "@/lib/server/repositories/quote";
+import { prisma } from "@/lib/server/db";
+import { tenantWhere } from "@/lib/server/tenant-scope";
 import { getSession } from "@/lib/server/session";
 import { QuoteEditor } from "./editor";
 
@@ -45,6 +47,12 @@ export default async function QuoteVersionPage({
     submittedSnapshot: version.submittedSnapshot as unknown as QuoteSnapshot | null,
   });
 
+  const bomVersions = await prisma.bOMVersion.findMany({
+    where: tenantWhere(session.tenantId),
+    orderBy: { createdAt: "desc" },
+    include: { bom: { select: { name: true } } },
+    take: 20,
+  });
   const unconfirmed = version.lines.filter((l) => !l.categoryConfirmed).map((l) => l.lineNo);
   const transitions = availableQuoteTransitions(status, session.roles);
 
@@ -135,6 +143,8 @@ export default async function QuoteVersionPage({
           markupPct: l.markupPct === null ? null : String(l.markupPct),
         }))}
         summaryLines={live.lines}
+        bomVersions={bomVersions.map((b) => ({ id: b.id, label: `${b.bom.name} V${b.versionNo}` }))}
+        canExport={exportSource.ok}
       />
     </div>
   );

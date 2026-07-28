@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { persistedProgress } from "@/lib/domain/procurement-flags";
 import { getProcurementRfq } from "@/lib/server/repositories/procurement";
+import { getProcurementPolicy } from "@/lib/server/repositories/procurement-policy";
 import { getSession } from "@/lib/server/session";
 import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -21,6 +22,7 @@ export default async function ProcurementRfqDetail({
   const prfq = await getProcurementRfq(session, id);
   if (!prfq) notFound();
 
+  const policy = await getProcurementPolicy(session.tenantId);
   const suppliers = await prisma.supplier.findMany({
     where: tenantWhere(session.tenantId, { isActive: true }),
     orderBy: { priority: "asc" },
@@ -97,6 +99,7 @@ export default async function ProcurementRfqDetail({
         procurementRfqId={prfq.id}
         lines={allLines}
         suppliers={suppliers}
+        policy={policy}
         canSubmit={progress.canSubmitToPm}
         alreadySubmitted={prfq.status === "FEEDBACK_READY"}
       />

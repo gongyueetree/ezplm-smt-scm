@@ -26,6 +26,8 @@ export function QuoteEditor({
   transitions,
   lines,
   summaryLines,
+  bomVersions,
+  canExport,
 }: {
   versionId: string;
   status: QuoteStatusValue;
@@ -34,7 +36,10 @@ export function QuoteEditor({
   transitions: { to: QuoteStatusValue; label: string; requiresReason: boolean }[];
   lines: EditorLine[];
   summaryLines: CalculatedLine[];
+  bomVersions: { id: string; label: string }[];
+  canExport: boolean;
 }) {
+  const [bomVersionId, setBomVersionId] = useState(bomVersions[0]?.id ?? "");
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +49,32 @@ export function QuoteEditor({
   const [lastRunId, setLastRunId] = useState<string | null>(null);
 
   const byLineNo = new Map(summaryLines.map((s) => [s.lineNo, s]));
+
+  async function generateFromBom() {
+    if (!bomVersionId) {
+      setError("请先选择 BOM 版本");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await fetch(`/api/quotes/${versionId}/from-bom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bomVersionId }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "生成失败");
+        return;
+      }
+      setInfo(`已生成 ${body.created} 行${body.note ? `;${body.note}` : ""}`);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function addDemoLine() {
     setBusy(true);
@@ -291,6 +322,24 @@ export function QuoteEditor({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!frozen && status === "DRAFT" ? (
             <>
+              {bomVersions.length > 0 ? (
+                <>
+                  <select
+                    value={bomVersionId}
+                    onChange={(e) => setBomVersionId(e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid var(--gray-300)" }}
+                  >
+                    {bomVersions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn" onClick={generateFromBom} disabled={busy}>
+                    从 BOM 生成报价行
+                  </button>
+                </>
+              ) : null}
               <button className="btn" onClick={addDemoLine} disabled={busy}>
                 添加示例行
               </button>
@@ -313,6 +362,11 @@ export function QuoteEditor({
             <button className="btn" onClick={newRevision} disabled={busy}>
               新建 Revision
             </button>
+          ) : null}
+          {canExport ? (
+            <a className="btn" href={`/api/quotes/${versionId}/export`}>
+              导出 XLSX(取快照)
+            </a>
           ) : null}
         </div>
       </Card>
