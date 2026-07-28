@@ -6,6 +6,7 @@
  * 排名结果只是「建议顺序」,正式供应商选择必须人工确认(硬性约束 3)。
  */
 import { Decimal } from "decimal.js";
+import { manufacturerMatches } from "@/lib/providers/common/mpn";
 import type {
   LifecycleValue,
   NormalizedOffer,
@@ -85,6 +86,13 @@ export interface RankContext {
   demandQty: number;
   /** 比价币种;与之不同币种的报价不参与可比排名(不做汇率换算) */
   currency: string;
+  /**
+   * 期望制造商。设置后,同 MPN 但制造商不符的报价不参与可比排名 ——
+   * 三方按 MPN 检索可能带回同号异厂料(如查 STM32F103C8T6 却返回
+   * "Microchip / Microsemi" 的记录),它们不是同一颗料,不能同表比价。
+   * 不设置 = 不做制造商约束(调用方明确知道自己在混比时)。
+   */
+  expectedManufacturer?: string;
   /** 供应商优先级缺省值(offer 未带时使用) */
   defaultSupplierPriority?: number;
 }
@@ -101,10 +109,10 @@ export interface OfferEvaluation {
   /** 库存覆盖比例 0–1(库存未知按 0 计) */
   stockCoverage: number;
   leadTimeDays: number | null;
-  /** 币种与比价币种一致、且能取到适用价格 → 可参与可比排名 */
+  /** 制造商相符、币种一致、且能取到适用价格 → 可参与可比排名 */
   comparable: boolean;
   /** 不可比原因(诚实展示,不静默丢弃) */
-  incomparableReason: "currency_mismatch" | "no_price_break" | null;
+  incomparableReason: "manufacturer_mismatch" | "currency_mismatch" | "no_price_break" | null;
 }
 
 /** 生命周期评分:EOL/停产在同价时必须排后 */
@@ -129,11 +137,15 @@ export function evaluateOffer(offer: NormalizedOffer, ctx: RankContext): OfferEv
   const stockCoverage =
     purchaseQty > 0 ? Math.min(1, stock / purchaseQty) : stock > 0 ? 1 : 0;
 
-  const incomparableReason = currencyMismatch
-    ? ("currency_mismatch" as const)
-    : appliedBreak === null
-      ? ("no_price_break" as const)
-      : null;
+  // 顺序即严重度:异厂商(根本不是同一颗料)> 异币种 > 取不到阶梯价
+  const manufacturerMismatch = !manufacturerMatches(offer.manufacturer, ctx.expectedManufacturer);
+  const incomparableReason = manufacturerMismatch
+    ? ("manufacturer_mismatch" as const)
+    : currencyMismatch
+      ? ("currency_mismatch" as const)
+      : appliedBreak === null
+        ? ("no_price_break" as const)
+        : null;
 
   return {
     offer,

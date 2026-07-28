@@ -20,6 +20,30 @@ config({ path: ".env" });
 
 const TEST_MPN = process.env.SMOKE_MPN ?? "STM32F103C8T6";
 const TEST_QTY = Number(process.env.SMOKE_QTY ?? 1000);
+/** 设置后,同 MPN 但制造商不符的报价会被标注为不可比(默认不做约束) */
+const EXPECTED_MFR = process.env.SMOKE_MFR?.trim() || undefined;
+
+/**
+ * 价格口径提示:跨源比价最容易被误读的地方。
+ * 凡未经官方文档/账户确认的口径,一律标注"待确认",不臆断。
+ */
+function printPriceBasisNotice() {
+  console.log("=== 价格口径(比价前必读)===");
+  console.log("  · 币种:各源按自身站点/配置返回;系统不做汇率换算,异币种标注为不可比。");
+  console.log(
+    `  · DigiKey:价格按 X-DIGIKEY-Locale-Currency(当前 ${process.env.DIGIKEY_CURRENCY ?? "CNY"})` +
+      "由 DigiKey 侧换算返回;是否含税、是否受 Customer-Id(DIGIKEY_ACCOUNT_ID)协议价影响," +
+      "**待 DigiKey 官方文档与账户确认**,不得据此断言口径。",
+  );
+  console.log(
+    "  · Mouser:价格取 PriceBreaks[].Currency 为准;是否含税同样待确认。",
+  );
+  console.log(
+    "  · 两侧均为分销商目录价,通常不含关税、运费与进口税费;若两源同料价格差异显著(如数倍)," +
+      "优先怀疑:①币种口径不同 ②同号异厂料 ③账户协议价 ④封装/批量不同,而非直接采信低价。",
+  );
+  console.log("");
+}
 
 const usage: ApiUsageRecord[] = [];
 const recorder = { record: (u: ApiUsageRecord) => usage.push(u) };
@@ -152,16 +176,39 @@ async function main() {
   }
 
   if (all.length > 0) {
-    console.log("=== 跨源排名(确定性函数,仅供参考,正式选型须人工确认)===");
-    for (const r of rankOffers(all, { demandQty: TEST_QTY, currency: all[0].currency })) {
+    const baseCurrency = all[0].currency;
+    console.log(
+      `=== 跨源排名(比价币种 ${baseCurrency};确定性函数,仅供参考,正式选型须人工确认)===`,
+    );
+    const ranked = rankOffers(all, {
+      demandQty: TEST_QTY,
+      currency: baseCurrency,
+      expectedManufacturer: EXPECTED_MFR,
+    });
+    for (const r of ranked) {
       console.log(
-        `  #${r.rank} ${r.offer.provider} ${r.offer.packaging ?? "-"} ` +
-          `采购量 ${r.purchaseQty} 单价 ${r.unitPrice?.toFixed() ?? "-"} ` +
-          `总价 ${r.extendedPrice?.toFixed() ?? "-"} 评分 ${r.score.total}` +
-          `${r.isLowestTotal ? " [最低总价]" : ""}${r.comparable ? "" : ` [不可比:${r.incomparableReason}]`}`,
+        `  #${r.rank} ${r.offer.provider} | ${r.offer.manufacturer ?? "厂商未知"} | ` +
+          `${r.offer.packaging ?? "-"} | 采购量 ${r.purchaseQty} | ` +
+          `单价 ${r.offer.currency} ${r.unitPrice?.toFixed() ?? "-"} | ` +
+          `总价 ${r.offer.currency} ${r.extendedPrice?.toFixed() ?? "-"} | 评分 ${r.score.total}` +
+          `${r.isLowestTotal ? " [最低总价]" : ""}` +
+          `${r.comparable ? "" : ` [不可比:${r.incomparableReason}]`}`,
+      );
+    }
+    if (ranked.some((r) => !r.comparable)) {
+      console.log(
+        "  ⚠ 标注[不可比]的行未参与价格比较:manufacturer_mismatch=同号异厂料(不是同一颗料);" +
+          "currency_mismatch=币种不同且系统不做汇率换算;no_price_break=圆整后取不到适用阶梯价。",
+      );
+    }
+    if (!EXPECTED_MFR) {
+      console.log(
+        "  提示:未设 SMOKE_MFR,本次未做制造商约束 —— 三方按 MPN 检索可能带回同号异厂料。" +
+          "设 SMOKE_MFR=STMicroelectronics 可让异厂结果被标注为不可比。",
       );
     }
     console.log("");
+    printPriceBasisNotice();
   }
 
   console.log("=== API 用量记录(端点已脱敏)===");

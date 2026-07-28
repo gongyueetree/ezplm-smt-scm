@@ -17,18 +17,22 @@ const SOURCES = [
     scope: "物料主数据 · 库存 · 在途 · 客户料号映射(只读真源)",
     mode: ezplmProviderMode,
     pr: "PR3",
+    /** 联调记录:null = 尚未与真实环境联调 */
+    verified: null,
   },
   {
     key: "DigiKey",
     scope: "Product Information V4 · 正式价格与库存 / 关键字候选 / 替代料",
     mode: digiKeyMode,
     pr: "PR4",
+    verified: "2026-07-27 冒烟联调通过",
   },
   {
     key: "Mouser",
     scope: "Search API v1 · 正式价格与库存 / 关键字候选(限流 + 日配额)",
     mode: mouserMode,
     pr: "PR4",
+    verified: "2026-07-27 冒烟联调通过",
   },
 ] as const;
 
@@ -45,7 +49,8 @@ export default function MaterialsPage() {
             <thead>
               <tr>
                 <th>数据源</th>
-                <th>当前形态</th>
+                <th>本环境形态</th>
+                <th>联调记录</th>
                 <th>覆盖范围</th>
                 <th>交付 PR</th>
               </tr>
@@ -58,9 +63,16 @@ export default function MaterialsPage() {
                   </td>
                   <td>
                     {r.mode === "mock" ? (
-                      <Badge tone="amber">示例数据 · 未配置凭据</Badge>
+                      <Badge tone="amber">示例数据 · 本环境未配置凭据</Badge>
                     ) : (
-                      <Badge tone="blue">已配置凭据 · 待联调验证</Badge>
+                      <Badge tone="green">已配置凭据</Badge>
+                    )}
+                  </td>
+                  <td>
+                    {r.verified ? (
+                      <Badge tone="green">已联调 · {r.verified}</Badge>
+                    ) : (
+                      <Badge tone="gray">待联调</Badge>
                     )}
                   </td>
                   <td className="small muted">{r.scope}</td>
@@ -74,10 +86,19 @@ export default function MaterialsPage() {
         <Banner tone="soft">
           <span>
             Provider 层(接口 / Mock / Http / 鉴权 / 限流 / 熔断重试 / 缓存键 / 合同测试)已交付。
+            DigiKey 与 Mouser 已于 2026-07-27 由 <code>pnpm smoke:external</code> 冒烟联调通过;
+            ezPLM 仍为待联调。
             {anyHttp
-              ? "部分数据源已配置凭据,但真实环境联调需运行 pnpm smoke:external 并留存输出后才算完成 —— 在此之前本页不声称已联调。"
-              : "当前全部为示例数据:比价、候选与库存均来自本地样例,不代表真实供应商行情。"}
-            价格、GTB、Markup、PPV 等数值一律由确定性 TypeScript 函数计算;排名仅为建议,正式供应商选择必须人工确认。
+              ? "本环境已配置凭据,查询走真实 API。"
+              : "本环境未配置凭据,页面数据来自本地样例,不代表真实供应商行情。"}
+          </span>
+        </Banner>
+        <Banner tone="warn">
+          <span>
+            <b>价格口径待确认</b>:DigiKey 换算币种价格是否含税、是否受账户协议价(Customer-Id)影响,
+            尚待 DigiKey 官方文档与账户确认;系统不做汇率换算,异币种报价一律标注为
+            <b>不可比</b>,同 MPN 异厂商报价标注为 <b>manufacturer_mismatch</b> 并排除出比价。
+            价格、GTB、Markup、PPV 一律由确定性函数计算;排名仅为建议,正式供应商选择必须人工确认。
           </span>
         </Banner>
       </Card>
