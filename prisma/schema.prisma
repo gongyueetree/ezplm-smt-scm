@@ -756,6 +756,11 @@ model QuoteLine {
   quotedMpn        String?
   /// 物料类别(阻容/IC/结构件等,Markup 分档依据)
   materialCategory String?
+  /// 物料类别是否经**人工**确认(CLAUDE.md:分类未全部人工确认不得提交审批)。
+  /// 必须与 materialCategory 分开:AI 也能填分类,"有分类"不等于"人工确认过"。
+  categoryConfirmed Boolean @default(false)
+  categoryConfirmedById String?
+  categoryConfirmedAt   DateTime?
   /// 替代料 MFG / MPN
   altMfg           String?
   altMpn           String?

@@ -93,10 +93,11 @@ test("子页面返回上一层按钮可用(工程角色)", async ({ page }) => {
 });
 
 test("占位页如实标注待实现状态(诚实 UI)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
-  await page.goto("/quotes");
+  // 指向仍未实现的模块;/quotes 已在 PR7 落地,不再是占位页
+  await login(page, "procurement@demo.ezplm.cn");
+  await page.goto("/inventory");
   await expect(page.locator(".banner")).toContainText("待实现");
-  await expect(page.locator(".banner")).toContainText("PR7");
+  await expect(page.locator(".banner")).toContainText("PR8");
 });
 
 test("登录/退出生成 AuditLog(经 /api 无会话 401 佐证鉴权链路)", async ({ page, request }) => {
