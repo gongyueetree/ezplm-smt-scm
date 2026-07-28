@@ -24,6 +24,51 @@ const TEST_QTY = Number(process.env.SMOKE_QTY ?? 1000);
 const usage: ApiUsageRecord[] = [];
 const recorder = { record: (u: ApiUsageRecord) => usage.push(u) };
 
+/** 凭据清单:required=缺失即无法联调;optional=不填走默认值 */
+const ENV_CHECKLIST = {
+  DigiKey: [
+    { name: "DIGIKEY_CLIENT_ID", required: true },
+    { name: "DIGIKEY_CLIENT_SECRET", required: true },
+    { name: "DIGIKEY_ACCOUNT_ID", required: false },
+    { name: "DIGIKEY_SITE", required: false, fallback: "CN" },
+    { name: "DIGIKEY_LANGUAGE", required: false, fallback: "zh" },
+    { name: "DIGIKEY_CURRENCY", required: false, fallback: "CNY" },
+    { name: "DIGIKEY_API_BASE_URL", required: false, fallback: "https://api.digikey.com" },
+  ],
+  Mouser: [
+    { name: "MOUSER_API_KEY", required: true },
+    { name: "MOUSER_API_BASE_URL", required: false, fallback: "https://api.mouser.com" },
+  ],
+} as const;
+
+/** 打印配置检查(只显示是否配置与字符数,绝不显示值) */
+function printEnvChecklist(): string[] {
+  const missing: string[] = [];
+  console.log("=== 凭据配置检查(只显示是否配置与字符数,不显示值)===");
+  for (const [group, vars] of Object.entries(ENV_CHECKLIST)) {
+    console.log(`  ${group}:`);
+    for (const v of vars) {
+      const raw = process.env[v.name];
+      const value = raw?.trim() ?? "";
+      if (value) {
+        console.log(`    ✓ ${v.name.padEnd(24)} 已配置(${value.length} 字符)`);
+      } else if (v.required) {
+        console.log(`    ✗ ${v.name.padEnd(24)} 未配置 —— 必填,缺失将跳过该 Provider`);
+        missing.push(v.name);
+      } else {
+        const fb = "fallback" in v ? `,默认 ${v.fallback}` : "";
+        console.log(`    · ${v.name.padEnd(24)} 未配置(可选${fb})`);
+      }
+    }
+  }
+  if (missing.length > 0) {
+    console.log("\n  ⚠ 请在 .env.local 中补齐以下变量(注意去掉行首的 # 注释符):");
+    for (const name of missing) console.log(`      ${name}=你的值`);
+  }
+  console.log("");
+  return missing;
+}
+
 function summarize(label: string, offers: NormalizedOffer[]) {
   console.log(`  ${label}:返回 ${offers.length} 条报价`);
   for (const o of offers.slice(0, 3)) {
@@ -39,8 +84,10 @@ function summarize(label: string, offers: NormalizedOffer[]) {
 }
 
 async function smokeDigiKey(): Promise<NormalizedOffer[]> {
-  if (!process.env.DIGIKEY_CLIENT_ID || !process.env.DIGIKEY_CLIENT_SECRET) {
-    console.log("• DigiKey:未配置凭据(跳过,当前为 Mock 模式)");
+  if (!process.env.DIGIKEY_CLIENT_ID?.trim() || !process.env.DIGIKEY_CLIENT_SECRET?.trim()) {
+    console.log(
+      "• DigiKey:跳过 —— 缺 DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET,系统仍运行在 Mock 模式",
+    );
     return [];
   }
   console.log("• DigiKey:已配置凭据,开始真实调用…");
@@ -63,8 +110,8 @@ async function smokeDigiKey(): Promise<NormalizedOffer[]> {
 }
 
 async function smokeMouser(): Promise<NormalizedOffer[]> {
-  if (!process.env.MOUSER_API_KEY) {
-    console.log("• Mouser:未配置 Key(跳过,当前为 Mock 模式)");
+  if (!process.env.MOUSER_API_KEY?.trim()) {
+    console.log("• Mouser:跳过 —— 缺 MOUSER_API_KEY,系统仍运行在 Mock 模式");
     return [];
   }
   console.log("• Mouser:已配置 Key,开始真实调用…");
@@ -83,6 +130,7 @@ async function smokeMouser(): Promise<NormalizedOffer[]> {
 
 async function main() {
   console.log(`=== 外部 Provider 联调冒烟 · MPN=${TEST_MPN} 数量=${TEST_QTY} ===\n`);
+  printEnvChecklist();
   let failed = false;
   const all: NormalizedOffer[] = [];
 
