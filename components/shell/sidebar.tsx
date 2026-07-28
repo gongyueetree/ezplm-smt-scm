@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { NAV_SECTIONS, type AppRoute } from "@/lib/routes";
+import { usePathname, useRouter } from "next/navigation";
+import type { SessionPayload } from "@/lib/auth/session";
+import { ROLE_LABELS, filterSectionsForRoles, primaryRole } from "@/lib/rbac";
+import type { AppRoute } from "@/lib/routes";
 import { NavIcon } from "./nav-icon";
 
 function NavItem({ route, child = false }: { route: AppRoute; child?: boolean }) {
@@ -22,10 +24,19 @@ function NavItem({ route, child = false }: { route: AppRoute; child?: boolean })
 }
 
 /**
- * 左侧菜单:完全由 lib/routes.ts 的统一 route config 生成(SPEC §2)。
- * 角色联动的菜单过滤在 PR2(Auth/RBAC)实现;当前为全量静态展示。
+ * 左侧菜单:由统一 route config 生成(SPEC §2),按会话角色过滤(SPEC §3)。
  */
-export function Sidebar() {
+export function Sidebar({ session }: { session: SessionPayload }) {
+  const router = useRouter();
+  const sections = filterSectionsForRoles(session.roles);
+  const role = primaryRole(session.roles);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -38,7 +49,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="nav">
-        {NAV_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div className="nav-section" key={section.title}>
             <div className="nav-section-title">{section.title}</div>
             {section.routes.map((route) => (
@@ -53,11 +64,14 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="user-card">
-        <div className="user-avatar">王</div>
-        <div>
-          <div className="user-name">王 工 / 乾创电子</div>
-          <div className="user-role">示例用户 · 登录与角色切换随 PR2 实现</div>
+        <div className="user-avatar">{session.name.slice(0, 1)}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="user-name">{session.name}</div>
+          <div className="user-role">{role ? ROLE_LABELS[role] : "无角色"}</div>
         </div>
+        <button className="btn ghost sm" onClick={logout} title="退出登录">
+          退出
+        </button>
       </div>
     </aside>
   );

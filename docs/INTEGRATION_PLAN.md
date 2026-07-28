@@ -175,3 +175,12 @@ PR9  Playwright 全量 E2E + 双轨部署(Vercel + Docker→国内)+ 文档
 - 对第五节风险项 1 的修订已生效:ezPLM API **不阻塞开发,只阻塞最终联调**;PR3(ezPLM Provider)按规范以 Mock 完成全部业务开发与合同测试骨架,Http 实现留待接口就绪后补一次联调 PR。
 - 独立产品外销与"一套代码两种交付"的关系:Vercel(演示/预览)+ Docker(客户私有化/国内主机)双轨不变;白标与多租户能力(7.2 第 5 条 + 规范 tenant 约束)即外销的技术底座。
 - 客户域名:独立部署天然支持;若客户同时是 ezPLM 私有化用户,则按 L2 同域反代方案二选一或并存(独立域名 + ezPLM 菜单内嵌均可达)。
+
+---
+
+## 八、计划偏差记录
+
+| 日期 | 偏差 | 决策 | 影响 |
+|---|---|---|---|
+| 2026-07-27 | **SPEC 级缺口备案(评审备案 F)**:SPEC §4 的 43 模型不含工单/齐料需求数据,但 §2 路由含 /shortage、/kitting | PR8 前需决策:新增只读缓存表(如 WorkOrderDemandSnapshot)还是经 Provider 实时取;数据主权归 ezPLM/ERP 侧不变;现阶段不加表 | /shortage、/kitting 页面在数据来源决策前只能做占位/导入形态;GTB 的"需求"输入暂以导入或人工录入为准 |
+| 2026-07-27 | **旧 NestJS V15 schema.prisma 不可得**:`reference/nestjs-v15/` 始终为空,经人工确认旧后端文件永久缺失(评审方 2026-07-27 确认) | 决策 1 中"NestJS schema 合并对照"路径作废;**SPEC §4 的 43 模型为唯一 schema 基线**;`docs/SCHEMAMERGEMAP.md` 由合并对照表改为 BASELINE 落库核对表 | PR1 交付项第 6 项(合并对照表)范围变更为"SPEC §4 落库核对表";第二节迁移地图中"NestJS V15 Prisma schema(42 表)→ 合并进新 schema"一行失效;NestJS service 业务规则仍按原计划以 CLAUDE.md 领域规则 + 静态原型逻辑为准直译,不再参考旧代码 |

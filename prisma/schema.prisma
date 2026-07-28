@@ -1,0 +1,1108 @@
+// ============================================================
+// ezPLM AI 供应链协同系统 — Prisma Schema(PR2 基线)
+// 基线依据:docs/SPEC.md §4(43 模型,唯一真源)+ docs/SCHEMAMERGEMAP.md(BASELINE)
+// 评审要求:PR1 评审意见 二.1–二.10(2026-07-27)
+//
+// 全局纪律:
+// - 多租户:所有业务表带 tenantId;唯一约束一律 tenant-scoped
+//   (@@unique([tenantId, ...]),无全局业务 unique);高频查询建 (tenantId, ...) 复合索引。
+// - FK 纪律(评审备案 B,后续 PR 不得随手偏离):
+//   聚合内子表用 FK 关系(RFQ→附件/历史、BOM→版本→行→候选/决定、Offer→阶梯、
+//   Quote→版本→行/审批、ProcurementRFQ→报价→行、OPO→回复、AgentRun→步骤/证据/确认);
+//   跨聚合引用(tenantId/userId/customerId/supplierId/partId/candidateId/previousLineId 等)
+//   一律受控标量:租户隔离由应用层 tenant scope + 复合唯一约束保证,
+//   审计/Agent 记录必须比 User 行长寿(用户只停用不删除),故不设用户 FK。
+// - 金额/单价/费率/数量一律 Decimal,禁止 Float;币种独立字段(ISO 4217)。
+// - 数据主权:ezPLM = 物料主数据/库存/工程文件唯一真源(本系统只读缓存);
+//   本系统 = RFQ/报价/采购比价/OPO 流程唯一真源。禁止双写。
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7:连接串不在 schema 中,见根目录 prisma.config.ts(env DATABASE_URL)
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// 枚举
+// ============================================================
+
+/// 角色固定五值(CLAUDE.md:无"销售主管/总经理/品质"等其它审批角色)
+enum RoleName {
+  PM
+  PROCUREMENT
+  ENGINEERING
+  MANAGEMENT
+  SUPPLIER
+}
+
+/// RFQ 状态机(SPEC §5)
+enum RfqStatus {
+  DRAFT
+  RECEIVED
+  PARSING
+  WAITING_ENGINEERING
+  WAITING_PROCUREMENT
+  QUOTING
+  PENDING_APPROVAL
+  QUOTED
+  CLOSED_NO_QUOTE
+  LOST
+}
+
+/// 报价状态机(CLAUDE.md 领域规则,与评审要求二.4 完全一致)
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+/// 报价成本分类(SPEC §12:材料/人工/NRE/SMT/DIP/测试/管理费/其它)
+enum QuoteCostCategory {
+  MATERIAL
+  LABOR
+  NRE
+  SMT
+  DIP
+  TEST
+  OVERHEAD
+  OTHER
+}
+
+/// 附件类型(SPEC §5)
+enum AttachmentType {
+  BOM
+  GERBER
+  PDF
+  IMAGE
+  PROCESS_DOC
+  OTHER
+}
+
+/// 通用作业状态机(ImportJob/AgentRun/IntegrationJob/ReminderLog)
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+/// 元器件生命周期
+enum Lifecycle {
+  ACTIVE
+  NRND
+  EOL
+  OBSOLETE
+  UNKNOWN
+}
+
+/// 外部数据/报价来源(SPEC §7–§10;OFFLINE=线下供应商 Excel)
+enum ProviderType {
+  EZPLM
+  DIGIKEY
+  MOUSER
+  OFFLINE
+}
+
+/// BOM 匹配候选来源,顺序对应 SPEC §6 匹配顺序
+enum MatchSource {
+  CUSTOMER_MAPPING
+  INTERNAL_PN
+  EXACT_MPN
+  MFR_MPN
+  DESCRIPTION
+  EZPLM
+  DIGIKEY
+  MOUSER
+  MANUAL
+}
+
+/// BOM 行人工确认结论(AI 只建议,不落定)
+enum LineDecisionType {
+  ACCEPT_CANDIDATE
+  MANUAL_ASSIGN
+  NO_MATCH
+}
+
+/// 审批/确认结论(QuoteApproval / AgentApproval)
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// 采购 RFQ 流程状态
+enum ProcurementRfqStatus {
+  DRAFT
+  SOURCING
+  FEEDBACK_READY
+  CLOSED
+}
+
+/// 现货/期货模式(SPEC §11)
+enum SourcingMode {
+  SPOT
+  FUTURES
+}
+
+/// 报价行异常处理结论(默认空、逐项人工选;CLAUDE.md 异常处理闭环)
+enum FlagResolution {
+  ACCEPT
+  REQUOTE
+  SWITCH_SOURCE
+  ADJUST_PRICE
+}
+
+/// PM 采购申请单状态
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  PROCESSING
+  CLOSED
+}
+
+/// OPO 供应商回复渠道
+enum ReplySource {
+  EMAIL
+  PORTAL
+  EXCEL
+  PHONE
+  MANUAL
+}
+
+/// 智能体类型(SPEC §13)
+enum AgentType {
+  RFQ_INTAKE
+  BOM_MATCHING
+  SOURCING
+  QUOTE
+  OPO
+}
+
+/// 集成作业类型(ERP Excel 模板兜底路径等)
+enum IntegrationJobType {
+  ERP_ORDER_EXPORT
+  ERP_ETA_WRITEBACK
+  EMAIL_SEND
+  OPO_REMINDER
+  OTHER
+}
+
+// ============================================================
+// 1. 租户与主体
+// ============================================================
+
+/// 租户。融合钉子:ezplmTenantId 可空,将来对接 ezPLM 本体租户(禁止现在就依赖)
+model Tenant {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  /// 融合字段(可空):对应 ezPLM 本体租户 ID,SSO/数据映射用
+  ezplmTenantId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users User[]
+}
+
+/// 用户。本地账号体系;externalUserId 为 SSO 融合预留(JWT 验签适配器)
+model User {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  email          String
+  name           String
+  /// 本地认证口令哈希(argon2/bcrypt);SSO 用户可空
+  passwordHash   String?
+  /// 融合字段(可空):ezPLM 侧用户 ID,JWT 验签后映射
+  externalUserId String?
+  /// 用户只停用不删除(审计记录长寿要求)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userRoles UserRole[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, externalUserId])
+}
+
+/// 角色目录(tenant-scoped;name 限定五值枚举)
+model Role {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      RoleName
+  createdAt DateTime @default(now())
+
+  userRoles UserRole[]
+
+  @@unique([tenantId, name])
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, userId, roleId])
+  @@index([tenantId, userId])
+}
+
+/// 客户(如示例数据中的联创科技)
+model Customer {
+  id        String   @id @default(cuid())
+  tenantId  String
+  code      String
+  name      String
+  contact   String?
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, name])
+}
+
+/// 供应商;priority 供 rankOffers 使用(数值越小优先级越高)
+model Supplier {
+  id              String   @id @default(cuid())
+  tenantId        String
+  code            String
+  name            String
+  defaultCurrency String   @default("CNY")
+  /// 供应商优先级(rankOffers 排名因子之一)
+  priority        Int      @default(100)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contacts SupplierContact[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, name])
+}
+
+/// 供应商联系人(供应商邮件建档回填目标)
+model SupplierContact {
+  id         String   @id @default(cuid())
+  tenantId   String
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  name       String
+  email      String?
+  phone      String?
+  title      String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, supplierId])
+}
+
+// ============================================================
+// 2. RFQ 域(本系统唯一真源)
+// ============================================================
+
+model RFQ {
+  id           String    @id @default(cuid())
+  tenantId     String
+  code         String
+  customerId   String
+  title        String
+  status       RfqStatus @default(DRAFT)
+  /// 报价数量(客户询价的阶梯数量,如 [100, 500, 1000])
+  quoteQtys    Json?
+  dueAt        DateTime?
+  /// "不报价并关闭"原因
+  closedReason String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  attachments   RFQAttachment[]
+  statusHistory RFQStatusHistory[]
+  boms          BOM[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+}
+
+/// 附件保留原始客户文件;fileKey 指向 FileStorageProvider
+model RFQAttachment {
+  id           String         @id @default(cuid())
+  tenantId     String
+  rfqId        String
+  rfq          RFQ            @relation(fields: [rfqId], references: [id])
+  type         AttachmentType @default(OTHER)
+  fileName     String
+  /// 存储键(FileStorageProvider 抽象;Vercel Blob 或本地)
+  fileKey      String
+  sizeBytes    Int?
+  contentType  String?
+  uploadedById String
+  createdAt    DateTime       @default(now())
+
+  @@index([tenantId, rfqId])
+}
+
+model RFQStatusHistory {
+  id          String     @id @default(cuid())
+  tenantId    String
+  rfqId       String
+  rfq         RFQ        @relation(fields: [rfqId], references: [id])
+  fromStatus  RfqStatus?
+  toStatus    RfqStatus
+  note        String?
+  changedById String
+  createdAt   DateTime   @default(now())
+
+  @@index([tenantId, rfqId, createdAt])
+}
+
+// ============================================================
+// 3. BOM 域
+// ============================================================
+
+model BOM {
+  id         String   @id @default(cuid())
+  tenantId   String
+  rfqId      String?
+  rfq        RFQ?     @relation(fields: [rfqId], references: [id])
+  customerId String?
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  versions BOMVersion[]
+
+  @@index([tenantId, rfqId])
+}
+
+model BOMVersion {
+  id            String   @id @default(cuid())
+  tenantId      String
+  bomId         String
+  bom           BOM      @relation(fields: [bomId], references: [id])
+  versionNo     Int
+  /// 原始导入文件(保留原始客户文件)
+  sourceFileKey String?
+  note          String?
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  lines BOMLine[]
+
+  @@unique([tenantId, bomId, versionNo])
+}
+
+/// BOM 行;qty 用 Decimal(胶/锡膏等可计量物料)
+model BOMLine {
+  id           String     @id @default(cuid())
+  tenantId     String
+  bomVersionId String
+  bomVersion   BOMVersion @relation(fields: [bomVersionId], references: [id])
+  lineNo       Int
+  /// 位号列表原文(如 "R1,R2,R5");重复位号校验对象
+  refDes       String?
+  qty          Decimal    @db.Decimal(18, 4)
+  customerPn   String?
+  mpn          String?
+  manufacturer String?
+  description  String?
+  footprint    String?
+  /// 导入校验结果(事实性标记,导入完成时一次性写入)
+  dupRefDesFlag     Boolean @default(false)
+  eolFlag           Boolean @default(false)
+  footprintMismatch Boolean @default(false)
+  createdAt    DateTime   @default(now())
+
+  matchCandidates BomMatchCandidate[]
+  decisions       BomLineDecision[]
+
+  @@unique([tenantId, bomVersionId, lineNo])
+  @@index([tenantId, mpn])
+}
+
+/// 大 BOM(>50 唯一 MPN)分批处理;幂等键防重复导入
+model BOMImportJob {
+  id             String    @id @default(cuid())
+  tenantId       String
+  bomId          String?
+  rfqId          String?
+  status         JobStatus @default(PENDING)
+  idempotencyKey String
+  /// 原始上传文件键列表(多文件批量)
+  fileKeys       Json?
+  totalLines     Int       @default(0)
+  processedLines Int       @default(0)
+  batchSize      Int       @default(20)
+  /// 列映射配置(非标准 BOM → 标准结构)
+  columnMapping  Json?
+  error          String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+}
+
+// ============================================================
+// 4. 物料域(ezPLM 只读真源 + 本地缓存)
+// ============================================================
+
+/// 物料主数据镜像。
+/// ⚠ 数据主权:ezPLM 为物料主数据唯一真源,本表是只读缓存语义 ——
+/// 仅由 Provider 同步通道写入(记录 AuditLog),业务代码禁止直接改写主数据字段,禁止双写回 ezPLM。
+/// 守卫(评审备案 C):Part 行仅经 ezPLM 同步通道创建(internalPn 必有);
+/// sourcedFrom 仅作溯源,不作为 DigiKey/Mouser 创建 Part 行的许可 ——
+/// 外部源数据只落 ExternalPartSnapshot / BomMatchCandidate / SupplierOffer(应用层守卫,PR3 实现)。
+model Part {
+  id           String    @id @default(cuid())
+  tenantId     String
+  internalPn   String
+  mpn          String?
+  manufacturer String?
+  description  String?
+  footprint    String?
+  lifecycle    Lifecycle @default(UNKNOWN)
+  /// DC/MSL/包装字段(整合方案 3.2,客户需求)
+  dateCode     String?
+  msl          String?
+  packaging    String?
+  rohs         Boolean?
+  reach        Boolean?
+  /// 缓存来源与时点(只读缓存语义的一部分)
+  sourcedFrom  ProviderType @default(EZPLM)
+  syncedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  identifiers PartIdentifier[]
+  alternates  PartAlternate[]  @relation("PartToAlternates")
+  alternateOf PartAlternate[]  @relation("AlternateToParts")
+
+  @@unique([tenantId, internalPn])
+  @@index([tenantId, mpn])
+  @@index([tenantId, manufacturer, mpn])
+}
+
+/// 物料标识(内部料号/MPN/客户料号等多标识索引)
+model PartIdentifier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  partId    String
+  part      Part     @relation(fields: [partId], references: [id])
+  /// 标识类型:INTERNAL_PN / MPN / CUSTOMER_PN / OTHER(字符串保留扩展性)
+  type      String
+  value     String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, type, value, partId])
+  @@index([tenantId, value])
+}
+
+/// 客户料号映射(BOM 匹配顺序第 1 位)
+model CustomerPartMapping {
+  id           String   @id @default(cuid())
+  tenantId     String
+  customerId   String
+  customerPn   String
+  partId       String?
+  mpn          String?
+  manufacturer String?
+  syncedAt     DateTime?
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, customerId, customerPn])
+  @@index([tenantId, partId])
+}
+
+/// 替代关系(ezPLM 同步 + 本地补充)
+model PartAlternate {
+  id              String   @id @default(cuid())
+  tenantId        String
+  partId          String
+  part            Part     @relation("PartToAlternates", fields: [partId], references: [id])
+  alternatePartId String
+  alternatePart   Part     @relation("AlternateToParts", fields: [alternatePartId], references: [id])
+  /// 替代等级/说明(如 完全替代/条件替代)
+  grade           String?
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@unique([tenantId, partId, alternatePartId])
+}
+
+/// 库存快照(来源 ezPLM,只读缓存;呆滞数量为候选展示项)
+model InventorySnapshot {
+  id             String   @id @default(cuid())
+  tenantId       String
+  partId         String
+  qtyOnHand      Decimal  @db.Decimal(18, 4)
+  /// 呆滞数量
+  qtySlowMoving  Decimal? @db.Decimal(18, 4)
+  warehouse      String?
+  fetchedAt      DateTime
+
+  @@index([tenantId, partId, fetchedAt])
+}
+
+/// 在途 PO 行(GTB 扣减项;来源 ezPLM/ERP,只读缓存)
+model OpenPOLine {
+  id         String    @id @default(cuid())
+  tenantId   String
+  partId     String
+  poNo       String
+  qtyOpen    Decimal   @db.Decimal(18, 4)
+  eta        DateTime?
+  supplierId String?
+  fetchedAt  DateTime
+
+  @@index([tenantId, partId])
+}
+
+/// BOM 匹配候选(SPEC §6:候选必须显示的字段全部落列;AI 只写候选,不写决定)
+model BomMatchCandidate {
+  id            String      @id @default(cuid())
+  tenantId      String
+  bomLineId     String
+  bomLine       BOMLine     @relation(fields: [bomLineId], references: [id])
+  source        MatchSource
+  /// 置信度 0–1
+  confidence    Decimal     @db.Decimal(5, 4)
+  partId        String?
+  mpn           String
+  manufacturer  String?
+  footprint     String?
+  lifecycle     Lifecycle?
+  stockQty      Decimal?    @db.Decimal(18, 4)
+  slowMovingQty Decimal?    @db.Decimal(18, 4)
+  opoQty        Decimal?    @db.Decimal(18, 4)
+  eta           DateTime?
+  price         Decimal?    @db.Decimal(18, 6)
+  currency      String?
+  /// 替代关系摘要
+  alternates    Json?
+  /// 数据更新时间(诚实 UI:显示更新时间而非暗示实时)
+  dataUpdatedAt DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId, bomLineId])
+}
+
+/// BOM 行人工确认(正式匹配必须人工;每行至多一个生效决定,由 @@unique([tenantId, bomLineId]) 保证)
+model BomLineDecision {
+  id          String           @id @default(cuid())
+  tenantId    String
+  bomLineId   String
+  bomLine     BOMLine          @relation(fields: [bomLineId], references: [id])
+  /// 受控标量(评审必改 A 备案):候选可被重算清理,而人工决定必须长寿,故不设 FK
+  candidateId String?
+  partId      String?
+  decision    LineDecisionType
+  note        String?
+  decidedById String
+  decidedAt   DateTime         @default(now())
+
+  @@unique([tenantId, bomLineId])
+}
+
+/// 外部 API 响应缓存快照。
+/// cacheKey = provider+site+currency+mpn+manufacturer+quantity(SPEC §15)。
+/// expiresAt 派生自 fetchedAt + ttlSeconds,由写入通道统一计算(唯一写入点),仅为索引效率物化。
+model ExternalPartSnapshot {
+  id         String       @id @default(cuid())
+  tenantId   String
+  source     ProviderType
+  cacheKey   String
+  payload    Json
+  fetchedAt  DateTime
+  ttlSeconds Int
+  expiresAt  DateTime
+  createdAt  DateTime     @default(now())
+
+  @@unique([tenantId, source, cacheKey])
+  @@index([tenantId, expiresAt])
+}
+
+// ============================================================
+// 5. 报价供应域(NormalizedOffer 持久化)
+// ============================================================
+
+/// 统一供应报价(SPEC §10 NormalizedOffer;线下 Excel 与三源 API 同构)
+model SupplierOffer {
+  id                 String       @id @default(cuid())
+  tenantId           String
+  provider           ProviderType
+  supplierId         String?
+  partId             String?
+  providerPartNumber String?
+  mpn                String
+  manufacturer       String?
+  description        String?
+  packaging          String?
+  stock              Decimal?     @db.Decimal(18, 4)
+  moq                Decimal?     @db.Decimal(18, 4)
+  spq                Decimal?     @db.Decimal(18, 4)
+  leadTimeDays       Int?
+  lifecycle          Lifecycle?
+  rohs               Boolean?
+  reach              Boolean?
+  currency           String
+  sourceUpdatedAt    DateTime?
+  sourceUrl          String?
+  createdAt          DateTime     @default(now())
+
+  priceBreaks PriceBreak[]
+
+  @@index([tenantId, mpn])
+  @@index([tenantId, provider, mpn])
+}
+
+/// 价格阶梯(确定性函数 getApplicablePriceBreak 的输入)
+model PriceBreak {
+  id              String        @id @default(cuid())
+  tenantId        String
+  supplierOfferId String
+  supplierOffer   SupplierOffer @relation(fields: [supplierOfferId], references: [id])
+  minQty          Decimal       @db.Decimal(18, 4)
+  unitPrice       Decimal       @db.Decimal(18, 6)
+
+  @@unique([tenantId, supplierOfferId, minQty])
+}
+
+// ============================================================
+// 6. 报价域(Quote,本系统唯一真源)
+// ============================================================
+
+/// 报价单标识。状态/参数在 QuoteVersion 上(每个修订各有生命周期,避免冗余镜像);
+/// 当前版 = revision 最大的 QuoteVersion,查询派生,不落冗余字段。
+model Quote {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  rfqId       String
+  customerId  String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  versions QuoteVersion[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, rfqId])
+}
+
+/// 报价修订版。
+/// 快照选型:Json 字段(submittedSnapshot/approvedSnapshot)而非再归一化表 ——
+/// 快照是"冻结文档"(整单含行/费率/汇总),用于审批与正式 PDF/XLSX 的唯一依据;
+/// Json 整体固化保证逐字节不漂移,不受后续行结构迁移影响;可编辑数据仍在 QuoteLine。
+/// Revision 递增由 @@unique([tenantId, quoteId, revision]) 保证;
+/// "禁止覆盖已批准版本"= 应用层只允许 INSERT 新修订,PENDING/APPROVED 版参数冻结(单测覆盖)。
+model QuoteVersion {
+  id                String      @id @default(cuid())
+  tenantId          String
+  quoteId           String
+  quote             Quote       @relation(fields: [quoteId], references: [id])
+  revision          Int
+  status            QuoteStatus @default(DRAFT)
+  currency          String      @default("CNY")
+  /// 人工费率模板快照(多模板可选,允许手工调整;模板本体后续 PR 建维护页)
+  laborRateTemplate Json?
+  /// 提交审批时冻结的整单快照
+  submittedSnapshot Json?
+  /// 审批通过时冻结的整单快照(PDF/XLSX 唯一数据源)
+  approvedSnapshot  Json?
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  /// 退回原因(退回后创建新 Revision)
+  rejectedReason    String?
+  expiresAt         DateTime?
+  createdById       String
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  lines     QuoteLine[]
+  approvals QuoteApproval[]
+
+  @@unique([tenantId, quoteId, revision])
+  @@index([tenantId, status])
+}
+
+/// 报价行(SPEC §12 全部字段;金额 Decimal,币种随版本)
+model QuoteLine {
+  id               String            @id @default(cuid())
+  tenantId         String
+  quoteVersionId   String
+  quoteVersion     QuoteVersion      @relation(fields: [quoteVersionId], references: [id])
+  lineNo           Int
+  category         QuoteCostCategory
+  bomLineId        String?
+  /// 报价 MFG / MPN
+  quotedMfg        String?
+  quotedMpn        String?
+  /// 物料类别(阻容/IC/结构件等,Markup 分档依据)
+  materialCategory String?
+  /// 替代料 MFG / MPN
+  altMfg           String?
+  altMpn           String?
+  qty              Decimal?          @db.Decimal(18, 4)
+  /// 采购成本(单价)
+  purchaseCost     Decimal?          @db.Decimal(18, 6)
+  /// Markup 百分比(如 0.085 = 8.5%)
+  markupPct        Decimal?          @db.Decimal(9, 6)
+  /// 最终物料报价(单价,确定性函数计算)
+  finalUnitPrice   Decimal?          @db.Decimal(18, 6)
+  /// 实际客户报价价格(单价,人工可调)
+  customerPrice    Decimal?          @db.Decimal(18, 6)
+  /// PPV(确定性函数计算)
+  ppv              Decimal?          @db.Decimal(18, 6)
+  note             String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([tenantId, quoteVersionId, lineNo])
+}
+
+/// 审批记录。审批人必须是五角色模型内的 User(应用层校验 + 单测)
+model QuoteApproval {
+  id             String           @id @default(cuid())
+  tenantId       String
+  quoteVersionId String
+  quoteVersion   QuoteVersion     @relation(fields: [quoteVersionId], references: [id])
+  approverId     String
+  decision       ApprovalDecision @default(PENDING)
+  comment        String?
+  decidedAt      DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([tenantId, quoteVersionId])
+}
+
+// ============================================================
+// 7. 采购 RFQ 域
+// ============================================================
+
+/// 采购 RFQ(SPEC §11):接收 PM 的一个或多个 BOM(经 rfqId 关联),多源比价
+model ProcurementRFQ {
+  id          String               @id @default(cuid())
+  tenantId    String
+  code        String
+  rfqId       String?
+  /// 关联的 BOMVersion id 列表(一个或多个 BOM)。
+  /// 已知取舍(评审备案 D):Json 数组保持 43 模型基线;反向查询("按 BOM 版本反查采购 RFQ")
+  /// 依赖 jsonb 包含查询;若该查询高频化,再升级为关联表。
+  bomVersionIds Json?
+  status      ProcurementRfqStatus @default(DRAFT)
+  sourcingMode SourcingMode        @default(SPOT)
+  /// 反馈给 PM 的说明
+  feedbackNote String?
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  supplierQuotes SupplierQuote[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+/// 供应商报价单(线下 Excel 导入或 API 拉取的一次报价)
+model SupplierQuote {
+  id               String         @id @default(cuid())
+  tenantId         String
+  procurementRfqId String
+  procurementRfq   ProcurementRFQ @relation(fields: [procurementRfqId], references: [id])
+  supplierId       String
+  provider         ProviderType   @default(OFFLINE)
+  currency         String
+  /// 原始导入文件(线下 Excel)
+  sourceFileKey    String?
+  quotedAt         DateTime
+  createdAt        DateTime       @default(now())
+
+  lines SupplierQuoteLine[]
+
+  @@index([tenantId, procurementRfqId])
+}
+
+/// 供应商报价行。
+/// 异常处理闭环(CLAUDE.md):wasFlagged 在采购填价时固化"原始异常集合";
+/// resolution 默认空、逐项人工选;换货源(SWITCH_SOURCE)必须新建行记录
+/// 新供应商/价格/币种/MOQ/SPQ/LT/报价时间,previousLineId 链回旧行,旧行不改写。
+model SupplierQuoteLine {
+  id              String          @id @default(cuid())
+  tenantId        String
+  supplierQuoteId String
+  supplierQuote   SupplierQuote   @relation(fields: [supplierQuoteId], references: [id])
+  bomLineId       String?
+  partId          String?
+  mpn             String
+  manufacturer    String?
+  unitPrice       Decimal         @db.Decimal(18, 6)
+  currency        String
+  moq             Decimal?        @db.Decimal(18, 4)
+  spq             Decimal?        @db.Decimal(18, 4)
+  leadTimeDays    Int?
+  sourcingMode    SourcingMode    @default(SPOT)
+  quotedAt        DateTime
+  /// 原始异常集合固化(填价时一次性写入,此后不随阈值变化)
+  wasFlagged      Boolean         @default(false)
+  /// 异常原因明细(如 超价格线/超 LT 线)
+  flagReasons     Json?
+  /// 异常处理结论(默认空,人工逐项选择)
+  resolution      FlagResolution?
+  resolutionNote  String?
+  /// 换货源/重报价链:指向被替代的旧行
+  previousLineId  String?
+  /// 采购选定标记与选择理由(SPEC §11)
+  selected        Boolean         @default(false)
+  selectionReason String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([tenantId, supplierQuoteId])
+  @@index([tenantId, bomLineId])
+}
+
+/// PM 端采购申请单(整合方案 3.2;GTB 核算 + 同 MPN 呆滞提示)
+model PurchaseRequest {
+  id            String                @id @default(cuid())
+  tenantId      String
+  code          String
+  requestedById String
+  bomVersionId  String?
+  partId        String?
+  mpn           String?
+  /// 申请数量(GTB 确定性函数输出;核算过程存快照)
+  qty           Decimal               @db.Decimal(18, 4)
+  /// GTB 核算快照(需求/损耗率/库存/在途/MOQ/SPQ 圆整过程)
+  gtbSnapshot   Json?
+  status        PurchaseRequestStatus @default(DRAFT)
+  note          String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([tenantId, mpn])
+}
+
+// ============================================================
+// 8. OPO 域(行级唯一数据源)
+// ============================================================
+
+/// OPO 行级模型 —— KPI/未回复表/差异表/异常清单全部由本表查询派生,
+/// 禁止落任何冗余计数字段、禁止旁路计数(CLAUDE.md OPO 规则)。
+model OPOLine {
+  id             String    @id @default(cuid())
+  tenantId       String
+  poNo           String
+  lineNo         Int
+  supplierId     String
+  partId         String?
+  mpn            String?
+  qtyOrdered     Decimal   @db.Decimal(18, 4)
+  qtyOpen        Decimal   @db.Decimal(18, 4)
+  unitPrice      Decimal?  @db.Decimal(18, 6)
+  currency       String?
+  /// ERP 承诺交期
+  promiseDate    DateTime?
+  /// 需求日期(异常判定输入)
+  needDate       DateTime?
+  /// 催办 Cron 扫描游标(提前 4 天催办)
+  nextReminderAt DateTime?
+  /// ERP 单据引用
+  erpRef         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  replies OPOReply[]
+
+  @@unique([tenantId, poNo, lineNo])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, nextReminderAt])
+}
+
+/// 供应商回复(五字段齐备,评审要求二.5)
+model OPOReply {
+  id          String      @id @default(cuid())
+  tenantId    String
+  opoLineId   String
+  opoLine     OPOLine     @relation(fields: [opoLineId], references: [id])
+  replyEta    DateTime?
+  replyQty    Decimal?    @db.Decimal(18, 4)
+  replyNote   String?
+  replyAt     DateTime
+  replySource ReplySource
+  /// 回复人(供应商联系人 id 或门户用户 id,可空)
+  contactId   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([tenantId, opoLineId, replyAt])
+}
+
+/// 催办日志;幂等键防重发(评审要求二.9 同款纪律)
+model ReminderLog {
+  id             String    @id @default(cuid())
+  tenantId       String
+  opoLineId      String
+  idempotencyKey String
+  channel        String    @default("EMAIL")
+  status         JobStatus @default(PENDING)
+  sentAt         DateTime?
+  error          String?
+  createdAt      DateTime  @default(now())
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, opoLineId])
+}
+
+// ============================================================
+// 9. 智能体域(SPEC §13;全部为本系统新增)
+// ============================================================
+
+/// AgentRun 记录 SPEC §13 全部要素:输入/工具/证据/输出/人工确认/写入结果/失败/token 成本/时间
+model AgentRun {
+  id             String    @id @default(cuid())
+  tenantId       String
+  agentType      AgentType
+  status         JobStatus @default(PENDING)
+  idempotencyKey String?
+  userId         String
+  input          Json
+  /// 模型最终输出(建议/草稿;正式写入须经 AgentApproval)
+  output         Json?
+  /// 最终写入结果引用(entityType/entityId 列表)
+  writtenRefs    Json?
+  error          String?
+  /// token 用量与成本(promptTokens/completionTokens/costUsd)
+  tokenUsage     Json?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  steps     AgentStep[]
+  evidences AgentEvidence[]
+  approvals AgentApproval[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, agentType, createdAt])
+}
+
+model AgentStep {
+  id         String    @id @default(cuid())
+  tenantId   String
+  agentRunId String
+  agentRun   AgentRun  @relation(fields: [agentRunId], references: [id])
+  stepNo     Int
+  /// 工具名(读工具自动执行;写工具必须经确认卡片)
+  toolName   String?
+  input      Json?
+  output     Json?
+  status     JobStatus @default(PENDING)
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([tenantId, agentRunId, stepNo])
+}
+
+/// 外部数据证据(候选/报价/库存等原始依据,支撑可追溯)
+model AgentEvidence {
+  id         String        @id @default(cuid())
+  tenantId   String
+  agentRunId String
+  agentRun   AgentRun      @relation(fields: [agentRunId], references: [id])
+  stepId     String?
+  source     ProviderType?
+  uri        String?
+  payload    Json
+  fetchedAt  DateTime      @default(now())
+
+  @@index([tenantId, agentRunId])
+}
+
+/// 写工具确认卡片记录(人工批准后才执行写入)
+model AgentApproval {
+  id          String           @id @default(cuid())
+  tenantId    String
+  agentRunId  String
+  agentRun    AgentRun         @relation(fields: [agentRunId], references: [id])
+  stepId      String?
+  toolName    String
+  /// 确认卡片展示的拟写入内容
+  payload     Json
+  status      ApprovalDecision @default(PENDING)
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([tenantId, agentRunId])
+}
+
+// ============================================================
+// 10. 平台域
+// ============================================================
+
+/// 审计日志(评审要求二.7 全字段;每个写操作必录)
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, userId, createdAt])
+}
+
+/// 集成作业(失败重试;ERP Excel 模板兜底路径)
+model IntegrationJob {
+  id             String             @id @default(cuid())
+  tenantId       String
+  type           IntegrationJobType
+  status         JobStatus          @default(PENDING)
+  idempotencyKey String?
+  payload        Json
+  attempts       Int                @default(0)
+  lastError      String?
+  nextRetryAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, nextRetryAt])
+}
+
+/// 外部 API 用量日志(DigiKey/Mouser 限流与配额观测,记录 X-RateLimit)
+model ApiUsageLog {
+  id                 String       @id @default(cuid())
+  tenantId           String
+  provider           ProviderType
+  endpoint           String
+  statusCode         Int?
+  rateLimitLimit     Int?
+  rateLimitRemaining Int?
+  durationMs         Int?
+  createdAt          DateTime     @default(now())
+
+  @@index([tenantId, provider, createdAt])
+}

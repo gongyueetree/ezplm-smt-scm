@@ -32,3 +32,7 @@ pnpm-debug.log*
 playwright-report/
 test-results/
 coverage/
+
+# 本地开发库与文件存储
+.pgdata/
+.storage/

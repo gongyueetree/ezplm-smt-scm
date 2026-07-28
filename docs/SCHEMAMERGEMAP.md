@@ -1,132 +1,146 @@
-# SCHEMA 合并对照表(NestJS V15 ↔ SPEC §4)
+# Schema 落库基线(SPEC §4 · 43 模型)
 
-> **状态:⚠️ 阻塞 — 旧 schema 输入缺失,本文件目前只是对照框架,不是完成品。**
+> **状态:BASELINE(2026-07-27 评审确认)**
 >
-> - 依据 `SETUP.md`,`reference/nestjs-v15/` 应由人工放入旧后端的 `schema.prisma`(42 表/41 枚举);
->   截至 PR1 提交时该目录为**空**,git 全部历史中也从未包含过任何 `.prisma` 文件。
-> - 因此下表的"旧表(NestJS V15)"列**全部待补**,旧表→新表映射、废弃表清单、字段级差异
->   均无法如实产出。按诚实汇报纪律,本 PR 不编造旧表清单。
-> - **解除阻塞方式**:将 `schema.prisma` 放入 `reference/nestjs-v15/` 后,在下一会话指示
->   "补全 SCHEMAMERGEMAP",即可在 PR2 落库前完成本表(整合方案第六节:schema 是最不能返工的东西,
->   本表必须先经人工评审,再动 Prisma)。
+> - 旧 NestJS V15 schema 经人工确认**不可得**,旧表侧正式作废;本文件由"合并对照表"
+>   转为 **PR2 落库执行核对表**,SPEC §4 的 43 个模型为唯一 schema 基线。
+> - 决策与影响已记录于 `docs/INTEGRATION_PLAN.md` 末尾"计划偏差记录"。
+> - 实现文件:`prisma/schema.prisma`(Prisma 7;连接串在 `prisma.config.ts`,env `DATABASE_URL`)。
 >
-> 本文件中**新模型侧(SPEC §4 的 43 个模型)是完整、确定的**,并已按域分组、标注用途与关键约束,
-> 可先行评审;旧表侧到位后按"对照方法"一节填充。
+> **全局纪律**(评审要求二.1–二.3):所有业务表带 `tenantId`;唯一约束一律
+> tenant-scoped(`@@unique([tenantId, ...])`,无全局业务 unique);高频查询建
+> `(tenantId, ...)` 复合索引;金额/单价/费率/数量一律 `Decimal`(禁 Float),币种独立字段;
+> `Tenant.ezplmTenantId` / `User.externalUserId` 可空融合字段到位。
 
-## 一、新 schema 模型清单(SPEC §4,共 43 个模型)
+## 枚举清单(18 个)
 
-全部业务表带 `tenantId`;update/delete 必须 tenant scoped;写操作记 AuditLog(CLAUDE.md 硬性约束 4)。
-`Tenant`/`User` 含可空融合字段 `ezplmTenantId` / `externalUserId`(融合钉子 2)。
+| 枚举 | 取值 | 依据 |
+|---|---|---|
+| RoleName | PM / PROCUREMENT / ENGINEERING / MANAGEMENT / SUPPLIER(仅此五值) | SPEC §3;评审二.8 |
+| RfqStatus | DRAFT / RECEIVED / PARSING / WAITING_ENGINEERING / WAITING_PROCUREMENT / QUOTING / PENDING_APPROVAL / QUOTED / CLOSED_NO_QUOTE / LOST | SPEC §5 |
+| QuoteStatus | DRAFT / PENDING_APPROVAL / APPROVED / REJECTED / EXPIRED | CLAUDE.md 状态机;评审二.4 |
+| QuoteCostCategory | MATERIAL / LABOR / NRE / SMT / DIP / TEST / OVERHEAD / OTHER | SPEC §12 |
+| AttachmentType | BOM / GERBER / PDF / IMAGE / PROCESS_DOC / OTHER | SPEC §5 |
+| JobStatus | PENDING / RUNNING / SUCCEEDED / FAILED / CANCELLED | 批处理状态机(评审二.9) |
+| Lifecycle | ACTIVE / NRND / EOL / OBSOLETE / UNKNOWN | SPEC §6 |
+| ProviderType | EZPLM / DIGIKEY / MOUSER / OFFLINE | SPEC §7–§10 |
+| MatchSource | CUSTOMER_MAPPING / INTERNAL_PN / EXACT_MPN / MFR_MPN / DESCRIPTION / EZPLM / DIGIKEY / MOUSER / MANUAL | SPEC §6 匹配顺序 |
+| LineDecisionType | ACCEPT_CANDIDATE / MANUAL_ASSIGN / NO_MATCH | 人工确认闭环 |
+| ApprovalDecision | PENDING / APPROVED / REJECTED | 审批/确认卡片 |
+| ProcurementRfqStatus | DRAFT / SOURCING / FEEDBACK_READY / CLOSED | SPEC §11 |
+| SourcingMode | SPOT / FUTURES | SPEC §11 现货/期货 |
+| FlagResolution | ACCEPT / REQUOTE / SWITCH_SOURCE / ADJUST_PRICE | CLAUDE.md 异常闭环 |
+| PurchaseRequestStatus | DRAFT / SUBMITTED / PROCESSING / CLOSED | 整合方案 3.2 |
+| ReplySource | EMAIL / PORTAL / EXCEL / PHONE / MANUAL | SPEC §14 |
+| AgentType | RFQ_INTAKE / BOM_MATCHING / SOURCING / QUOTE / OPO | SPEC §13 |
+| IntegrationJobType | ERP_ORDER_EXPORT / ERP_ETA_WRITEBACK / EMAIL_SEND / OPO_REMINDER / OTHER | SPEC §14 |
 
-### 1. 租户与主体
+## 落库核对表(43 模型)
 
-| # | 新模型 | 用途 / 关键约束 | 旧表(NestJS V15) |
-|---|---|---|---|
-| 1 | Tenant | 租户;含可空 `ezplmTenantId` | ⏳ 待旧 schema |
-| 2 | User | 用户;含可空 `externalUserId`(SSO 预留) | ⏳ |
-| 3 | Role | 角色:PM / PROCUREMENT / ENGINEERING / MANAGEMENT / SUPPLIER(无其他审批角色) | ⏳ |
-| 4 | UserRole | 用户-角色多对多 | ⏳ |
-| 5 | Customer | 客户(如示例数据中的联创科技) | ⏳ |
-| 6 | Supplier | 供应商 | ⏳ |
-| 7 | SupplierContact | 供应商联系人(供应商邮件建档回填目标) | ⏳ |
+### 1. 租户与主体(7)
 
-### 2. RFQ 域(本系统唯一真源)
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 1 | Tenant | 租户 | slug(全局唯一)、**ezplmTenantId?**(融合) | — |
+| 2 | User | 用户(本地账号;只停用不删) | email、passwordHash?、**externalUserId?**(SSO)、isActive | `@@unique([tenantId, email])` |
+| 3 | Role | 角色目录 | name | RoleName 五值;`@@unique([tenantId, name])` |
+| 4 | UserRole | 用户-角色 | userId、roleId | `@@unique([tenantId, userId, roleId])` |
+| 5 | Customer | 客户 | code、name、联系方式 | `@@unique([tenantId, code])` |
+| 6 | Supplier | 供应商 | code、defaultCurrency、**priority**(rankOffers 因子) | `@@unique([tenantId, code])` |
+| 7 | SupplierContact | 供应商联系人(邮件建档回填) | name、email、isPrimary | — |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 8 | RFQ | 状态机 DRAFT→RECEIVED→PARSING→WAITING_ENGINEERING→WAITING_PROCUREMENT→QUOTING→PENDING_APPROVAL→QUOTED / CLOSED_NO_QUOTE / LOST | ⏳ |
-| 9 | RFQAttachment | Gerber/PDF/图片/工艺说明;保留原始客户文件;标记附件类型 | ⏳ |
-| 10 | RFQStatusHistory | 状态流转处理记录 | ⏳ |
+### 2. RFQ 域(3)
 
-### 3. BOM 域
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 8 | RFQ | 客户询价 | code、customerId、quoteQtys(Json 阶梯数量)、dueAt、closedReason(不报价关闭) | RfqStatus 十态;`@@unique([tenantId, code])` |
+| 9 | RFQAttachment | 附件(保留原始客户文件) | type、fileName、fileKey(FileStorageProvider)、uploadedById | AttachmentType |
+| 10 | RFQStatusHistory | 状态流转处理记录 | fromStatus?、toStatus、changedById | RfqStatus |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 11 | BOM | RFQ 可关联多个 BOM | ⏳ |
-| 12 | BOMVersion | 版本比对基础 | ⏳ |
-| 13 | BOMLine | 行级数据;重复位号/EOL/封装校验对象 | ⏳ |
-| 14 | BOMImportJob | >50 唯一 MPN 走分批(10–20/批)+ SSE/轮询进度 | ⏳ |
+### 3. BOM 域(4)
 
-### 4. 物料域(ezPLM 只读真源 + 本地缓存)
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 11 | BOM | BOM 主体(RFQ 可关联多个) | rfqId?、name | — |
+| 12 | BOMVersion | 版本(比对基础) | versionNo、sourceFileKey(原始文件) | `@@unique([tenantId, bomId, versionNo])` |
+| 13 | BOMLine | 行(qty=Decimal) | refDes、qty、customerPn/mpn/manufacturer/footprint、dupRefDesFlag/eolFlag/footprintMismatch(导入校验事实) | `@@unique([tenantId, bomVersionId, lineNo])` |
+| 14 | BOMImportJob | 大 BOM 分批导入(>50 MPN) | **idempotencyKey**、status、totalLines/processedLines/batchSize、columnMapping | JobStatus;`@@unique([tenantId, idempotencyKey])` |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 15 | Part | 物料主数据镜像;按整合方案 3.2 追加 dateCode/msl/包装字段(挂 PR5) | ⏳ |
-| 16 | PartIdentifier | 内部料号/MPN 等标识 | ⏳ |
-| 17 | CustomerPartMapping | 客户料号映射(BOM 匹配顺序第 1 位) | ⏳ |
-| 18 | PartAlternate | 替代关系 | ⏳ |
-| 19 | InventorySnapshot | 库存快照(ezPLM 只读来源) | ⏳ |
-| 20 | OpenPOLine | 在途(GTB 扣减项) | ⏳ |
-| 21 | BomMatchCandidate | 匹配候选:来源/置信度/生命周期/呆滞/OPO/ETA/数据更新时间 | ⏳ |
-| 22 | BomLineDecision | 人工确认结果(AI 只建议,不落定) | ⏳ |
-| 23 | ExternalPartSnapshot | 外部数据缓存快照(禁止双写 ezPLM) | ⏳ |
+### 4. 物料域(9,ezPLM 只读缓存语义)
 
-### 5. 报价供应域
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 15 | Part | 物料主数据镜像(**只读缓存**,注释声明禁双写) | internalPn、mpn、lifecycle、dateCode/msl/packaging(客户需求字段)、sourcedFrom、syncedAt | Lifecycle;`@@unique([tenantId, internalPn])` |
+| 16 | PartIdentifier | 多标识索引 | type、value | `@@unique([tenantId, type, value, partId])` |
+| 17 | CustomerPartMapping | 客户料号映射(匹配第 1 位) | customerId、customerPn、partId? | `@@unique([tenantId, customerId, customerPn])` |
+| 18 | PartAlternate | 替代关系 | partId、alternatePartId、grade | `@@unique([tenantId, partId, alternatePartId])` |
+| 19 | InventorySnapshot | 库存快照(含呆滞) | qtyOnHand、qtySlowMoving、fetchedAt | Decimal(18,4) |
+| 20 | OpenPOLine | 在途(GTB 扣减项) | poNo、qtyOpen、eta、fetchedAt | — |
+| 21 | BomMatchCandidate | 匹配候选(SPEC §6 展示字段全落列) | source、confidence、stockQty/slowMovingQty/opoQty/eta/price、**dataUpdatedAt**(诚实 UI) | MatchSource、Lifecycle |
+| 22 | BomLineDecision | 行级人工确认(每行至多一个) | candidateId?、decision、decidedById | LineDecisionType;`@@unique([tenantId, bomLineId])` |
+| 23 | ExternalPartSnapshot | 外部 API 缓存 | source、cacheKey、payload、**fetchedAt/ttlSeconds**、expiresAt(物化,唯一写入通道派生) | ProviderType;`@@unique([tenantId, source, cacheKey])` |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 24 | SupplierOffer | NormalizedOffer 持久化;线下 Excel 与三源统一 | ⏳ |
-| 25 | PriceBreak | 价格阶梯(确定性函数 getApplicablePriceBreak 输入) | ⏳ |
+### 5. 报价供应域(2)
 
-### 6. 报价域(Quote,本系统唯一真源)
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 24 | SupplierOffer | NormalizedOffer 持久化(SPEC §10 全字段) | provider、mpn、stock/moq/spq、leadTimeDays、currency、sourceUpdatedAt/sourceUrl | ProviderType、Lifecycle |
+| 25 | PriceBreak | 价格阶梯 | minQty、unitPrice Decimal(18,6) | `@@unique([tenantId, supplierOfferId, minQty])` |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 26 | Quote | 状态机 DRAFT→PENDING_APPROVAL→APPROVED/REJECTED/EXPIRED;PENDING/APPROVED 参数冻结 | ⏳ |
-| 27 | QuoteVersion | 修订版;退回出新 Revision,禁止覆盖已批准版本;存 submittedSnapshot/approvedSnapshot | ⏳ |
-| 28 | QuoteLine | 行含 MFG/MPN/Markup/物料类别/替代料/采购成本/PPV;拆材料/人工/NRE/SMT/DIP/测试/管理费 | ⏳ |
-| 29 | QuoteApproval | 审批记录;审批人必须在角色模型内 | ⏳ |
+### 6. 报价域(4)
 
-### 7. 采购 RFQ 域
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 26 | Quote | 报价单标识(状态在版本上,当前版查询派生) | code、rfqId、customerId | `@@unique([tenantId, code])` |
+| 27 | QuoteVersion | 修订版(快照=Json,理由见 schema 注释) | **revision** 递增、status、**submittedSnapshot/approvedSnapshot Json**、laborRateTemplate、rejectedReason | QuoteStatus;`@@unique([tenantId, quoteId, revision])` |
+| 28 | QuoteLine | 报价行(SPEC §12 全字段) | category、quotedMfg/quotedMpn、altMfg/altMpn、materialCategory、purchaseCost/markupPct/finalUnitPrice/customerPrice/**ppv**(全 Decimal) | QuoteCostCategory |
+| 29 | QuoteApproval | 审批记录(审批人限五角色,应用层校验) | approverId、decision、comment | ApprovalDecision |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 30 | ProcurementRFQ | 采购比价流程;现货/期货模式 | ⏳ |
-| 31 | SupplierQuote | 供应商报价;换货源必须记录新供应商/币种/MOQ/SPQ/LT/报价时间 | ⏳ |
-| 32 | SupplierQuoteLine | 行级;wasFlagged 原始异常集合固化在此域 | ⏳ |
-| 33 | PurchaseRequest | PM 端采购申请单(整合方案 3.2,挂 PR6) | ⏳ |
+### 7. 采购 RFQ 域(4)
 
-### 8. OPO 域(行级唯一数据源)
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 30 | ProcurementRFQ | 采购比价流程 | code、bomVersionIds(Json 多 BOM)、sourcingMode、feedbackNote(反馈 PM) | ProcurementRfqStatus、SourcingMode |
+| 31 | SupplierQuote | 一次供应商报价 | supplierId、provider、currency、sourceFileKey(线下 Excel 原件)、quotedAt | ProviderType |
+| 32 | SupplierQuoteLine | 报价行(异常闭环载体) | unitPrice/currency/moq/spq/leadTimeDays/quotedAt、**wasFlagged**(原始异常固化)、flagReasons、resolution?(默认空人工选)、**previousLineId**(换货源链,旧行不改写)、selected/selectionReason | FlagResolution、SourcingMode |
+| 33 | PurchaseRequest | PM 采购申请单 | qty(GTB 输出)、**gtbSnapshot**(核算过程) | PurchaseRequestStatus;`@@unique([tenantId, code])` |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 34 | OPOLine | KPI/未回复/差异/异常全部派生,禁止旁路计数 | ⏳ |
-| 35 | OPOReply | replyEta/replyQty/replyNote/replyAt/replySource | ⏳ |
-| 36 | ReminderLog | 提前 4 天催办;幂等键防重发 | ⏳ |
+### 8. OPO 域(3)
 
-### 9. 智能体域(全部新增,旧系统无对应)
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 34 | OPOLine | 行级唯一数据源(KPI/差异/异常全派生,**无冗余计数字段**) | poNo/lineNo、qtyOrdered/qtyOpen、promiseDate/needDate、**nextReminderAt**(催办游标)、erpRef | `@@unique([tenantId, poNo, lineNo])` |
+| 35 | OPOReply | 供应商回复 | **replyEta/replyQty/replyNote/replyAt/replySource** 五字段齐备 | ReplySource |
+| 36 | ReminderLog | 催办日志 | **idempotencyKey**(防重发)、channel、status、sentAt | JobStatus;`@@unique([tenantId, idempotencyKey])` |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 37 | AgentRun | 输入/工具/证据/输出/人工确认/写入结果/失败/token 成本/时间 | (预计新增) |
-| 38 | AgentStep | 步骤明细 | (预计新增) |
-| 39 | AgentEvidence | 外部数据证据 | (预计新增) |
-| 40 | AgentApproval | 写工具确认卡片记录 | (预计新增) |
+### 9. 智能体域(4)
 
-### 10. 平台域
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 37 | AgentRun | 一次智能体运行(SPEC §13 全要素) | agentType、status、**idempotencyKey**、input/output、writtenRefs、error、**tokenUsage**、startedAt/finishedAt | AgentType、JobStatus |
+| 38 | AgentStep | 步骤明细 | stepNo、toolName、input/output、status | `@@unique([tenantId, agentRunId, stepNo])` |
+| 39 | AgentEvidence | 外部数据证据 | source、uri、payload、fetchedAt | ProviderType |
+| 40 | AgentApproval | 写工具确认卡片 | toolName、payload(拟写入内容)、status、decidedById | ApprovalDecision |
 
-| # | 新模型 | 用途 / 关键约束 | 旧表 |
-|---|---|---|---|
-| 41 | AuditLog | 每个写操作:tenantId、userId、时间 | ⏳ |
-| 42 | IntegrationJob | 失败任务重试;ERP Excel 模板兜底路径 | ⏳ |
-| 43 | ApiUsageLog | DigiKey/Mouser 限流与配额记录(X-RateLimit) | ⏳ |
+### 10. 平台域(3)
 
-> 注:SPEC §4 原文清单 Tenant…ApiUsageLog 逐一清点为 **43 个模型名**,上表无增删、
-> 仅按域分组;与整合方案中"旧后端 42 表"是两套数字(旧表数以实际 schema.prisma 为准)。
+| # | 模型 | 用途 | 关键字段 | 关键枚举/约束 |
+|---|---|---|---|---|
+| 41 | AuditLog | 审计(每写必录) | **tenantId/userId/action/entityType/entityId/before/after/createdAt** 全字段(评审二.7) | 三组复合索引 |
+| 42 | IntegrationJob | 集成作业重试(ERP Excel 兜底) | type、**idempotencyKey**、payload、attempts、nextRetryAt | IntegrationJobType、JobStatus |
+| 43 | ApiUsageLog | API 用量(X-RateLimit 观测) | provider、endpoint、rateLimitLimit/rateLimitRemaining、durationMs | ProviderType |
 
-## 二、对照方法(旧 schema 到位后执行)
+## 设计决策备忘(评审可复核)
 
-1. **逐表三分类**:旧表 → ①映射(改名/合并到新模型)②废弃(功能超出一期范围:品质/PPAP/RMA/SN 追溯/完整 ECN 等,标 feature flag/backlog)③保留原样迁移。
-2. **字段级差异要点**:对映射表逐字段列 增/删/改名/类型变更/约束变更(重点:tenantId 补齐、快照字段、状态机枚举差异)。
-3. **枚举对照**:旧 41 枚举 ↔ 新状态机(RFQ 10 态、Quote 5 态、角色 5 种);多余枚举归入废弃清单。
-4. **新增表确认**:预计增量为 RFQ 族、Agent 族、ExternalPartSnapshot、SupplierOffer/PriceBreak、ProcurementRFQ 族(整合方案第二节);以实际旧 schema 比对为准。
-5. 产出经人工评审后,才作为 PR2 Prisma 落库的输入。
-
-## 三、当前状态汇总
-
-| 交付项 | 状态 |
-|---|---|
-| 新模型清单(SPEC §4)分域整理 + 约束标注 | ✅ 完成,可评审 |
-| 旧表→新表映射 | ⛔ 阻塞:`reference/nestjs-v15/schema.prisma` 缺失 |
-| 废弃表清单 | ⛔ 同上 |
-| 字段级差异要点 | ⛔ 同上 |
+1. **快照选 Json 而非再归一化表**(评审二.4 允许二选一):快照是冻结文档,整单 Json
+   固化保证逐字节不漂移、不受后续行结构迁移影响;可编辑数据仍在 QuoteLine。
+   Revision 递增靠 `@@unique([tenantId, quoteId, revision])`,"禁止覆盖已批准版本"由
+   应用层只 INSERT 新修订 + 单测保障(检查点 B 起实现)。
+2. **业务表 tenantId/userId 为受控标量,不建 FK**:租户隔离由应用层 tenant scope +
+   复合唯一约束保证;审计/Agent 记录须比 User 行长寿(用户只停用不删),故不设用户 FK。
+   域内导航关系(RFQ→附件、BOM→版本→行、报价→版本→行等)保留 FK。
+3. **ExternalPartSnapshot.expiresAt 物化**:派生自 fetchedAt+ttlSeconds,由唯一写入
+   通道计算,物化仅为过期清理/命中判断的索引效率(评审二.5 一致性保障方式说明)。
+4. **OPO 无任何物化计数**:KPI/未回复/差异/异常全部查询派生(评审二.5)。
+5. **Prisma 7**:连接串按 Prisma 7 规范移至 `prisma.config.ts`(env `DATABASE_URL`);
+   版本固定 7.9.0(npmmirror 已同步版本,保障国内镜像可安装——生产部署在国内主机)。

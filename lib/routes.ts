@@ -19,6 +19,9 @@ export type IconName =
   | "scale"
   | "calendar";
 
+/** 角色名(与 prisma RoleName 枚举一致;仅此五值) */
+export type RoleName = "PM" | "PROCUREMENT" | "ENGINEERING" | "MANAGEMENT" | "SUPPLIER";
+
 export interface AppRoute {
   /** 以 / 开头的完整路径 */
   path: string;
@@ -30,6 +33,11 @@ export interface AppRoute {
   plannedPr: string;
   /** 占位页说明 */
   desc: string;
+  /**
+   * 可见角色(SPEC §3)。缺省 = 所有角色可见;
+   * MANAGEMENT 全局可见,不受此限制(见 rbac.ts filterSectionsForRoles)。
+   */
+  roles?: RoleName[];
   children?: AppRoute[];
 }
 
@@ -60,6 +68,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "quote",
         plannedPr: "PR5",
         desc: "创建 RFQ、多 BOM 与附件上传、状态机流转、不报价关闭。",
+        roles: ["PM"],
       },
       {
         path: "/quotes",
@@ -68,6 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
         ai: true,
         plannedPr: "PR7",
         desc: "报价拆分(材料/人工/NRE/SMT/DIP/测试/管理费)、Markup/PPV、版本快照与审批。",
+        roles: ["PM"],
       },
     ],
   },
@@ -80,6 +90,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "bom",
         plannedPr: "PR5",
         desc: "BOM 台账、版本管理、组合筛选。",
+        roles: ["PM", "ENGINEERING"],
         children: [
           {
             path: "/bom/import",
@@ -102,6 +113,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "db",
         plannedPr: "PR5",
         desc: "物料主数据查询(ezPLM 只读真源 + ExternalPartSnapshot 缓存),候选显示生命周期/库存/呆滞/OPO/数据更新时间。",
+        roles: ["ENGINEERING", "PROCUREMENT"],
       },
     ],
   },
@@ -115,6 +127,7 @@ export const NAV_SECTIONS: NavSection[] = [
         ai: true,
         plannedPr: "PR6",
         desc: "ezPLM / DigiKey / Mouser / 线下 Excel 统一 NormalizedOffer 比价,推荐可改可拒,保存选择理由。",
+        roles: ["PROCUREMENT"],
       },
       {
         path: "/procurement/orders",
@@ -122,6 +135,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "cart",
         plannedPr: "PR6/PR8",
         desc: "采购订单台账与 ERP 导出模板(API 不可回写时的替代路径)。",
+        roles: ["PROCUREMENT"],
       },
       {
         path: "/suppliers/opo",
@@ -129,6 +143,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "clock",
         plannedPr: "PR8",
         desc: "行级 OPOLine 唯一数据源,KPI/未回复/差异/异常全部派生;提前 4 天催办 Cron。",
+        roles: ["PROCUREMENT", "SUPPLIER"],
       },
     ],
   },
@@ -141,6 +156,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "ledger",
         plannedPr: "PR8",
         desc: "AR 与 AP 按角色与 Tab 区分,对账单发送走邮件适配器(预览/模拟)。",
+        roles: ["PM", "PROCUREMENT"],
       },
       {
         path: "/shortage",
@@ -148,13 +164,15 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "alert",
         plannedPr: "PR8",
         desc: "缺料分析与 Call 料表。",
+        roles: ["PROCUREMENT"],
       },
       {
         path: "/kitting",
         label: "齐料检查",
         icon: "box",
         plannedPr: "PR8",
-        desc: "工单齐料检查(GTB:ceil(需求×(1+损耗率)) − 库存 − 在途,≥MOQ 再按 SPQ 圆整)。",
+        desc: "工单齐料检查(GTB:ceil(需求×(1+损耗率)) − 库存 − 在途,≥MOQ 再按 SPQ 向上圆整)。",
+        roles: ["PROCUREMENT", "ENGINEERING"],
       },
       {
         path: "/inventory",
@@ -162,6 +180,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "calendar",
         plannedPr: "PR8",
         desc: "库存与呆滞总览(ezPLM 只读数据源),按客户/日期筛选。",
+        roles: ["PROCUREMENT"],
       },
     ],
   },
@@ -174,6 +193,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "gear",
         plannedPr: "PR2",
         desc: "租户、用户与角色管理;集成状态只用 待确认/待授权/待联调/示例配置。",
+        roles: ["MANAGEMENT"],
       },
     ],
   },
