@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 interface QuoteLine {
   id: string;
@@ -373,7 +374,9 @@ export function SourcingPanel({
                 {results.map((r) => (
                   <tr key={r.bomLineId}>
                     <td className="small">
-                      <div className="mono">{r.mpn}</div>
+                      <div>
+                        <MpnLink mpn={r.mpn} />
+                      </div>
                       <div className="muted">{r.manufacturer ?? "-"}</div>
                     </td>
                     <td className="num">{r.demandQty}</td>
@@ -442,7 +445,9 @@ export function SourcingPanel({
                 lines.map((l) => (
                   <tr key={l.id} className={l.wasFlagged && !l.resolution ? "row-danger" : undefined}>
                     <td className="small">
-                      <div className="mono">{l.mpn}</div>
+                      <div>
+                        <MpnLink mpn={l.mpn} />
+                      </div>
                       <div className="muted">{l.manufacturer ?? "-"}</div>
                       {l.previousLineId ? <Badge tone="purple">换货源新行</Badge> : null}
                     </td>

@@ -8,6 +8,7 @@ import { buildKittingReport } from "@/lib/server/repositories/kitting";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -127,7 +128,9 @@ export default async function ShortagePage({
                   ) : (
                     shortages.map((l) => (
                       <tr key={l.lineNo} className={l.status === "unknown" ? "row-warn" : "row-danger"}>
-                        <td className="mono small">{l.mpn ?? "-"}</td>
+                        <td className="small">
+                          <MpnLink mpn={l.mpn} />
+                        </td>
                         <td className="small">{l.manufacturer ?? "-"}</td>
                         <td className="small">{l.refDes ?? "-"}</td>
                         <td className="num">{l.requiredQty}</td>

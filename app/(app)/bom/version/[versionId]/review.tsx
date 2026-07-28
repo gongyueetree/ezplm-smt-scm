@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export interface ReviewCandidate {
   id: string;
@@ -98,7 +99,9 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                   <div className="muted">×{l.qty}</div>
                 </td>
                 <td className="small">
-                  <div className="mono">{l.mpn ?? "(无 MPN)"}</div>
+                  <div>
+                    <MpnLink mpn={l.mpn} fallback="(无 MPN)" />
+                  </div>
                   <div className="muted">
                     {l.manufacturer ?? "-"} · {l.footprint ?? "-"}
                   </div>
@@ -128,7 +131,7 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                           >
                             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                               <Badge tone="blue">{c.source}</Badge>
-                              <span className="mono">{c.mpn}</span>
+                              <MpnLink mpn={c.mpn} />
                               <span className="muted">{c.manufacturer ?? "-"}</span>
                               <Badge tone={LIFECYCLE_TONE[c.lifecycle ?? "UNKNOWN"] ?? "gray"}>
                                 {c.lifecycle ?? "生命周期未知"}

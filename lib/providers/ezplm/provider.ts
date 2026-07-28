@@ -12,6 +12,8 @@ import type {
   CustomerPartMappingDto,
   GetPartByMpnInput,
   InventoryResult,
+  PartDocument,
+  PartParameter,
   SearchPartsInput,
 } from "./types";
 
@@ -26,4 +28,8 @@ export interface EzplmPartsProvider {
   getCustomerMappings(customerId: string): Promise<CustomerPartMappingDto[]>;
   getAlternates(partId: string): Promise<AlternatePart[]>;
   getCompliance(partId: string): Promise<ComplianceResult>;
+  /** 规格参数(SPEC §7 之外的增量;物料详情页「规格参数」页签) */
+  getParameters(partId: string): Promise<PartParameter[]>;
+  /** 库文件 / 数据手册等工程文档(ezPLM 为唯一真源,本系统只读不复制) */
+  getDocuments(partId: string): Promise<PartDocument[]>;
 }

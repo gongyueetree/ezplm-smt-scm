@@ -274,3 +274,7 @@ a { color: inherit; text-decoration: none; }
   .print-doc { max-width: none; }
   @page { margin: 16mm; }
 }
+
+/* ===== 物料型号链接(全站可点开详情)===== */
+.mpn-link { color: var(--brand-700); border-bottom: 1px dashed var(--brand-300); }
+.mpn-link:hover { color: var(--brand); border-bottom-style: solid; background: var(--brand-50); }

@@ -38,12 +38,21 @@ async function createProcurementRfq(page: Page) {
 }
 
 test("采购创建比价单并查询多源报价,推荐与最低价分别标识(SPEC §17-4)", async ({ page }) => {
+  // 配置真实 DigiKey/Mouser 凭据时,每个料号要串行打两次外网 API,
+  // 分批询价耗时远超默认 30s —— 放宽本例超时,而不是把断言改松。
+  test.setTimeout(300_000);
   await ensureBom(page);
   await login(page, "procurement@demo.ezplm.cn");
   await createProcurementRfq(page);
 
   await page.getByRole("button", { name: "查询 DigiKey / Mouser" }).click();
   await expect(page.getByText("多源比价")).toBeVisible({ timeout: 60_000 });
+
+  // B4 分批:表格是逐批填充的,必须等进度跑到「已完成」再断言,
+  // 否则断言的是空表(Mock 模式瞬时完成会掩盖这个竞态)。
+  await expect(page.locator("p", { hasText: "询价进度" })).toContainText("已完成", {
+    timeout: 240_000,
+  });
 
   // 同一料号下有多个来源的合格报价,且标出推荐(按卡片语义定位,不依赖表格序号)
   const table = page.locator(".card", { hasText: "② 多源比价" }).locator("table.tbl");

@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { MpnLink } from "@/components/ui/mpn-link";
 import { CATEGORY_LABELS, type CalculatedLine } from "@/lib/domain/quote-calc";
 import type { QuoteStatusValue } from "@/lib/domain/quote-status";
 
 interface EditorLine {
   id: string;
   lineNo: number;
+  quotedMpn: string | null;
   category: string;
   materialCategory: string | null;
   categoryConfirmed: boolean;
@@ -236,6 +238,7 @@ export function QuoteEditor({
             <thead>
               <tr>
                 <th>行</th>
+                <th>MPN</th>
                 <th>成本分类</th>
                 <th>物料类别</th>
                 <th className="num">数量</th>
@@ -249,7 +252,7 @@ export function QuoteEditor({
             <tbody>
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={10} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     暂无报价行
                   </td>
                 </tr>
@@ -259,6 +262,9 @@ export function QuoteEditor({
                   return (
                     <tr key={l.id} className={!l.categoryConfirmed ? "row-warn" : undefined}>
                       <td className="num">{l.lineNo}</td>
+                      <td className="small">
+                        <MpnLink mpn={l.quotedMpn} />
+                      </td>
                       <td className="small">{CATEGORY_LABELS[l.category as keyof typeof CATEGORY_LABELS] ?? l.category}</td>
                       <td className="small">
                         {l.materialCategory ?? "-"}{" "}

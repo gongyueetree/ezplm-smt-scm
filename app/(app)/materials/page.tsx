@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +127,9 @@ export default async function MaterialsPage({
                   return (
                     <tr key={p.id} className={p.lifecycle === "EOL" || p.lifecycle === "OBSOLETE" ? "row-danger" : undefined}>
                       <td className="mono small">{p.internalPn}</td>
-                      <td className="mono small">{p.mpn ?? "-"}</td>
+                      <td className="small">
+                        <MpnLink mpn={p.mpn} />
+                      </td>
                       <td className="small">{p.manufacturer ?? "-"}</td>
                       <td className="small">{p.description ?? "-"}</td>
                       <td className="small">{p.footprint ?? "-"}</td>

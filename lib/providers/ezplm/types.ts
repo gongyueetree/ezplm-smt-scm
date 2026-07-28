@@ -9,7 +9,8 @@ export const LifecycleSchema = z.enum(["ACTIVE", "NRND", "EOL", "OBSOLETE", "UNK
 export const CanonicalPartSchema = z.object({
   /** ezPLM 侧物料 ID(真源主键) */
   id: z.string().min(1),
-  internalPn: z.string().min(1),
+  /** ezPLM API Key 接口不返回内部料号,故可空 */
+  internalPn: z.string().min(1).nullable(),
   mpn: z.string().nullable(),
   manufacturer: z.string().nullable(),
   description: z.string().nullable(),
@@ -88,3 +89,49 @@ export const ComplianceResultSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type ComplianceResult = z.infer<typeof ComplianceResultSchema>;
+
+// ============================================================
+// 物料详情扩展(SPEC §7 接口清单之外的增量)
+// 依据:客户要求物料详情需含 库文件 / 数据手册 / 基本参数 / 替代料,
+// 对应静态原型 material-detail.html 的「规格参数 / 文档 / 替代料关系」页签。
+// ezPLM 为工程文件的唯一真源,本系统只读。
+// ============================================================
+
+export const PartDocumentKindSchema = z.enum([
+  "DATASHEET",
+  "SYMBOL",
+  "FOOTPRINT",
+  "MODEL_3D",
+  "APP_NOTE",
+  "CERTIFICATE",
+  "OTHER",
+]);
+export type PartDocumentKind = z.infer<typeof PartDocumentKindSchema>;
+
+export const PartDocumentSchema = z.object({
+  id: z.string(),
+  kind: PartDocumentKindSchema,
+  name: z.string(),
+  /** 下载/查看地址;ezPLM 侧地址,本系统不复制文件 */
+  url: z.string().nullable(),
+  version: z.string().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+  updatedAt: z.string().datetime().nullable(),
+});
+export type PartDocument = z.infer<typeof PartDocumentSchema>;
+
+export const PartParameterSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+  unit: z.string().nullable(),
+  /** 分组(如 电气特性 / 封装 / 温度),便于分区展示 */
+  group: z.string().nullable(),
+});
+export type PartParameter = z.infer<typeof PartParameterSchema>;
+
+export const PartDetailSchema = z.object({
+  part: CanonicalPartSchema,
+  parameters: z.array(PartParameterSchema),
+  documents: z.array(PartDocumentSchema),
+});
+export type PartDetail = z.infer<typeof PartDetailSchema>;

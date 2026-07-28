@@ -82,6 +82,14 @@ export function runEzplmProviderContract(
       expect(alts[0].alternate.mpn).toBe("MAX3232EIDR");
     });
 
+    it("getParameters / getDocuments:返回规格参数与工程文档", async () => {
+      const p = await makeProvider();
+      const params = await p.getParameters("ezp-1001");
+      expect(params.length).toBeGreaterThan(0);
+      const docs = await p.getDocuments("ezp-1001");
+      expect(docs.map((d) => d.kind)).toContain("DATASHEET");
+    });
+
     it("getCompliance:返回 RoHS/REACH 状态(允许 null=未知,不伪造合规)", async () => {
       const p = await makeProvider();
       const c = await p.getCompliance("ezp-1003");

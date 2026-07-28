@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { listPurchaseRequests } from "@/lib/server/repositories/purchase-request";
 import { getSession } from "@/lib/server/session";
 import { GtbCalculator } from "./calculator";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,9 @@ export default async function PurchaseRequestPage() {
                 items.map((p) => (
                   <tr key={p.id}>
                     <td style={{ fontWeight: 600 }}>{p.code}</td>
-                    <td className="mono small">{p.mpn ?? "-"}</td>
+                    <td className="small">
+                      <MpnLink mpn={p.mpn} />
+                    </td>
                     <td className="num">{String(p.qty)}</td>
                     <td className="small">{p.status}</td>
                     <td className="small">{p.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>

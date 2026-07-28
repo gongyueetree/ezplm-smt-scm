@@ -14,6 +14,8 @@ import {
   type CustomerPartMappingDto,
   type GetPartByMpnInput,
   type InventoryResult,
+  type PartDocument,
+  type PartParameter,
   type SearchPartsInput,
 } from "./types";
 
@@ -146,6 +148,68 @@ const MOCK_ALTERNATES: Record<string, { altId: string; grade: string; note: stri
   "ezp-1002": [],
 };
 
+/** 规格参数样例(对齐静态原型「规格参数」页签) */
+const MOCK_PARAMETERS: Record<string, PartParameter[]> = {
+  "ezp-1001": [
+    { name: "内核", value: "ARM Cortex-M3", unit: null, group: "核心" },
+    { name: "主频", value: "72", unit: "MHz", group: "核心" },
+    { name: "Flash", value: "64", unit: "KB", group: "存储" },
+    { name: "SRAM", value: "20", unit: "KB", group: "存储" },
+    { name: "工作电压", value: "2.0 ~ 3.6", unit: "V", group: "电气特性" },
+    { name: "工作温度", value: "-40 ~ 85", unit: "℃", group: "环境" },
+    { name: "封装", value: "LQFP-48", unit: null, group: "封装" },
+    { name: "引脚数", value: "48", unit: null, group: "封装" },
+  ],
+  "ezp-1002": [
+    { name: "容值", value: "0.1", unit: "uF", group: "电气特性" },
+    { name: "耐压", value: "50", unit: "V", group: "电气特性" },
+    { name: "介质", value: "X7R", unit: null, group: "电气特性" },
+    { name: "精度", value: "±10", unit: "%", group: "电气特性" },
+    { name: "工作温度", value: "-55 ~ 125", unit: "℃", group: "环境" },
+    { name: "封装", value: "0603", unit: null, group: "封装" },
+  ],
+  "ezp-1003": [
+    { name: "通道数", value: "2 驱动 / 2 接收", unit: null, group: "核心" },
+    { name: "工作电压", value: "5", unit: "V", group: "电气特性" },
+    { name: "数据速率", value: "120", unit: "kbps", group: "电气特性" },
+    { name: "封装", value: "DIP-16", unit: null, group: "封装" },
+  ],
+  "ezp-1004": [
+    { name: "通道数", value: "2 驱动 / 2 接收", unit: null, group: "核心" },
+    { name: "工作电压", value: "3.0 ~ 5.5", unit: "V", group: "电气特性" },
+    { name: "数据速率", value: "250", unit: "kbps", group: "电气特性" },
+    { name: "封装", value: "SOIC-16", unit: null, group: "封装" },
+  ],
+  "ezp-1005": [
+    { name: "阻值", value: "10", unit: "kΩ", group: "电气特性" },
+    { name: "精度", value: "±1", unit: "%", group: "电气特性" },
+    { name: "功率", value: "0.1", unit: "W", group: "电气特性" },
+    { name: "封装", value: "0603", unit: null, group: "封装" },
+  ],
+};
+
+/** 工程文档样例(数据手册 + 库文件,对齐静态原型「文档」页签) */
+const MOCK_DOCUMENTS: Record<string, PartDocument[]> = {
+  "ezp-1001": [
+    { id: "d-1001-ds", kind: "DATASHEET", name: "STM32F103xx Datasheet Rev.17.pdf", url: "https://example.invalid/ezplm/docs/stm32f103-ds.pdf", version: "Rev.17", sizeBytes: 2_411_520, updatedAt: T0 },
+    { id: "d-1001-sym", kind: "SYMBOL", name: "STM32F103C8T6.SchLib", url: "https://example.invalid/ezplm/lib/stm32f103c8t6.schlib", version: "v3", sizeBytes: 48_128, updatedAt: T0 },
+    { id: "d-1001-fp", kind: "FOOTPRINT", name: "LQFP-48_7x7mm.PcbLib", url: "https://example.invalid/ezplm/lib/lqfp48.pcblib", version: "v3", sizeBytes: 96_256, updatedAt: T0 },
+    { id: "d-1001-3d", kind: "MODEL_3D", name: "LQFP-48.step", url: "https://example.invalid/ezplm/lib/lqfp48.step", version: "v1", sizeBytes: 512_000, updatedAt: T0 },
+  ],
+  "ezp-1002": [
+    { id: "d-1002-ds", kind: "DATASHEET", name: "GRM188R71H104KA93D Datasheet.pdf", url: "https://example.invalid/ezplm/docs/grm188.pdf", version: "Rev.C", sizeBytes: 620_000, updatedAt: T0 },
+    { id: "d-1002-fp", kind: "FOOTPRINT", name: "C0603.PcbLib", url: "https://example.invalid/ezplm/lib/c0603.pcblib", version: "v2", sizeBytes: 24_576, updatedAt: T0 },
+  ],
+  "ezp-1003": [
+    { id: "d-1003-ds", kind: "DATASHEET", name: "MAX232 Datasheet.pdf", url: "https://example.invalid/ezplm/docs/max232.pdf", version: "Rev.G", sizeBytes: 780_000, updatedAt: T0 },
+    { id: "d-1003-eol", kind: "CERTIFICATE", name: "停产通知 PCN-2024-118.pdf", url: "https://example.invalid/ezplm/docs/pcn-2024-118.pdf", version: null, sizeBytes: 120_000, updatedAt: T0 },
+  ],
+  "ezp-1004": [
+    { id: "d-1004-ds", kind: "DATASHEET", name: "MAX3232E Datasheet.pdf", url: "https://example.invalid/ezplm/docs/max3232e.pdf", version: "Rev.J", sizeBytes: 810_000, updatedAt: T0 },
+    { id: "d-1004-sym", kind: "SYMBOL", name: "MAX3232EIDR.SchLib", url: "https://example.invalid/ezplm/lib/max3232eidr.schlib", version: "v2", sizeBytes: 36_864, updatedAt: T0 },
+  ],
+};
+
 function norm(s: string): string {
   return s.trim().toUpperCase();
 }
@@ -186,7 +250,9 @@ export class MockEzplmProvider implements EzplmPartsProvider {
           }
         }
         if (query.internalPn) {
-          const part = MOCK_PARTS.find((p) => norm(p.internalPn) === norm(query.internalPn!));
+          const part = MOCK_PARTS.find(
+            (p) => p.internalPn && norm(p.internalPn) === norm(query.internalPn!),
+          );
           if (part) return { query, part, confidence: 0.97 };
         }
         if (query.mpn) {
@@ -214,6 +280,14 @@ export class MockEzplmProvider implements EzplmPartsProvider {
       const alternate = MOCK_PARTS.find((p) => p.id === r.altId);
       return alternate ? [{ partId, alternate, grade: r.grade, note: r.note }] : [];
     });
+  }
+
+  async getParameters(partId: string): Promise<PartParameter[]> {
+    return MOCK_PARAMETERS[partId] ?? [];
+  }
+
+  async getDocuments(partId: string): Promise<PartDocument[]> {
+    return MOCK_DOCUMENTS[partId] ?? [];
   }
 
   async getCompliance(partId: string): Promise<ComplianceResult> {

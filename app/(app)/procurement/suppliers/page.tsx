@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { PolicyForm, SupplierOfferForm } from "./forms";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,9 @@ export default async function SuppliersPage() {
                 offers.map((o) => (
                   <tr key={o.id}>
                     <td className="small">{supplierName.get(o.supplierId ?? "") ?? "-"}</td>
-                    <td className="mono small">{o.mpn}</td>
+                    <td className="small">
+                      <MpnLink mpn={o.mpn} />
+                    </td>
                     <td className="small">{o.manufacturer ?? "-"}</td>
                     <td className="num">{o.moq === null ? "-" : String(o.moq)}</td>
                     <td className="num">{o.spq === null ? "-" : String(o.spq)}</td>

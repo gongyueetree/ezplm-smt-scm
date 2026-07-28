@@ -135,6 +135,7 @@ export default async function QuoteVersionPage({
         lines={version.lines.map((l) => ({
           id: l.id,
           lineNo: l.lineNo,
+          quotedMpn: l.quotedMpn,
           category: l.category,
           materialCategory: l.materialCategory,
           categoryConfirmed: l.categoryConfirmed,

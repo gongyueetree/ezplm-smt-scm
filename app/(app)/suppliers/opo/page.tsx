@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getOpoDashboard } from "@/lib/server/repositories/opo";
 import { getSession } from "@/lib/server/session";
 import { OpoActions } from "./actions";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,9 @@ export default async function OpoPage() {
                   <tr key={l.id}>
                     <td className="mono small">{l.poNo}</td>
                     <td className="num">{l.lineNo}</td>
-                    <td className="mono small">{l.mpn ?? "-"}</td>
+                    <td className="small">
+                      <MpnLink mpn={l.mpn} />
+                    </td>
                     <td className="num">{l.qtyOpen}</td>
                     <td className="small">{l.promiseDate?.slice(0, 10) ?? "-"}</td>
                   </tr>

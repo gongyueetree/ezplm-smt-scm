@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 interface OpoLineRow {
   id: string;
@@ -94,7 +95,9 @@ export function OpoActions({ lines }: { lines: OpoLineRow[] }) {
                   <tr key={l.id}>
                     <td className="mono small">{l.poNo}</td>
                     <td className="num">{l.lineNo}</td>
-                    <td className="mono small">{l.mpn ?? "-"}</td>
+                    <td className="small">
+                      <MpnLink mpn={l.mpn} />
+                    </td>
                     <td className="num">{l.qtyOpen}</td>
                     <td className="small">{l.needDate?.slice(0, 10) ?? "-"}</td>
                     <td className="small">{l.promiseDate?.slice(0, 10) ?? "-"}</td>

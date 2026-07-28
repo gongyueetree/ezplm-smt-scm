@@ -8,6 +8,7 @@ import type { ParsedBomLine } from "@/lib/domain/bom-parse";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -148,10 +149,22 @@ export default async function BomComparePage({
                     </td>
                     <td className="mono small">{e.key}</td>
                     <td className="small">
-                      {e.before ? `${e.before.mpn ?? "-"} ×${e.before.qty ?? "-"}` : "—"}
+                      {e.before ? (
+                        <>
+                          <MpnLink mpn={e.before.mpn} /> ×{e.before.qty ?? "-"}
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="small">
-                      {e.after ? `${e.after.mpn ?? "-"} ×${e.after.qty ?? "-"}` : "—"}
+                      {e.after ? (
+                        <>
+                          <MpnLink mpn={e.after.mpn} /> ×{e.after.qty ?? "-"}
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="small muted">{e.changes.join(";")}</td>
                   </tr>

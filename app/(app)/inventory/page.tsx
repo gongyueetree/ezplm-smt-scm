@@ -10,6 +10,7 @@ import {
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
 
@@ -130,7 +131,9 @@ export default async function InventoryPage() {
               ) : (
                 rows.map((r) => (
                   <tr key={r.partId}>
-                    <td className="mono small">{r.mpn ?? "-"}</td>
+                    <td className="small">
+                      <MpnLink mpn={r.mpn} />
+                    </td>
                     <td className="small">{r.dateCode ?? <span className="muted">未知</span>}</td>
                     <td className="num">{r.qtyOnHand}</td>
                     <td className="num">

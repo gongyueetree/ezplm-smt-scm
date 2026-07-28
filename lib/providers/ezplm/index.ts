@@ -29,7 +29,9 @@ export function getEzplmPartsProvider(): EzplmPartsProvider {
 }
 
 export { MockEzplmProvider } from "./mock";
-export { HttpEzplmProvider, DEFAULT_PATHS } from "./http";
+export { HttpEzplmProvider } from "./http";
+export { EZPLM_PATHS } from "./api-types";
+export type { EzplmApiPart, EzplmReferenceDesign } from "./api-types";
 export { ProviderError } from "./provider";
 export type { EzplmPartsProvider } from "./provider";
 export * from "./types";

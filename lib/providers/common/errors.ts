@@ -16,6 +16,7 @@ export type ProviderErrorKind =
   | "rate_limited"
   | "quota_exceeded"
   | "auth"
+  | "not_supported"
   | "not_found";
 
 export interface ProviderErrorOptions {

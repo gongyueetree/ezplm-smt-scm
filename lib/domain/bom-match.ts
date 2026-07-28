@@ -256,7 +256,7 @@ export async function matchBomLine(
           source: "EZPLM",
           confidence: SOURCE_CONFIDENCE.EZPLM,
           partId: part.id,
-          mpn: part.mpn ?? part.internalPn,
+          mpn: part.mpn ?? part.internalPn ?? "(无 MPN)",
           manufacturer: part.manufacturer,
           footprint: part.footprint,
           lifecycle: part.lifecycle,
