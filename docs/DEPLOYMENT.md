@@ -47,6 +47,15 @@ Vercel 仅用于团队开发与演示;**客户 UAT 与生产走第三节的 Dock
 
 ## 三、Docker(客户 UAT / 生产,国内主机)
 
+> ⚠ **验证状态**:Dockerfile 与 compose **尚未经真实 `docker build` 验证**(开发机无 Docker)。
+> 已验证的部分:`BUILD_STANDALONE=1` 产出的 `.next/standalone/server.js` 可独立启动
+> (实测 `/login` 200、受保护页 307)。
+> 已发现并修复的一处真实缺陷:standalone 的 `node_modules` **不含 prisma CLI 与 `.bin`**,
+> 而 pnpm 的 `.bin/prisma` wrapper 硬编码 `.pnpm/` 绝对路径 —— 只复制 `prisma`/`@prisma`
+> 会让容器内 `migrate deploy` 必然失败(已用本地模拟复现报错)。现改为整棵复制构建期依赖树。
+> **首次部署前请务必在有 Docker 的机器上跑一次 `docker build` 与 `docker compose up` 验证。**
+
+
 ### 3.1 本地一体验证
 
 ```bash

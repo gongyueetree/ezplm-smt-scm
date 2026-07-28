@@ -47,17 +47,24 @@ ENV HOSTNAME=0.0.0.0
 # 非 root 运行
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
-# standalone 产物已包含裁剪后的 node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# migrate deploy 所需(schema、migrations 与 prisma CLI)
+# ---- 依赖树:为什么用完整 node_modules 而不是 standalone 的裁剪版 ----
+# standalone 的 node_modules **不含 prisma CLI 也不含 .bin**(实测:只有 @prisma/next/react/typescript),
+# 而 pnpm 的 node_modules/.bin/prisma 是一个 wrapper 脚本,内部硬编码了
+# /app/node_modules/.pnpm/<hash>/... 的绝对路径。
+# 因此只复制 node_modules/prisma + @prisma 会让 `prisma migrate deploy` 在容器内必然失败
+# (符号链接指向的 .pnpm 子树不存在)。
+# 取舍:改为整棵复制构建期的 node_modules(镜像变大约数百 MB),换取迁移可靠可用;
+# 先删掉裁剪版再复制,避免"真实目录 vs 符号链接"同名冲突导致的不确定行为。
+RUN rm -rf ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# migrate deploy 所需的 schema 与 migrations
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin ./node_modules/.bin
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
