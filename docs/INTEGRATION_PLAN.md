@@ -182,6 +182,7 @@ PR9  Playwright 全量 E2E + 双轨部署(Vercel + Docker→国内)+ 文档
 
 | 日期 | 偏差 | 决策 | 影响 |
 |---|---|---|---|
+| 2026-07-27 | **DigiKey/Mouser API 凭据到位**:申请完成并经人工测试可用(第五节风险项 1 与决策 3 的前置事项解除) | PR4 外部依赖解除,可做真实联调;真实 Key 仅存 .env.local(不进版本库/不进对话),代码经环境变量读取,日志与错误信息禁止输出 Key 明文 | 当前唯一阻塞项仅剩 GitHub 账号申诉(push/Preview);ezPLM API 维持"不阻塞开发、只阻塞最终联调" |
 | 2026-07-27 | **Prisma 版本固定 7.9.0**:7.9.1 的引擎依赖(@prisma/fetch-engine)npmmirror 未同步,国内镜像无法安装 | 固定 prisma / @prisma/client / @prisma/adapter-pg = 7.9.0;镜像同步后评估升级 | 客户生产走国内主机,镜像可安装性为硬需求;升级前需复测 migrate/generate |
 | 2026-07-27 | **GitHub 账号 eehubio suspended**:push 与 Vercel Preview 阻塞 | 阻塞期间每个 PR 完成时 `git bundle create --all` 备份到仓库外;push 恢复后先 `git fetch` 核对远端再推 | 本地 feature/nextjs-agent-v1 为唯一副本;Preview URL 暂无法提供,以本地验证代替 |
 | 2026-07-27 | **SPEC 级缺口备案(评审备案 F)**:SPEC §4 的 43 模型不含工单/齐料需求数据,但 §2 路由含 /shortage、/kitting | PR8 前需决策:新增只读缓存表(如 WorkOrderDemandSnapshot)还是经 Provider 实时取;数据主权归 ezPLM/ERP 侧不变;现阶段不加表 | /shortage、/kitting 页面在数据来源决策前只能做占位/导入形态;GTB 的"需求"输入暂以导入或人工录入为准 |
