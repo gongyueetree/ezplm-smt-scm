@@ -3,6 +3,12 @@
  * 密码:SEED_DEMO_PASSWORD 环境变量,缺省 demo1234(仅本地/预览;生产禁跑本种子)。
  * 所有写操作按纪律记 AuditLog(userId=管理层演示账号)。
  */
+// 自足加载环境变量:不依赖 prisma.config.ts 的副作用(直接 tsx 运行也要能跑)
+// .env.local 优先于 .env(与 Next.js 约定一致;dotenv 不覆盖已存在的变量)
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: ".env.local", quiet: true });
+loadEnv({ quiet: true });
+
 import { PrismaClient, RoleName } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../lib/auth/password";
@@ -79,6 +85,18 @@ async function main() {
       where: { tenantId_code: { tenantId: tenant.id, code: c.code } },
       update: { name: c.name },
       create: { tenantId: tenant.id, code: c.code, name: c.name },
+    });
+  }
+
+  // 示例供应商(priority 越小越优先,参与 rankOffers)
+  for (const s of [
+    { code: "SUP-A", name: "华强北电子(示例)", priority: 10 },
+    { code: "SUP-B", name: "深圳market代理(示例)", priority: 50 },
+  ]) {
+    await prisma.supplier.upsert({
+      where: { tenantId_code: { tenantId: tenant.id, code: s.code } },
+      update: { name: s.name, priority: s.priority },
+      create: { tenantId: tenant.id, ...s, defaultCurrency: "CNY" },
     });
   }
 

@@ -212,6 +212,32 @@ export interface ProcurementProgress {
   canSubmitToPm: boolean;
 }
 
+/** 落库视图:只有异常标记与结论,不含替代报价明细 */
+export interface PersistedFlagLine {
+  lineId: string;
+  wasFlagged: boolean;
+  resolution: FlagResolutionValue | null;
+}
+
+/**
+ * 落库视图的流程状态(两阶段设计的第二阶段)。
+ *
+ * 第一阶段:写入结论时经 validateResolution 完整校验(替代报价七要素、新价重过校验),
+ *          校验不通过根本写不进去,且过程记 AuditLog;
+ * 第二阶段:提交前只需统计「原始异常行是否都已有结论」——
+ *          不重复校验替代报价,也**绝不**为了让校验通过而伪造替代数据。
+ */
+export function persistedProgress(lines: readonly PersistedFlagLine[]): ProcurementProgress {
+  const flagged = lines.filter((l) => l.wasFlagged);
+  const unresolved = flagged.filter((l) => !l.resolution).length;
+  return {
+    totalLines: lines.length,
+    flaggedLines: flagged.length,
+    unresolved,
+    canSubmitToPm: unresolved === 0,
+  };
+}
+
 /** 采购侧流程状态(以未处理数驱动,不用"当前是否超线") */
 export function procurementProgress(
   lines: readonly FlaggedLineState[],

@@ -1,0 +1,453 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+
+interface QuoteLine {
+  id: string;
+  mpn: string;
+  manufacturer: string | null;
+  unitPrice: string;
+  currency: string;
+  leadTimeDays: number | null;
+  wasFlagged: boolean;
+  flagReasons: { code: string; detail: string }[];
+  resolution: string | null;
+  resolutionNote: string | null;
+  selected: boolean;
+  selectionReason: string | null;
+  previousLineId: string | null;
+  supplierId: string;
+}
+
+interface SourcingResult {
+  bomLineId: string;
+  mpn: string | null;
+  manufacturer: string | null;
+  demandQty: number;
+  totalOffers: number;
+  recommended: RankedView | null;
+  lowestTotal: RankedView | null;
+  eligible: RankedView[];
+  excluded: { offer: RankedView; reason: string }[];
+}
+
+interface RankedView {
+  rank: number;
+  purchaseQty: number;
+  comparable: boolean;
+  stockCovered: boolean;
+  leadTimeDays: number | null;
+  score: { total: number };
+  offer: {
+    provider: string;
+    providerPartNumber: string | null;
+    manufacturer: string | null;
+    mpn: string;
+    currency: string;
+    stock: number | null;
+    lifecycle: string;
+    sourceUpdatedAt: string | null;
+  };
+}
+
+const THRESHOLDS = { currency: "CNY", maxUnitPrice: "10", maxLeadTimeDays: 30 };
+
+export function SourcingPanel({
+  procurementRfqId,
+  lines,
+  suppliers,
+  canSubmit,
+  alreadySubmitted,
+}: {
+  procurementRfqId: string;
+  lines: QuoteLine[];
+  suppliers: { id: string; code: string; name: string }[];
+  canSubmit: boolean;
+  alreadySubmitted: boolean;
+}) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [results, setResults] = useState<SourcingResult[] | null>(null);
+  const [degraded, setDegraded] = useState<{ provider: string; kind: string }[]>([]);
+
+  async function runSourcing() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/procurement/rfq/${procurementRfqId}/sourcing`);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "询价失败");
+        return;
+      }
+      setResults(body.results as SourcingResult[]);
+      setDegraded(body.degraded ?? []);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importQuote() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setError("请选择线下供应商报价文件");
+      return;
+    }
+    if (!supplierId) {
+      setError("请选择供应商");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("supplierId", supplierId);
+      fd.append("currency", THRESHOLDS.currency);
+      fd.append("maxUnitPrice", THRESHOLDS.maxUnitPrice);
+      fd.append("maxLeadTimeDays", String(THRESHOLDS.maxLeadTimeDays));
+      const res = await fetch(`/api/procurement/rfq/${procurementRfqId}/quotes`, {
+        method: "POST",
+        body: fd,
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "导入失败");
+        return;
+      }
+      if (fileRef.current) fileRef.current.value = "";
+      setInfo(`已导入 ${body.importedLines} 行报价,异常已在落库时固化`);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resolve(lineId: string, resolution: string) {
+    setError(null);
+    let note: string | null = null;
+    let replacement: Record<string, unknown> | null = null;
+
+    if (resolution === "ACCEPT") {
+      note = window.prompt("接受异常必须写明理由:");
+      if (note === null) return;
+    } else {
+      const price = window.prompt(
+        resolution === "SWITCH_SOURCE" ? "新供应商的单价:" : "新单价:",
+      );
+      if (price === null) return;
+      replacement = {
+        supplierId: resolution === "SWITCH_SOURCE" ? (window.prompt("新供应商 ID:") ?? "") : "",
+        unitPrice: price,
+        currency: THRESHOLDS.currency,
+        moq: resolution === "SWITCH_SOURCE" ? Number(window.prompt("MOQ:") ?? "0") : 0,
+        spq: resolution === "SWITCH_SOURCE" ? Number(window.prompt("SPQ:") ?? "0") : 0,
+        leadTimeDays: Number(window.prompt("Lead Time(天):") ?? "0"),
+        quotedAt: new Date().toISOString(),
+      };
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/procurement/lines/${lineId}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resolution,
+          resolutionNote: note,
+          replacement,
+          thresholds: THRESHOLDS,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail = (body?.errors ?? []).map((e: { message: string }) => e.message).join(";");
+        setError(detail || body?.error || "处理失败");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function select(lineId: string, recommendedKey: string | null) {
+    setError(null);
+    let reason: string | null = null;
+    if (recommendedKey && recommendedKey !== lineId) {
+      reason = window.prompt("选择与系统推荐不一致,必须填写理由:");
+      if (reason === null) return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/procurement/lines/${lineId}/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendedKey, reason }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "选定失败");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function feedback() {
+    setError(null);
+    const note = window.prompt("反馈 PM 的说明(可选):") ?? "";
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/procurement/rfq/${procurementRfqId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "反馈失败");
+        return;
+      }
+      setInfo("已反馈 PM");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      {error ? (
+        <div className="banner warn" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {info ? (
+        <div className="banner info" role="status">
+          {info}
+        </div>
+      ) : null}
+
+      <Card title="① 询价与线下报价导入">
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <button className="btn ai" onClick={runSourcing} disabled={busy}>
+            {busy ? "查询中…" : "查询 DigiKey / Mouser"}
+          </button>
+          <label className="fld" style={{ marginBottom: 0, minWidth: 180 }}>
+            <span>线下供应商</span>
+            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} · {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="fld" style={{ marginBottom: 0, flex: 1, minWidth: 220 }}>
+            <span>线下报价文件(CSV/XLSX)</span>
+            <input ref={fileRef} type="file" />
+          </label>
+          <button className="btn" onClick={importQuote} disabled={busy}>
+            导入线下报价
+          </button>
+        </div>
+        <p className="small muted" style={{ marginTop: 10 }}>
+          价格线 {THRESHOLDS.currency} {THRESHOLDS.maxUnitPrice} · 交期线{" "}
+          {THRESHOLDS.maxLeadTimeDays} 天(演示阈值;正式阈值由采购策略维护)。
+          导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
+        </p>
+        {degraded.length > 0 ? (
+          <div className="banner warn" style={{ marginTop: 10 }}>
+            外部数据源降级(不影响其余报价):
+            {degraded.map((d, i) => (
+              <span key={i}>
+                {" "}
+                {d.provider}/{d.kind}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </Card>
+
+      {results ? (
+        <Card title="② 多源比价" sub={`${results.length} 个料号`} flush>
+          <div className="tbl-scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>料号</th>
+                  <th className="num">需求</th>
+                  <th>合格报价(排名 · 来源 · 制造商 · 采购量 · 币种 · 库存 · 生命周期 · 数据更新)</th>
+                  <th>被排除</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.bomLineId}>
+                    <td className="small">
+                      <div className="mono">{r.mpn}</div>
+                      <div className="muted">{r.manufacturer ?? "-"}</div>
+                    </td>
+                    <td className="num">{r.demandQty}</td>
+                    <td className="small">
+                      {r.eligible.length === 0 ? (
+                        <span className="muted">无合格报价</span>
+                      ) : (
+                        r.eligible.slice(0, 4).map((e, i) => {
+                          const isRec = r.recommended?.offer.providerPartNumber === e.offer.providerPartNumber;
+                          const isLow = r.lowestTotal?.offer.providerPartNumber === e.offer.providerPartNumber;
+                          return (
+                            <div key={i} style={{ marginBottom: 4 }}>
+                              <Badge tone="blue">#{e.rank}</Badge> {e.offer.provider} ·{" "}
+                              {e.offer.manufacturer ?? "-"} · {e.purchaseQty} 件 · {e.offer.currency} ·
+                              库存 {e.offer.stock ?? "未知"} · {e.offer.lifecycle} · 数据更新{" "}
+                              {e.offer.sourceUpdatedAt?.slice(0, 10) ?? "未知"}{" "}
+                              {isRec ? <Badge tone="green">推荐</Badge> : null}
+                              {isLow ? <Badge tone="amber">最低总价</Badge> : null}
+                            </div>
+                          );
+                        })
+                      )}
+                    </td>
+                    <td className="small muted">
+                      {r.excluded.length === 0
+                        ? "-"
+                        : r.excluded.slice(0, 3).map((x, i) => (
+                            <div key={i}>
+                              {x.offer.offer.provider}:{x.reason}
+                            </div>
+                          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+
+      <Card
+        title="③ 线下报价行与异常处理"
+        sub="原始异常集合固化;结论默认空,逐项人工选"
+        flush
+      >
+        <div className="tbl-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>料号</th>
+                <th className="num">单价</th>
+                <th className="num">交期</th>
+                <th>异常</th>
+                <th>处理结论</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                    暂无线下报价,使用上方导入
+                  </td>
+                </tr>
+              ) : (
+                lines.map((l) => (
+                  <tr key={l.id} className={l.wasFlagged && !l.resolution ? "row-danger" : undefined}>
+                    <td className="small">
+                      <div className="mono">{l.mpn}</div>
+                      <div className="muted">{l.manufacturer ?? "-"}</div>
+                      {l.previousLineId ? <Badge tone="purple">换货源新行</Badge> : null}
+                    </td>
+                    <td className="num small">
+                      {l.currency} {l.unitPrice}
+                    </td>
+                    <td className="num small">{l.leadTimeDays ?? "-"}</td>
+                    <td className="small">
+                      {l.wasFlagged ? (
+                        <>
+                          <Badge tone="red">原始异常</Badge>
+                          <div className="muted" style={{ marginTop: 2 }}>
+                            {l.flagReasons.map((r) => r.detail).join(";")}
+                          </div>
+                        </>
+                      ) : (
+                        <Badge tone="green">正常</Badge>
+                      )}
+                    </td>
+                    <td className="small">
+                      {l.resolution ? (
+                        <>
+                          <Badge tone="green">{l.resolution}</Badge>
+                          {l.resolutionNote ? (
+                            <div className="muted">{l.resolutionNote}</div>
+                          ) : null}
+                        </>
+                      ) : l.wasFlagged ? (
+                        <Badge tone="gray">待处理</Badge>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {l.wasFlagged && !l.resolution ? (
+                          <>
+                            <button className="btn xs" disabled={busy} onClick={() => resolve(l.id, "ACCEPT")}>
+                              接受
+                            </button>
+                            <button className="btn xs" disabled={busy} onClick={() => resolve(l.id, "ADJUST_PRICE")}>
+                              调价
+                            </button>
+                            <button
+                              className="btn xs"
+                              disabled={busy}
+                              onClick={() => resolve(l.id, "SWITCH_SOURCE")}
+                            >
+                              换货源
+                            </button>
+                          </>
+                        ) : null}
+                        <button
+                          className={`btn xs ${l.selected ? "primary" : ""}`}
+                          disabled={busy}
+                          onClick={() => select(l.id, null)}
+                        >
+                          {l.selected ? "✓ 已选定" : "选定"}
+                        </button>
+                      </div>
+                      {l.selectionReason ? (
+                        <div className="small muted" style={{ marginTop: 2 }}>
+                          理由:{l.selectionReason}
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="④ 反馈 PM">
+        <p className="small muted" style={{ marginBottom: 10 }}>
+          必须<b>全部原始异常行</b>都已给出处理结论后方可反馈(不按当前是否仍超线判断)。
+        </p>
+        <button className="btn primary" onClick={feedback} disabled={busy || !canSubmit || alreadySubmitted}>
+          {alreadySubmitted ? "已反馈 PM" : canSubmit ? "反馈给 PM" : "尚有未处理异常,不可反馈"}
+        </button>
+      </Card>
+    </div>
+  );
+}
