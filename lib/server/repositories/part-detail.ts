@@ -23,6 +23,7 @@ import type {
   PartParameter,
 } from "@/lib/providers/ezplm/types";
 import type { EzplmReferenceDesign } from "@/lib/providers/ezplm/api-types";
+import { effectiveDetailTtlSeconds } from "@/lib/providers/ezplm/file-token";
 import { prisma } from "@/lib/server/db";
 import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 
@@ -146,9 +147,15 @@ async function loadFromEzplmCached(
       referenceDesigns,
     };
 
-    // 规格/文档属"规格类"数据,按 SPEC §15 用 24h TTL
-    const ttl = CACHE_TTL_SECONDS.SPEC_LIFECYCLE_COMPLIANCE;
+    // 规格/文档属"规格类"数据,按 SPEC §15 用 24h TTL;
+    // 但库文件地址是短时签名的(约 3h),TTL 必须被它压住 ——
+    // 否则缓存还"新鲜",里面的符号/封装/3D 地址已经 401 了。
     const fetchedAt = new Date();
+    const ttl = effectiveDetailTtlSeconds(
+      CACHE_TTL_SECONDS.SPEC_LIFECYCLE_COMPLIANCE,
+      detail.documents.map((d) => d.url),
+      fetchedAt,
+    );
     await prisma.externalPartSnapshot.upsert({
       where: {
         tenantId_source_cacheKey: { tenantId, source: ProviderType.EZPLM, cacheKey },

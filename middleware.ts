@@ -24,6 +24,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // 排除静态资源;页面与 API 全部经过会话检查
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|ico)$).*)"],
+  // 排除静态资源(含 public/vendor 下自发的 WASM —— 走鉴权会被 307 到登录页,
+  // 3D 内核就永远加载不出来);页面与 API 全部经过会话检查
+  matcher: ["/((?!_next/static|_next/image|vendor/|favicon.ico|.*\\.(?:svg|png|jpg|ico|wasm)$).*)"],
 };

@@ -20,11 +20,14 @@ export const dynamic = "force-dynamic";
 const SOURCES = [
   {
     key: "ezPLM",
-    scope: "物料主数据 · 库存 · 在途 · 客户料号映射(只读真源)",
+    // 手册确认:API Key 查询接口只有 parts 与 reference-designs 两类;
+    // 库存 / 在途 / 客户料号映射 / 替代料 / 合规**接口侧不提供**,不得写进覆盖范围。
+    scope:
+      "物料主数据 · 规格参数 · 库文件(符号/封装/3D)· 数据手册 · 参考设计(只读真源);接口不提供库存/在途/客户料号映射/替代料/合规",
     mode: ezplmProviderMode,
     pr: "PR3",
     /** 联调记录:null = 尚未与真实环境联调 */
-    verified: null,
+    verified: "2026-07-28 签名接口联调通过(物料详情页取真实数据)",
   },
   {
     key: "DigiKey",
@@ -218,7 +221,8 @@ export default async function MaterialsPage({
           <span>
             Provider 层(接口 / Mock / Http / 鉴权 / 限流 / 熔断重试 / 缓存键 / 合同测试)已交付。
             DigiKey 与 Mouser 已于 2026-07-27 由 <code>pnpm smoke:external</code> 冒烟联调通过;
-            ezPLM 仍为待联调。
+            ezPLM 已于 2026-07-28 按《API 密钥查询接口用户操作手册》完成 HMAC 签名联调,
+            物料详情页取到的是真实数据。
             {anyHttp
               ? "本环境已配置凭据,查询走真实 API。"
               : "本环境未配置凭据,页面数据来自本地样例,不代表真实供应商行情。"}

@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, Suspense } from "react";
 import Link from "next/link";
 import { BackLink } from "@/components/shell/back-link";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,9 @@ import { MpnLink } from "@/components/ui/mpn-link";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
 import { getSession } from "@/lib/server/session";
 import { CandidateFinder } from "./candidate-finder";
+import { LibraryPreview, LibraryPreviewFallback } from "./library-preview";
+import { LiveOffers } from "./live-offers";
+import { Model3D } from "./model-3d";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +49,8 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
   const mpn = decodeURIComponent(raw);
   const session = (await getSession())!;
   const d = await getPartDetail(session.tenantId, mpn);
+
+  const model3d = d.documents.find((x) => x.kind === "MODEL_3D") ?? null;
 
   const groups = new Map<string, typeof d.parameters>();
   for (const p of d.parameters) {
@@ -214,8 +219,45 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
         )}
       </Card>
 
-      {/* ③ 文档与库文件 */}
-      <Card title="③ 数据手册与库文件" sub={`${d.documents.length} 份`} flush>
+      {/* ③ 在线预览:原理图符号 / PCB 封装 / 3D 模型 */}
+      <Card
+        title="③ 原理图符号与 PCB 封装(在线预览)"
+        sub="由 ezPLM 库文件解析绘制"
+        flush
+      >
+        {d.documents.some((x) => x.kind === "SYMBOL" || x.kind === "FOOTPRINT") ? (
+          <Suspense fallback={<LibraryPreviewFallback />}>
+            <LibraryPreview documents={d.documents} />
+          </Suspense>
+        ) : (
+          <p className="small muted" style={{ padding: 16 }}>
+            ezPLM 未提供该物料的符号/封装库文件。
+          </p>
+        )}
+      </Card>
+
+      {/* ④ 3D 模型 */}
+      <Card title="④ 3D 模型(STEP 在线预览)" sub="本站自发的 OCCT 内核解析,不走 CDN" flush>
+        {model3d ? (
+          <Model3D mpn={mpn} fileName={model3d.name} />
+        ) : (
+          <p className="small muted" style={{ padding: 16 }}>
+            ezPLM 未提供该物料的 3D 模型文件。
+          </p>
+        )}
+      </Card>
+
+      {/* ⑤ 价格与库存 */}
+      <Card
+        title="⑤ 分销商价格与库存(DigiKey / Mouser)"
+        sub="经 15 分钟缓存;显示数据更新时间,非实时行情"
+        flush
+      >
+        <LiveOffers mpn={mpn} manufacturer={d.part?.manufacturer ?? null} />
+      </Card>
+
+      {/* ⑥ 文档与库文件 */}
+      <Card title="⑥ 数据手册与库文件" sub={`${d.documents.length} 份`} flush>
         {d.documents.length === 0 ? (
           <p className="small muted" style={{ padding: 16 }}>
             ezPLM 未返回该物料的文档。
@@ -258,8 +300,8 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
         )}
       </Card>
 
-      {/* ④ 替代料 */}
-      <Card title="④ 替代料" sub={`${d.alternates.length} 条 · 每条标注来源`} flush>
+      {/* ⑦ 替代料 */}
+      <Card title="⑦ 替代料" sub={`${d.alternates.length} 条 · 每条标注来源`} flush>
         <div style={{ padding: "10px 16px 0" }}>
           <p className="small muted">
             ⚠ ezPLM API Key 查询接口<b>不提供替代料能力</b>,此处为
@@ -308,9 +350,9 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
         <CandidateFinder mpn={mpn} />
       </Card>
 
-      {/* ⑤ 供应与库存 */}
+      {/* ⑧ 供应与库存 */}
       <Card
-        title="⑤ 供应与库存"
+        title="⑧ 供应与库存"
         sub="本系统内数据(库存快照 / OPO 采购行),非 ERP 实时"
         flush
       >
@@ -354,9 +396,9 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
         </div>
       </Card>
 
-      {/* ⑥ 参考设计(ezPLM 独有能力) */}
+      {/* ⑨ 参考设计(ezPLM 独有能力) */}
       {d.referenceDesigns.length > 0 ? (
-        <Card title="⑥ 参考设计" sub={`${d.referenceDesigns.length} 个 · 来自 ezPLM`} flush>
+        <Card title="⑨ 参考设计" sub={`${d.referenceDesigns.length} 个 · 来自 ezPLM`} flush>
           <div className="tbl-scroll">
             <table className="tbl">
               <thead>
