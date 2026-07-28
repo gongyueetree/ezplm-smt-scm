@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { SvgViewport } from "@/components/ui/svg-viewport";
 import { parseKicadFootprint, renderFootprintSvg } from "@/lib/domain/kicad-footprint";
 import { parseKicadSymbol, renderSymbolSvg } from "@/lib/domain/kicad-symbol";
 import type { PartDocument } from "@/lib/providers/ezplm/types";
@@ -59,29 +60,28 @@ function Pane({
           </a>
         ) : null}
       </div>
-      <div
-        style={{
-          border: "1px solid var(--gray-200)",
-          borderRadius: 8,
-          padding: 10,
-          background: "var(--gray-50)",
-          minHeight: 160,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "auto",
-        }}
-      >
-        {"error" in result ? (
+      {"error" in result ? (
+        <div
+          style={{
+            border: "1px solid var(--gray-200)",
+            borderRadius: 8,
+            padding: 10,
+            background: "var(--gray-50)",
+            minHeight: 160,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <span className="small muted" style={{ textAlign: "center" }}>
             无法在线渲染:{result.error}
             {downloadUrl ? <br /> : null}
             {downloadUrl ? "可下载源文件用 KiCad 打开。" : null}
           </span>
-        ) : (
-          <div style={{ width: "100%" }} dangerouslySetInnerHTML={{ __html: result.svg }} />
-        )}
-      </div>
+        </div>
+      ) : (
+        <SvgViewport html={result.svg} label={title} />
+      )}
       {!("error" in result) && result.skipped > 0 ? (
         <p className="small muted" style={{ marginTop: 4 }}>
           有 {result.skipped} 个图元未能识别,未参与渲染(下载源文件可看到完整内容)。

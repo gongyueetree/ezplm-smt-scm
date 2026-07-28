@@ -87,6 +87,43 @@ test("在线预览:原理图符号与 PCB 封装渲染成 SVG,失败时如实报
   await expect(card.getByText(/与 KiCad 中的显示可能存在差异/)).toBeVisible();
 });
 
+test("在线预览:符号与封装可缩放、拖动、双击复位,且滚轮不带动页面滚动", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "engineering@demo.ezplm.cn");
+  await page.goto("/materials/STM32F103C8T6");
+
+  const card = page.locator(".card", { hasText: "原理图符号与 PCB 封装" });
+  const viewport = card.locator(".svg-viewport").first();
+  await expect(viewport).toBeVisible({ timeout: 120_000 });
+  const inner = card.locator(".svg-viewport-inner").first();
+  const transform = () => inner.evaluate((el) => (el as HTMLElement).style.transform);
+
+  // 按钮缩放
+  await card.getByRole("button", { name: /^放大/ }).first().click();
+  await expect.poll(transform).toContain("scale(1.3)");
+
+  await card.getByRole("button", { name: /^缩小/ }).first().click();
+  await expect.poll(transform).toContain("scale(1)");
+
+  // 滚轮缩放:必须缩放图纸而**不是**滚动页面
+  const box = (await viewport.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(transform).not.toContain("scale(1)");
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+  // 拖动平移
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(transform).not.toContain("translate(0px, 0px)");
+
+  // 双击复位
+  await viewport.dblclick();
+  await expect.poll(transform).toBe("translate(0px, 0px) scale(1)");
+});
+
 test("3D 模型:提供在线预览入口与源文件下载,且说明体积代价", async ({ page }) => {
   await login(page, "engineering@demo.ezplm.cn");
   await page.goto("/materials/STM32F103C8T6");
