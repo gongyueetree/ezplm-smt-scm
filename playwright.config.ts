@@ -21,10 +21,15 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+  /**
+   * 跑生产构建而非 dev server:
+   * dev 模式下多 worker 并发首次访问会触发按需编译争用,产生与产品无关的超时;
+   * 生产构建同时更接近真实交付形态。本地调试可用 E2E_DEV=1 切回 dev。
+   */
   webServer: {
-    command: "pnpm dev",
+    command: process.env.E2E_DEV ? "pnpm dev" : "pnpm build && pnpm start",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 300_000,
   },
 });

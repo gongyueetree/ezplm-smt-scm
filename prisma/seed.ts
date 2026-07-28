@@ -70,6 +70,71 @@ async function main() {
     created.push(`${u.email} [${u.role}]`);
   }
 
+  // 示例客户(联创科技等为示例数据中的下游客户)
+  for (const c of [
+    { code: "LC", name: "联创科技(深圳)" },
+    { code: "HX", name: "宏兴电子" },
+  ]) {
+    await prisma.customer.upsert({
+      where: { tenantId_code: { tenantId: tenant.id, code: c.code } },
+      update: { name: c.name },
+      create: { tenantId: tenant.id, code: c.code, name: c.name },
+    });
+  }
+
+  // 示例物料主数据(供 BOM 匹配演示;真实数据以 ezPLM 为唯一真源)
+  const demoParts = [
+    {
+      internalPn: "QC-IC-0001",
+      mpn: "STM32F103C8T6",
+      manufacturer: "STMicroelectronics",
+      description: "MCU ARM Cortex-M3 64KB Flash LQFP-48",
+      footprint: "LQFP-48",
+      lifecycle: "ACTIVE" as const,
+    },
+    {
+      internalPn: "QC-RC-0104",
+      mpn: "GRM188R71H104KA93D",
+      manufacturer: "Murata",
+      description: "CAP CER 0.1uF 50V X7R 0603",
+      footprint: "0603",
+      lifecycle: "ACTIVE" as const,
+    },
+    {
+      internalPn: "QC-IC-0077",
+      mpn: "MAX232CPE",
+      manufacturer: "Analog Devices",
+      description: "RS-232 收发器 DIP-16",
+      footprint: "DIP-16",
+      lifecycle: "EOL" as const,
+    },
+  ];
+  for (const p of demoParts) {
+    await prisma.part.upsert({
+      where: { tenantId_internalPn: { tenantId: tenant.id, internalPn: p.internalPn } },
+      update: {},
+      create: { tenantId: tenant.id, ...p, syncedAt: new Date("2026-07-20T08:00:00Z") },
+    });
+  }
+
+  await prisma.customerPartMapping.upsert({
+    where: {
+      tenantId_customerId_customerPn: {
+        tenantId: tenant.id,
+        customerId: "LC",
+        customerPn: "LC-M-3201",
+      },
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      customerId: "LC",
+      customerPn: "LC-M-3201",
+      mpn: "STM32F103C8T6",
+      manufacturer: "STMicroelectronics",
+    },
+  });
+
   const admin = await prisma.user.findUniqueOrThrow({
     where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.ezplm.cn" } },
   });

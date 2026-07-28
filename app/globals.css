@@ -204,6 +204,7 @@ a { color: inherit; text-decoration: none; }
 .btn.ai:hover { background: var(--ai-600); }
 .btn.ghost { border-color: transparent; color: var(--gray-500); }
 .btn.sm { padding: 4px 10px; font-size: 11.5px; }
+.btn.xs { padding: 3px 9px; font-size: 11px; }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
 
 /* ===== Tabs ===== */
