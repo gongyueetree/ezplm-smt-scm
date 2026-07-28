@@ -13,8 +13,19 @@ interface ImportResponse {
   mapping: { fields: Record<string, number>; headerRowIndex: number; confidence: number; unmapped: { header: string }[] };
   uniqueMpns: number;
   usesBatching: boolean;
-  archivedOnly: string[];
+  archivedOnly: { fileName: string; reason: string }[];
+  extractions: { fileName: string; source: string; isDraft: boolean; note?: string }[];
+  /** spreadsheet(表格)/ pdf-text(PDF 文本层,确定性)/ ocr(模型转写草稿) */
+  source: string;
+  isDraft: boolean;
+  sourceNote?: string;
 }
+
+const SOURCE_LABEL: Record<string, { text: string; tone: "green" | "blue" | "amber" }> = {
+  spreadsheet: { text: "表格解析(确定性)", tone: "green" },
+  "pdf-text": { text: "PDF 文本层重建(确定性)", tone: "blue" },
+  ocr: { text: "模型转写草稿 · 须逐行人工核对", tone: "amber" },
+};
 
 interface Progress {
   total: number;
@@ -145,9 +156,28 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
             title="③ 导入校验"
             sub={`${result.job.totalLines} 行 · ${result.uniqueMpns} 个唯一 MPN · ${result.validation.errorCount} 错误 / ${result.validation.warningCount} 提示`}
           >
+            {result.source ? (
+              <div style={{ marginBottom: 10 }}>
+                <Badge tone={SOURCE_LABEL[result.source]?.tone ?? "gray"}>
+                  {SOURCE_LABEL[result.source]?.text ?? result.source}
+                </Badge>
+                {result.sourceNote ? (
+                  <p className="small muted" style={{ marginTop: 6 }}>
+                    {result.sourceNote}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {result.isDraft ? (
+              <div className="banner warn">
+                本次表格来自<b>模型转写</b>,属识别草稿:型号可能有形近字错误、行列可能错位。
+                导入前请对照原件逐行核对;数量、单价等数值由系统按既有规则重新解析,<b>模型不参与任何计算</b>。
+              </div>
+            ) : null}
             {result.archivedOnly.length > 0 ? (
               <div className="banner warn">
-                以下文件仅归档,未做自动识别(OCR 属二期):{result.archivedOnly.join("、")}
+                以下文件仅归档,未能自动识别:
+                {result.archivedOnly.map((a) => `${a.fileName}(${a.reason})`).join(";")}
               </div>
             ) : null}
             {result.validation.issues.length === 0 ? (

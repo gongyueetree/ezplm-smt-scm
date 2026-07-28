@@ -31,9 +31,14 @@ export async function POST(req: Request) {
   const storage = getStorageProvider();
 
   const fileKeys: string[] = [];
-  const archivedOnly: string[] = [];
+  const archivedOnly: { fileName: string; reason: string }[] = [];
+  /** 每个文件的解析来源与置信度,前端据此区分"解析"与"识别草稿" */
+  const extractions: { fileName: string; source: string; isDraft: boolean; note?: string }[] = [];
   let rows: string[][] = [];
   let sourceName = "";
+  let sourceKind: string = "none";
+  let sourceIsDraft = false;
+  let sourceNote: string | undefined;
   const hash = createHash("sha256");
 
   for (const file of files) {
@@ -49,13 +54,22 @@ export async function POST(req: Request) {
     fileKeys.push(stored.key);
 
     const extracted = await extractRows(file.name, buffer, file.type);
+    extractions.push({
+      fileName: file.name,
+      source: extracted.source,
+      isDraft: extracted.isDraft,
+      note: extracted.note,
+    });
     if (extracted.requiresManualTranscription) {
-      archivedOnly.push(file.name);
+      archivedOnly.push({ fileName: file.name, reason: extracted.note ?? "无法自动解析" });
       continue;
     }
     if (extracted.rows.length > rows.length) {
       rows = extracted.rows;
       sourceName = file.name;
+      sourceKind = extracted.source;
+      sourceIsDraft = extracted.isDraft;
+      sourceNote = extracted.note;
     }
   }
 
@@ -64,9 +78,10 @@ export async function POST(req: Request) {
       {
         error:
           archivedOnly.length > 0
-            ? "图片/PDF 已归档保存,但自动识别(OCR)属二期范围,请人工补录为 CSV/XLSX 后再导入"
+            ? archivedOnly.map((a) => `${a.fileName}:${a.reason}`).join(";")
             : "未能从上传文件中解析出表格内容",
         archivedOnly,
+        extractions,
         fileKeys,
         requiresManualTranscription: archivedOnly.length > 0,
       },
@@ -83,6 +98,7 @@ export async function POST(req: Request) {
         mapping,
         preview: rows.slice(0, 5),
         fileKeys,
+        extractions,
       },
       { status: 422 },
     );
@@ -110,6 +126,11 @@ export async function POST(req: Request) {
       uniqueMpns,
       usesBatching: shouldUseImportJob(uniqueMpns),
       archivedOnly,
+      extractions,
+      /** 表格来自哪条路径:spreadsheet / pdf-text(确定性)/ ocr(模型草稿) */
+      source: sourceKind,
+      isDraft: sourceIsDraft,
+      sourceNote,
     },
     { status: 201 },
   );
