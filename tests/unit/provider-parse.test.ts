@@ -41,7 +41,10 @@ describe("三方字段解析(解析不了就返回 null,不猜数值)", () => {
     expect(parseQuantity("500 In Stock")).toBe(500);
     expect(parseQuantity("1,200")).toBe(1200);
     expect(parseQuantity(3100)).toBe(3100);
-    expect(parseQuantity("None")).toBeNull();
+    // PR4 评审后语义收紧:"None" 是"明确无货",应为 0 而非"未知";
+    // 真正未知(需询价 / 欠货)才返回 null,见 parse-negation.test.ts
+    expect(parseQuantity("None")).toBe(0);
+    expect(parseQuantity("Call for stock")).toBeNull();
   });
 
   it("parseLeadTimeDays:周/天单位换算", () => {

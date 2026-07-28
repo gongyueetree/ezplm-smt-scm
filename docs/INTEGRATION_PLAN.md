@@ -89,6 +89,7 @@ docx 明确"实时询价抓取需放到一期"。规范用 **DigiKey Product Inf
 |---|---|---|
 | **ECN 完整流程**(发布/影响分析/批量物料/作废追溯/批量审批) | docx 大量 ECN 意见 vs 规范 1.11"不实现完整 ECN"、路由无 /ecn | 折中案:一期做 **ECN-Lite**(登记、单物料替换、审批、关联 BOM 版本),满足 xlsx"ECN 审核-有需改进";"发布/影响面/批量"列二期。需客户书面确认 |
 | 品质模块(来料检验/客诉/品质报表/PPAP/RMA/制程 OCR) | docx 抱怨缺失 vs 规范排除 | 维持二期;向客户出示既有变更需求池条目,避免验收争议 |
+| **跨币种比价是否引入汇率归一** | PR4 评审提出:客户实际比价多为 CNY 统一口径,但三方 API 可能返回 USD/EUR 报价 | 当前策略=**保留异币种报价但标注"不可比",不做换算**(诚实,不引入未经确认的汇率)。若需归一,需甲方确认:①汇率来源(银行中间价/ERP 内置/手工维护)②更新频率 ③报价快照是否留痕当时汇率(审批与 PDF 必须可复现)。**答复前维持现状,严禁硬编码汇率** |
 | 生产报表 OCR + 稼动率 | xlsx"无" | 二期(依赖 MES/报表源);一期可给"生产报表文件上传归档"占位 |
 | 客户自助查询(仅库存进出) | docx 问"不可以以权限进行?" | 可谈:若只读库存流水,技术上一期可加 SUPPLIER 同款轻门户;但属新增范围,**报价后再做** |
 | PO 反查工单、批次级全链路 | xlsx"无"(需 MES) | 维持二期,依赖 ERP/MES 数据可得性 |
@@ -182,6 +183,7 @@ PR9  Playwright 全量 E2E + 双轨部署(Vercel + Docker→国内)+ 文档
 
 | 日期 | 偏差 | 决策 | 影响 |
 |---|---|---|---|
+| 2026-07-27 | **ExternalPartSnapshot 持久化延至 PR6**:PR4 只交付内存缓存实现与缓存键/TTL 策略(SPEC §15) | 缓存的 Prisma 落库(经 tenant 守卫写 ExternalPartSnapshot)在 PR6 消费侧接入 | PR4 的"缓存"能力仅进程内有效,多实例部署不共享;验收时不得按"缓存已持久化"计 |
 | 2026-07-27 | **DigiKey/Mouser API 凭据到位**:申请完成并经人工测试可用(第五节风险项 1 与决策 3 的前置事项解除) | PR4 外部依赖解除,可做真实联调;真实 Key 仅存 .env.local(不进版本库/不进对话),代码经环境变量读取,日志与错误信息禁止输出 Key 明文 | 当前唯一阻塞项仅剩 GitHub 账号申诉(push/Preview);ezPLM API 维持"不阻塞开发、只阻塞最终联调" |
 | 2026-07-27 | **Prisma 版本固定 7.9.0**:7.9.1 的引擎依赖(@prisma/fetch-engine)npmmirror 未同步,国内镜像无法安装 | 固定 prisma / @prisma/client / @prisma/adapter-pg = 7.9.0;镜像同步后评估升级 | 客户生产走国内主机,镜像可安装性为硬需求;升级前需复测 migrate/generate |
 | 2026-07-27 | **GitHub 账号 eehubio suspended**:push 与 Vercel Preview 阻塞 | 阻塞期间每个 PR 完成时 `git bundle create --all` 备份到仓库外;push 恢复后先 `git fetch` 核对远端再推 | 本地 feature/nextjs-agent-v1 为唯一副本;Preview URL 暂无法提供,以本地验证代替 |

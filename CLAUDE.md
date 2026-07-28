@@ -40,6 +40,14 @@
 ## 数据访问约定(PR2 评审新增,2026-07-27)
 - 自 PR3 起,所有业务查询/写入必须经 `lib/server/tenant-scope.ts` 的 `tenantWhere`/`tenantData`/`assertTenantScopedMutation` 守卫;Provider 与业务代码不得绕过直接拼 where。
 
+## 外部字段解析纪律(PR4 评审新增,2026-07-27)
+- 语义判定禁止裸 `includes`/`indexOf`:子串匹配会把否定式误判为肯定式(`Inactive` 含 `active`、`REACH Unaffected` 含 `affected`、`Not In Production` 含 `production`)。
+- 一律走「规范化 → 精确映射表 → 词边界规则 → 否定式护栏」(见 `lib/providers/common/parse.ts`);含否定词而无法精确归类者返回 UNKNOWN/null,绝不落到"在产/合规/有货"。
+- 每新增一处外部字段解析,必须在 `tests/unit/parse-negation.test.ts` 补一条否定式用例。
+
+## 收尾汇报固定格式(PR4 评审新增,2026-07-27)
+每个 PR 的结尾汇报必须包含:①`pnpm lint` / `typecheck` / `test`(含用例数与通过数)/ `build` 四项执行结果原文;②本 PR 修复的每个缺陷对应的回归测试名;③已完成/未完成清单;④Preview URL 或本地验证说明。
+
 ## PR 工作纪律
 - 按 SPEC 第十九节 PR1–PR9 顺序;**一个会话只做一个 PR**;完成后停下,给出:测试结果、Preview URL(或本地验证说明)、已完成/未完成清单,等人类确认后才可进入下一个 PR。
 - 每个 PR 必须通过:`pnpm lint && pnpm typecheck && pnpm test && pnpm build && prisma validate`(涉及 UI 流程的 PR 另跑 `pnpm test:e2e`)。
