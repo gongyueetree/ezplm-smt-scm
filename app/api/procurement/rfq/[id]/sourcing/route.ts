@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildComparisonSet } from "@/lib/domain/sourcing";
+import { computeProgress, nextBatchSlice } from "@/lib/domain/import-batching";
 import { notFound, requireSession } from "@/lib/server/api";
 import { loadSourcingLines, runSourcing } from "@/lib/server/repositories/procurement";
 import { prisma } from "@/lib/server/db";
@@ -8,8 +9,11 @@ import { tenantWhere } from "@/lib/server/tenant-scope";
 export const runtime = "nodejs";
 
 /**
- * 多源询价并构建比价集合(SPEC §11)。
- * 三方 + 线下 Excel 的报价统一为 NormalizedOffer 后进同一张比价表;
+ * 多源询价并构建比价集合(SPEC §11 + Backlog B4:分批)。
+ *
+ * 拉取式分批(与 BOM 导入同一模型):每次只处理一批(10–20 个料号)后立即返回进度,
+ * 由前端持续拉取直至 done —— 既不在单个请求里打满三方配额、不触发 Serverless 超时,
+ * 也不再像此前那样**静默截断到前 20 个料号**。
  * provider 失败只降级不阻断,degraded 如实返回给 UI。
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +25,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!loaded) return notFound("采购 RFQ 不存在或不属于当前租户");
   const { prfq, lines } = loaded;
 
+  const url = new URL(_req.url);
+  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? 0));
+  const batchSize = Number(url.searchParams.get("batchSize") ?? 20);
+
   // 线下供应商报价(已落库)一并进入比价集合
   const offlineLines = await prisma.supplierQuoteLine.findMany({
     where: tenantWhere(auth.session.tenantId, {
@@ -30,10 +38,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
 
   const targets = lines.filter((l) => l.mpn);
+  const slice = nextBatchSlice(targets.length, offset, batchSize);
+  const batch = slice ? targets.slice(slice.start, slice.end) : [];
+
   const results = [];
   const degradedAll: { provider: string; kind: string; message: string }[] = [];
 
-  for (const line of targets.slice(0, 20)) {
+  for (const line of batch) {
     const demandQty = Number(line.qty) || 1;
     const run = await runSourcing(line.mpn!, line.manufacturer, demandQty);
     degradedAll.push(...run.degraded);
@@ -83,10 +94,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     });
   }
 
+  const processed = slice ? slice.end : targets.length;
   return NextResponse.json({
     procurementRfqId: id,
     mode: prfq.sourcingMode,
-    truncated: targets.length > 20,
+    offset,
+    batchSize,
+    progress: computeProgress(targets.length, processed),
     results,
     degraded: degradedAll,
   });

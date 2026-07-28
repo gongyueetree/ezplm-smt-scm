@@ -1,3 +1,10 @@
+import {
+  cellText,
+  detectMapping,
+  missingFields,
+  type MappingResult,
+} from "./column-mapping";
+
 /**
  * BOM 列映射与标准化(SPEC §6:列映射、非标准 BOM 转标准结构)。
  *
@@ -43,106 +50,17 @@ const SYNONYMS: Record<BomField, string[]> = {
   footprint: ["封装", "footprint", "package", "packagetype", "外形", "封装形式"],
 };
 
-/** 归一化列名:去空格/标点、小写 */
-function normalizeHeader(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[\s_\-.()（）【】\[\]:：#*]/g, "")
-    .trim();
-}
-
-export interface ColumnMapping {
-  /** 字段 → 列索引;未识别的字段不出现 */
-  fields: Partial<Record<BomField, number>>;
-  /** 表头所在行索引 */
-  headerRowIndex: number;
-  /** 未能识别的列(索引 + 原始列名),供 UI 展示"这些列被忽略" */
-  unmapped: { index: number; header: string }[];
-  /** 识别置信度 0–1:已识别的关键字段占比 */
-  confidence: number;
-}
+export type ColumnMapping = MappingResult<BomField>;
 
 /** 关键字段:缺任一个都不能算可用的 BOM */
 const REQUIRED_FIELDS: BomField[] = ["qty", "mpn"];
 
 /**
- * 单列对单字段的匹配分数;无匹配返回 0。
- * 精确相等恒高于"包含";包含匹配中同义词越长越具体
- * (否则 "制造商料号" 会被 "制造商" 的子串匹配抢走,导致 MPN 列丢失)。
- */
-function scoreFieldForCell(cell: string, synonyms: string[]): number {
-  const exact = synonyms.findIndex((s) => s === cell);
-  if (exact >= 0) return 10_000 - exact;
-  let best = 0;
-  for (const s of synonyms) {
-    if (cell.includes(s)) best = Math.max(best, 1_000 + s.length);
-  }
-  return best;
-}
-
-function mapHeaderRow(header: string[]): {
-  fields: Partial<Record<BomField, number>>;
-  unmapped: { index: number; header: string }[];
-} {
-  const entries = Object.entries(SYNONYMS) as [BomField, string[]][];
-  const triples: { index: number; field: BomField; score: number }[] = [];
-
-  header.forEach((rawCell, index) => {
-    const cell = normalizeHeader(rawCell ?? "");
-    if (!cell) return;
-    for (const [field, synonyms] of entries) {
-      const score = scoreFieldForCell(cell, synonyms);
-      if (score > 0) triples.push({ index, field, score });
-    }
-  });
-
-  // 贪心择优分配:分数高者先占位;同分按列序、字段名排序,保证结果确定
-  triples.sort(
-    (a, b) => b.score - a.score || a.index - b.index || a.field.localeCompare(b.field),
-  );
-
-  const fields: Partial<Record<BomField, number>> = {};
-  const usedColumns = new Set<number>();
-  for (const t of triples) {
-    if (fields[t.field] !== undefined || usedColumns.has(t.index)) continue;
-    fields[t.field] = t.index;
-    usedColumns.add(t.index);
-  }
-
-  const unmapped = header
-    .map((h, index) => ({ index, header: h }))
-    .filter((c) => !usedColumns.has(c.index) && (c.header ?? "").trim() !== "");
-
-  return { fields, unmapped };
-}
-
-/**
- * 检测表头行并生成建议映射。
+ * 检测表头行并生成建议映射(委托通用引擎 lib/domain/column-mapping.ts)。
  * 非标准 BOM 常见前几行是标题/客户信息,故在前 maxScanRows 行中选"识别字段最多"的一行。
  */
 export function detectColumnMapping(rows: string[][], maxScanRows = 10): ColumnMapping {
-  let best: ColumnMapping = {
-    fields: {},
-    headerRowIndex: 0,
-    unmapped: [],
-    confidence: 0,
-  };
-
-  const scan = Math.min(rows.length, maxScanRows);
-  for (let i = 0; i < scan; i++) {
-    const { fields, unmapped } = mapHeaderRow(rows[i] ?? []);
-    const identified = Object.keys(fields).length;
-    if (identified === 0) continue;
-    const requiredHit = REQUIRED_FIELDS.filter((f) => fields[f] !== undefined).length;
-    // 置信度:关键字段权重更高
-    const confidence =
-      (requiredHit / REQUIRED_FIELDS.length) * 0.7 +
-      (identified / Object.keys(SYNONYMS).length) * 0.3;
-    if (confidence > best.confidence) {
-      best = { fields, headerRowIndex: i, unmapped, confidence: Number(confidence.toFixed(4)) };
-    }
-  }
-  return best;
+  return detectMapping(rows, SYNONYMS, REQUIRED_FIELDS, maxScanRows);
 }
 
 /** 映射是否可用于导入 */
@@ -151,7 +69,7 @@ export function isMappingUsable(mapping: ColumnMapping): boolean {
 }
 
 export function missingRequiredFields(mapping: ColumnMapping): BomField[] {
-  return REQUIRED_FIELDS.filter((f) => mapping.fields[f] === undefined);
+  return missingFields(mapping, REQUIRED_FIELDS);
 }
 
 export interface ParsedBomLine {
@@ -168,14 +86,6 @@ export interface ParsedBomLine {
   footprint: string | null;
   /** 本行解析问题(数量非法等) */
   issues: string[];
-}
-
-function cell(row: string[], index: number | undefined): string | null {
-  if (index === undefined) return null;
-  const v = row[index];
-  if (v === undefined || v === null) return null;
-  const t = String(v).trim();
-  return t === "" ? null : t;
 }
 
 /** 数量:支持 "10"、"10.0"、"10 pcs"、全角数字;失败返回 null 并记 issue */
@@ -201,12 +111,12 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
     const row = rows[r] ?? [];
     if (row.every((c) => (c ?? "").trim() === "")) continue;
 
-    const rawQty = cell(row, mapping.fields.qty);
+    const rawQty = cellText(row, mapping.fields.qty);
     const { qty, issue } = parseQty(rawQty);
-    const mpn = cell(row, mapping.fields.mpn);
-    const customerPn = cell(row, mapping.fields.customerPn);
-    const internalPn = cell(row, mapping.fields.internalPn);
-    const description = cell(row, mapping.fields.description);
+    const mpn = cellText(row, mapping.fields.mpn);
+    const customerPn = cellText(row, mapping.fields.customerPn);
+    const internalPn = cellText(row, mapping.fields.internalPn);
+    const description = cellText(row, mapping.fields.description);
 
     // 整行没有任何可识别标识 → 视为表格附注,不当作 BOM 行
     if (!mpn && !customerPn && !internalPn && !description) continue;
@@ -219,14 +129,14 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
     out.push({
       sourceRow: r + 1,
       lineNo,
-      refDes: cell(row, mapping.fields.refDes),
+      refDes: cellText(row, mapping.fields.refDes),
       qty,
       mpn,
-      manufacturer: cell(row, mapping.fields.manufacturer),
+      manufacturer: cellText(row, mapping.fields.manufacturer),
       customerPn,
       internalPn,
       description,
-      footprint: cell(row, mapping.fields.footprint),
+      footprint: cellText(row, mapping.fields.footprint),
       issues,
     });
   }

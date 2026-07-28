@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
+import {
+  detectSupplierQuoteMapping,
+  isSupplierQuoteMappingUsable,
+  missingSupplierQuoteFields,
+  SUPPLIER_QUOTE_FIELD_LABELS,
+  toSupplierQuoteLines,
+} from "@/lib/domain/supplier-quote-parse";
 import { badRequest, forbidden, notFound, requireSession } from "@/lib/server/api";
 import { extractRows } from "@/lib/server/file-parse";
-import { detectColumnMapping, isMappingUsable, missingRequiredFields, toStandardLines } from "@/lib/domain/bom-parse";
 import { importOfflineQuote } from "@/lib/server/repositories/procurement";
 import { getStorageProvider } from "@/lib/server/storage";
 
@@ -10,8 +16,9 @@ export const runtime = "nodejs";
 const MAX_BYTES = 20 * 1024 * 1024;
 
 /**
- * 导入线下供应商报价 Excel(SPEC §11)。
- * 复用 BOM 的列映射能力;价格列取「单价」同义词。
+ * 导入线下供应商报价 Excel(SPEC §11 + Backlog B5)。
+ * 列映射走 supplier-quote-parse:MPN / 单价 / 币种 / MOQ / SPQ / Lead Time 全部识别 ——
+ * 这些是比价排名与异常判定的输入,缺了会让"最低价"虚假占优、超交期不被标异常。
  * 原始文件归档;落库当刻固化原始异常集合(wasFlagged)。
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -56,38 +63,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const mapping = detectColumnMapping(extracted.rows);
-  if (!isMappingUsable(mapping)) {
+  const mapping = detectSupplierQuoteMapping(extracted.rows);
+  if (!isSupplierQuoteMappingUsable(mapping)) {
     return NextResponse.json(
-      { error: "未能识别必需列(至少需要 MPN 与数量/单价)", missingFields: missingRequiredFields(mapping), preview: extracted.rows.slice(0, 5) },
+      {
+        error: `未能识别必需列:${missingSupplierQuoteFields(mapping)
+          .map((f) => SUPPLIER_QUOTE_FIELD_LABELS[f])
+          .join("、")}`,
+        missingFields: missingSupplierQuoteFields(mapping),
+        preview: extracted.rows.slice(0, 5),
+        fileKey: stored.key,
+      },
       { status: 422 },
     );
   }
 
-  // 单价列:供应商报价表的「数量」列位常放单价,这里以显式的价格同义词为准
-  const priceCol = extracted.rows[mapping.headerRowIndex].findIndex((h) =>
-    /单价|价格|price|unitprice/i.test(String(h ?? "").replace(/\s/g, "")),
-  );
-  if (priceCol < 0) {
-    return NextResponse.json({ error: "未找到单价列(需包含 单价/价格/Price)" }, { status: 422 });
+  const { lines, skipped } = toSupplierQuoteLines(extracted.rows, mapping, {
+    fallbackCurrency: currency,
+  });
+  if (lines.length === 0) {
+    return NextResponse.json(
+      { error: "文件中没有可导入的报价行", skipped, fileKey: stored.key },
+      { status: 422 },
+    );
   }
-
-  const parsed = toStandardLines(extracted.rows, mapping);
-  const rows = extracted.rows;
-  const lines = parsed
-    .filter((l) => l.mpn)
-    .map((l) => ({
-      mpn: l.mpn!,
-      manufacturer: l.manufacturer,
-      unitPrice: String(rows[l.sourceRow - 1]?.[priceCol] ?? "").trim(),
-      currency,
-      moq: null,
-      spq: null,
-      leadTimeDays: null,
-    }))
-    .filter((l) => l.unitPrice !== "");
-
-  if (lines.length === 0) return badRequest("文件中没有可导入的报价行");
 
   const quote = await importOfflineQuote(auth.session, {
     procurementRfqId: id,
@@ -95,10 +94,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     currency,
     sourceFileKey: stored.key,
     quotedAt: new Date(),
-    lines,
+    lines: lines.map((l) => ({
+      mpn: l.mpn,
+      manufacturer: l.manufacturer,
+      unitPrice: l.unitPrice,
+      currency: l.currency,
+      moq: l.moq,
+      spq: l.spq,
+      leadTimeDays: l.leadTimeDays,
+    })),
     thresholds,
   });
   if (!quote) return notFound("采购 RFQ 不存在或不属于当前租户");
 
-  return NextResponse.json({ quote, importedLines: lines.length }, { status: 201 });
+  return NextResponse.json(
+    {
+      quote,
+      importedLines: lines.length,
+      // 被跳过的行如实返回,不静默丢弃
+      skipped,
+      mapping: {
+        headerRowIndex: mapping.headerRowIndex,
+        fields: Object.fromEntries(
+          Object.entries(mapping.fields).map(([f, col]) => [
+            SUPPLIER_QUOTE_FIELD_LABELS[f as keyof typeof SUPPLIER_QUOTE_FIELD_LABELS],
+            (col as number) + 1,
+          ]),
+        ),
+      },
+    },
+    { status: 201 },
+  );
 }

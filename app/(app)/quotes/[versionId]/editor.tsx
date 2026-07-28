@@ -364,9 +364,14 @@ export function QuoteEditor({
             </button>
           ) : null}
           {canExport ? (
-            <a className="btn" href={`/api/quotes/${versionId}/export`}>
-              导出 XLSX(取快照)
-            </a>
+            <>
+              <a className="btn" href={`/api/quotes/${versionId}/export`}>
+                导出 XLSX(取快照)
+              </a>
+              <a className="btn" href={`/quotes/${versionId}/print`} target="_blank" rel="noreferrer">
+                打印视图 / 另存为 PDF
+              </a>
+            </>
           ) : null}
         </div>
       </Card>

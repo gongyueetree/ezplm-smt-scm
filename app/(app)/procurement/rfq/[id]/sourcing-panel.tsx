@@ -89,19 +89,41 @@ export function SourcingPanel({
   const [info, setInfo] = useState<string | null>(null);
   const [results, setResults] = useState<SourcingResult[] | null>(null);
   const [degraded, setDegraded] = useState<{ provider: string; kind: string }[]>([]);
+  const [sourcingProgress, setSourcingProgress] = useState<{
+    processed: number;
+    total: number;
+    percent: number;
+    done: boolean;
+  } | null>(null);
 
+  /** 拉取式分批:逐批询价直到完成(B4:不再静默截断到前 20 个料号) */
   async function runSourcing() {
     setBusy(true);
     setError(null);
+    setResults([]);
+    setDegraded([]);
+    setSourcingProgress(null);
     try {
-      const res = await fetch(`/api/procurement/rfq/${procurementRfqId}/sourcing`);
-      const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(body?.error ?? "询价失败");
-        return;
+      const collected: SourcingResult[] = [];
+      let offset = 0;
+      for (let i = 0; i < 200; i++) {
+        const res = await fetch(
+          `/api/procurement/rfq/${procurementRfqId}/sourcing?offset=${offset}`,
+        );
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(body?.error ?? "询价失败");
+          return;
+        }
+        collected.push(...((body.results ?? []) as SourcingResult[]));
+        setResults([...collected]);
+        if (body.degraded?.length) {
+          setDegraded((prev) => [...prev, ...body.degraded]);
+        }
+        setSourcingProgress(body.progress);
+        if (body.progress?.done) return;
+        offset = body.progress?.processed ?? offset + (body.batchSize ?? 20);
       }
-      setResults(body.results as SourcingResult[]);
-      setDegraded(body.degraded ?? []);
     } finally {
       setBusy(false);
     }
@@ -137,7 +159,13 @@ export function SourcingPanel({
         return;
       }
       if (fileRef.current) fileRef.current.value = "";
-      setInfo(`已导入 ${body.importedLines} 行报价,异常已在落库时固化`);
+      const cols = Object.keys(body.mapping?.fields ?? {}).join("、");
+      const skippedNote = body.skipped?.length
+        ? `;${body.skipped.length} 行被跳过(${body.skipped[0].reason}…)`
+        : "";
+      setInfo(
+        `已导入 ${body.importedLines} 行报价,异常已在落库时固化。识别到的列:${cols}${skippedNote}`,
+      );
       router.refresh();
     } finally {
       setBusy(false);
@@ -288,6 +316,34 @@ export function SourcingPanel({
           。导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
           阈值在<a href="/procurement/suppliers">「供应商与采购策略」</a>维护。
         </p>
+        {sourcingProgress ? (
+          <div style={{ marginTop: 12 }}>
+            <div
+              style={{
+                height: 8,
+                background: "var(--gray-150)",
+                borderRadius: 999,
+                overflow: "hidden",
+                marginBottom: 6,
+              }}
+            >
+              <div
+                style={{
+                  width: `${sourcingProgress.percent}%`,
+                  height: "100%",
+                  background: sourcingProgress.done ? "var(--brand)" : "var(--ai)",
+                  transition: "width 200ms",
+                }}
+              />
+            </div>
+            <p className="small muted">
+              询价进度 {sourcingProgress.processed} / {sourcingProgress.total} 个料号 ·{" "}
+              {sourcingProgress.percent}%
+              {sourcingProgress.done ? " · 已完成" : " · 分批进行中"}
+            </p>
+          </div>
+        ) : null}
+
         {degraded.length > 0 ? (
           <div className="banner warn" style={{ marginTop: 10 }}>
             外部数据源降级(不影响其余报价):

@@ -262,3 +262,15 @@ a { color: inherit; text-decoration: none; }
   .app { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
 }
+
+/* ===== 打印视图(报价单正式输出;数据只来自冻结快照)===== */
+.print-doc { max-width: 900px; margin: 0 auto; }
+@media print {
+  .sidebar, .topbar, .print-hide { display: none !important; }
+  .app { display: block; }
+  .content { padding: 0; max-width: none; }
+  body { background: white; font-size: 12px; }
+  .tbl th { background: var(--gray-50) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-doc { max-width: none; }
+  @page { margin: 16mm; }
+}
