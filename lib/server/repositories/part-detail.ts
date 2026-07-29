@@ -11,12 +11,17 @@
  * 详情查询必须过 ExternalPartSnapshot 缓存(SPEC §15),避免刷页面就烧配额。
  */
 import { ProviderType, type Prisma } from "@prisma/client";
+import { rankAlternates, type AlternateCandidate, type RankedAlternate } from "@/lib/domain/alternate-rank";
+import { mergeFields, type MergedFields } from "@/lib/domain/field-merge";
+import { rankBySimilarity } from "@/lib/domain/similarity";
 import { buildOfferCacheKey, CACHE_TTL_SECONDS } from "@/lib/providers/common/cache";
+import { getDigiKeyProvider as getDk } from "@/lib/providers/digikey";
+import { getMouserProvider } from "@/lib/providers/mouser";
 import { ProviderError } from "@/lib/providers/common/errors";
 import { normalizeMpn } from "@/lib/providers/common/mpn";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { HttpEzplmProvider } from "@/lib/providers/ezplm/http";
-import { ezplmProviderMode, MockEzplmProvider } from "@/lib/providers/ezplm";
+import { ezplmProviderMode, getEzplmPartsProvider, MockEzplmProvider } from "@/lib/providers/ezplm";
 import type {
   CanonicalPart,
   PartDocument,
@@ -44,7 +49,7 @@ export interface PartDetailView {
   parameters: PartParameter[];
   documents: PartDocument[];
   referenceDesigns: EzplmReferenceDesign[];
-  alternates: AlternateItem[];
+  alternates: RankedAlternate[];
   /** 本地缓存的库存/呆滞(ezPLM API 不提供库存查询) */
   inventory: { qtyOnHand: number; qtySlowMoving: number | null; fetchedAt: string } | null;
   /** 本地 BOM 用到该料的行数与 OPO 在途,便于判断影响面 */
@@ -67,6 +72,56 @@ export interface PartDetailView {
   degraded: { provider: string; kind: string; message: string }[];
   /** 配置告警(如 http/多余路径) */
   configWarnings: string[];
+  /**
+   * 多源合并后的字段与来源。
+   * ezPLM 覆盖面有限(白名单原厂库),缺的字段由分销商反查补上,
+   * **每个字段都标来源** —— 客户给的和外部查的可信度完全不同。
+   */
+  fields: MergedFields;
+}
+
+/** 从分销商报价里取字段(用于回填 ezPLM 缺失的信息) */
+async function distributorFacts(
+  mpn: string,
+): Promise<{ digikey: Record<string, unknown>; mouser: Record<string, unknown>; degraded: PartDetailView["degraded"] }> {
+  const degraded: PartDetailView["degraded"] = [];
+  const pick = (o: {
+    manufacturer: string | null;
+    description: string | null;
+    packaging: string | null;
+    lifecycle: string;
+    rohs: boolean | null;
+    reach: boolean | null;
+  }) => ({
+    manufacturer: o.manufacturer,
+    description: o.description,
+    packaging: o.packaging,
+    lifecycle: o.lifecycle,
+    rohs: o.rohs,
+    reach: o.reach,
+  });
+
+  let digikey: Record<string, unknown> = {};
+  let mouser: Record<string, unknown> = {};
+  await Promise.all([
+    (async () => {
+      try {
+        const offers = await getDk().getOffersByMpn({ mpn });
+        if (offers[0]) digikey = pick(offers[0]);
+      } catch (e) {
+        degraded.push(toDegraded(e, "DIGIKEY"));
+      }
+    })(),
+    (async () => {
+      try {
+        const offers = await getMouserProvider().getOffersByMpn({ mpn });
+        if (offers[0]) mouser = pick(offers[0]);
+      } catch (e) {
+        degraded.push(toDegraded(e, "MOUSER"));
+      }
+    })(),
+  ]);
+  return { digikey, mouser, degraded };
 }
 
 function toDegraded(e: unknown, provider: string) {
@@ -204,54 +259,149 @@ async function loadFromEzplmCached(
   }
 }
 
-/** 替代料聚合:本地维护 ∪ DigiKey Substitutions,每条标来源 */
+/**
+ * 替代料候选聚合 + 排序。
+ *
+ * 来源(客户要求的优先级):
+ * 1. 本系统物料库:显式维护的替代关系,以及型号相似的自家料 —— 能直接下单;
+ * 2. ezPLM 检索到的同系列型号;
+ * 3. DigiKey Substitutions。
+ *
+ * 排序交给 lib/domain/alternate-rank.ts(纯函数):
+ * 本系统优先 > 有现货 > 在产 > 性价比,且**相似度权重最高** ——
+ * 便宜又有货但根本不像的料不是替代料。
+ *
+ * 配额纪律:不为每个候选单独打一次分销商接口(那会瞬间烧完配额)。
+ * 库存/价格只用手头已有的数据,拿不到就是「未知」,由排序按中性处理。
+ */
 async function loadAlternates(
   tenantId: string,
   mpn: string,
-): Promise<{ items: AlternateItem[]; degraded: { provider: string; kind: string; message: string }[] }> {
-  const degraded: { provider: string; kind: string; message: string }[] = [];
-  const items: AlternateItem[] = [];
+  self: { footprint: string | null; lifecycle: string | null },
+): Promise<{ items: RankedAlternate[]; degraded: PartDetailView["degraded"] }> {
+  const degraded: PartDetailView["degraded"] = [];
+  const candidates: AlternateCandidate[] = [];
+  const seen = new Set<string>([normalizeMpn(mpn)]);
 
-  // 本地 PartAlternate
-  const part = await prisma.part.findFirst({
-    where: tenantWhere(tenantId, { mpn }),
-    select: { id: true },
-  });
-  if (part) {
+  const push = (c: AlternateCandidate) => {
+    const key = normalizeMpn(c.mpn);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    candidates.push(c);
+  };
+
+  const footprintMatchOf = (fp: string | null): boolean | null => {
+    if (!self.footprint || !fp) return null; // 缺一边就是未知
+    const norm = (v: string) => v.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    return norm(self.footprint) === norm(fp);
+  };
+
+  // 本地库:显式维护的替代关系(最可信)+ 型号相似的自家料
+  const localParts = await prisma.part.findMany({ where: tenantWhere(tenantId), take: 5000 });
+  const selfPart = localParts.find((p) => normalizeMpn(p.mpn ?? "") === normalizeMpn(mpn));
+  if (selfPart) {
     const rows = await prisma.partAlternate.findMany({
-      where: tenantWhere(tenantId, { partId: part.id }),
-      include: { alternatePart: { select: { mpn: true, manufacturer: true } } },
+      where: tenantWhere(tenantId, { partId: selfPart.id }),
+      include: { alternatePart: true },
     });
     for (const r of rows) {
-      items.push({
-        mpn: r.alternatePart.mpn ?? "(无 MPN)",
+      push({
+        mpn: r.alternatePart.mpn ?? r.alternatePart.internalPn,
         manufacturer: r.alternatePart.manufacturer,
-        grade: r.grade,
-        note: r.note,
-        source: "local",
+        origin: "LOCAL",
+        similarity: 1, // 人工维护的关系,不需要靠型号猜
+        lifecycle: r.alternatePart.lifecycle,
+        stock: null,
+        unitPrice: null,
+        currency: null,
+        footprintMatches: footprintMatchOf(r.alternatePart.footprint),
       });
+    }
+  }
+
+  const localRanked = rankBySimilarity(
+    { value: mpn, footprint: self.footprint },
+    localParts
+      .filter((p) => p.mpn && normalizeMpn(p.mpn) !== normalizeMpn(mpn))
+      .map((p) => ({
+        mpn: p.mpn!,
+        manufacturer: p.manufacturer,
+        footprint: p.footprint,
+        lifecycle: p.lifecycle,
+      })),
+    { limit: 5 },
+  );
+  for (const r of localRanked) {
+    push({
+      mpn: r.target.mpn,
+      manufacturer: r.target.manufacturer ?? null,
+      origin: "LOCAL",
+      similarity: r.score.score,
+      lifecycle: r.target.lifecycle,
+      stock: null,
+      unitPrice: null,
+      currency: null,
+      footprintMatches: footprintMatchOf(r.target.footprint ?? null),
+    });
+  }
+
+  // ezPLM:同系列型号
+  if (ezplmProviderMode() === "http") {
+    try {
+      const found = await getEzplmPartsProvider().searchParts({ keyword: mpn, limit: 20 });
+      const ranked = rankBySimilarity(
+        { value: mpn, footprint: self.footprint },
+        found
+          .filter((p): p is typeof p & { mpn: string } =>
+            Boolean(p.mpn) && normalizeMpn(p.mpn ?? "") !== normalizeMpn(mpn),
+          )
+          .map((p) => ({
+            mpn: p.mpn,
+            manufacturer: p.manufacturer,
+            footprint: p.footprint,
+            lifecycle: p.lifecycle,
+          })),
+        { limit: 5 },
+      );
+      for (const r of ranked) {
+        push({
+          mpn: r.target.mpn,
+          manufacturer: r.target.manufacturer ?? null,
+          origin: "EZPLM",
+          similarity: r.score.score,
+          lifecycle: r.target.lifecycle,
+          stock: null,
+          unitPrice: null,
+          currency: null,
+          footprintMatches: footprintMatchOf(r.target.footprint ?? null),
+        });
+      }
+    } catch (e) {
+      degraded.push(toDegraded(e, "EZPLM"));
     }
   }
 
   // DigiKey Substitutions
   try {
-    const dk = getDigiKeyProvider();
-    const subs = await dk.getSubstitutes(mpn);
+    const subs = await getDigiKeyProvider().getSubstitutes(mpn);
     for (const s of subs) {
-      if (items.some((i) => normalizeMpn(i.mpn) === normalizeMpn(s.mpn))) continue;
-      items.push({
+      push({
         mpn: s.mpn,
         manufacturer: s.manufacturer,
-        grade: null,
-        note: s.description,
-        source: "digikey",
+        origin: "DIGIKEY",
+        similarity: 0.9, // 分销商标注的替代关系,可信度高于纯型号相似
+        lifecycle: null,
+        stock: null,
+        unitPrice: null,
+        currency: null,
+        footprintMatches: null,
       });
     }
   } catch (e) {
     degraded.push(toDegraded(e, "DIGIKEY"));
   }
 
-  return { items, degraded };
+  return { items: rankAlternates(candidates, { limit: 8 }), degraded };
 }
 
 export async function getPartDetail(tenantId: string, mpn: string): Promise<PartDetailView> {
@@ -312,8 +462,53 @@ export async function getPartDetail(tenantId: string, mpn: string): Promise<Part
     fetchedAt = (local.syncedAt ?? local.updatedAt).toISOString();
   }
 
+  const facts = await distributorFacts(mpn);
+  degraded.push(...facts.degraded);
+
+  /*
+   * 字段优先级:本地库(已人工确认过的自家数据)> ezPLM(工程主数据)
+   * > DigiKey > Mouser。只补空,不覆盖。
+   */
+  const fields = mergeFields([
+    {
+      name: "LOCAL",
+      values: local
+        ? {
+            manufacturer: local.manufacturer,
+            description: local.description,
+            footprint: local.footprint,
+            lifecycle: local.lifecycle,
+            rohs: local.rohs,
+            reach: local.reach,
+            packaging: local.packaging,
+            msl: local.msl,
+          }
+        : {},
+    },
+    {
+      name: "EZPLM",
+      values: part
+        ? {
+            manufacturer: part.manufacturer,
+            description: part.description,
+            footprint: part.footprint,
+            lifecycle: part.lifecycle,
+            rohs: part.rohs,
+            reach: part.reach,
+            packaging: part.packaging,
+            msl: part.msl,
+          }
+        : {},
+    },
+    { name: "DIGIKEY", values: facts.digikey },
+    { name: "MOUSER", values: facts.mouser },
+  ]);
+
   const [alternates, inventory, bomLines, opoLines] = await Promise.all([
-    loadAlternates(tenantId, mpn),
+    loadAlternates(tenantId, mpn, {
+      footprint: (fields.footprint.value as string | null) ?? null,
+      lifecycle: (fields.lifecycle.value as string | null) ?? null,
+    }),
     local
       ? prisma.inventorySnapshot.findFirst({
           where: tenantWhere(tenantId, { partId: local.id }),
@@ -371,5 +566,6 @@ export async function getPartDetail(tenantId: string, mpn: string): Promise<Part
     fetchedAt,
     degraded,
     configWarnings,
+    fields,
   };
 }

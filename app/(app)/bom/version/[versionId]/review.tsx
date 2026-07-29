@@ -45,6 +45,8 @@ export interface ReviewLine {
   /** MPN 来源:inferred-from-value = 由 Value 列推断,须人工确认 */
   mpnSource?: string | null;
   packageCode?: string | null;
+  /** 需要找替代料时的原因;不需要为 null */
+  alternateHint?: string | null;
   id: string;
   lineNo: number;
   refDes: string | null;
@@ -127,9 +129,19 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                   <div className="muted">
                     {l.manufacturer ?? "-"} · {l.packageCode ?? l.footprint ?? "-"}
                   </div>
+                  {l.alternateHint && l.mpn ? (
+                    <div style={{ marginTop: 4 }}>
+                      <a className="btn xs" href={`/materials/${encodeURIComponent(l.mpn)}`}>
+                        查替代料
+                      </a>
+                    </div>
+                  ) : null}
                   <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                     {l.mpnSource === "inferred-from-value" ? (
                       <Badge tone="amber">MPN 由 Value 推断 · 待人工确认</Badge>
+                    ) : null}
+                    {l.alternateHint ? (
+                      <Badge tone="amber">{l.alternateHint}</Badge>
                     ) : null}
                     {l.flags.dupRefDes ? <Badge tone="red">位号重复</Badge> : null}
                     {l.flags.eol ? <Badge tone="red">EOL</Badge> : null}

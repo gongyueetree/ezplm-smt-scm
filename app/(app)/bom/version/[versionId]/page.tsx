@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { getBomVersionDetail } from "@/lib/server/repositories/bom-import";
 import { getSession } from "@/lib/server/session";
 import { MatchReview, type ReviewLine } from "./review";
+import { needsAlternate } from "@/lib/domain/alternate-rank";
+import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,11 @@ export default async function BomVersionPage({
     footprint: l.footprint,
     packageCode: l.packageCode,
     mpnSource: l.mpnSource,
+    // 需不需要找替代料:没候选,或最佳候选已停产/NRND
+    alternateHint: needsAlternate({
+      matched: l.matchCandidates.length > 0,
+      lifecycle: (l.matchCandidates[0]?.lifecycle ?? null) as LifecycleValue | null,
+    }).reason,
     flags: {
       dupRefDes: l.dupRefDesFlag,
       eol: l.eolFlag,

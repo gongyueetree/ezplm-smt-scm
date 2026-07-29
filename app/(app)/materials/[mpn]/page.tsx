@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { FIELD_LABELS, type EnrichableField } from "@/lib/domain/field-merge";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
 import { getSession } from "@/lib/server/session";
 import { CandidateFinder } from "./candidate-finder";
@@ -37,6 +38,14 @@ function clamp(text: string | null | undefined, max: number): string {
   return one.length > max ? `${one.slice(0, max)}…` : one;
 }
 
+/** 字段来源标签:客户/自家给的,与外部反查来的,可信度完全不同,必须分开显示 */
+const FIELD_SOURCE_LABEL: Record<string, { text: string; tone: "green" | "blue" | "purple" | "gray" }> = {
+  LOCAL: { text: "本地库", tone: "green" },
+  EZPLM: { text: "ezPLM", tone: "blue" },
+  DIGIKEY: { text: "DigiKey 反查", tone: "purple" },
+  MOUSER: { text: "Mouser 反查", tone: "purple" },
+};
+
 function fmtSize(b: number | null): string {
   if (b === null) return "-";
   if (b < 1024) return `${b} B`;
@@ -51,6 +60,24 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
   const d = await getPartDetail(session.tenantId, mpn);
 
   const model3d = d.documents.find((x) => x.kind === "MODEL_3D") ?? null;
+
+  /** 渲染一个字段:值 + 来源徽标;缺失时如实写「各数据源均无」 */
+  const Field = ({ name }: { name: EnrichableField }) => {
+    const f = d.fields[name];
+    if (f.source === null) {
+      return <span className="muted">各数据源均无</span>;
+    }
+    const label = FIELD_SOURCE_LABEL[f.source] ?? { text: f.source, tone: "gray" as const };
+    const text =
+      typeof f.value === "boolean" ? (f.value ? "合规" : "不合规") : String(f.value ?? "");
+    return (
+      <>
+        {text}{" "}
+        <Badge tone={label.tone}>{label.text}</Badge>
+      </>
+    );
+  };
+  void FIELD_LABELS;
 
   const groups = new Map<string, typeof d.parameters>();
   for (const p of d.parameters) {
@@ -110,6 +137,8 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
           数据获取时间 {d.fetchedAt ? d.fetchedAt.slice(0, 19).replace("T", " ") : "未知"}
           (为<b>抓取时间</b>,非 ezPLM 侧的数据更新时间)。
           ezPLM 查询接口有<b>日调用配额</b>,详情已按 24 小时缓存。
+          ezPLM 未收录或字段缺失时,<b>由 DigiKey / Mouser 反查补齐</b>,
+          每个字段都标注了来源 —— 只补空,<b>不覆盖已有值</b>。
         </span>
       </Banner>
 
@@ -122,33 +151,46 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
                 <th style={{ width: 160 }}>厂商型号 MPN</th>
                 <td className="mono">{d.part?.mpn ?? mpn}</td>
                 <th style={{ width: 160 }}>制造商</th>
-                <td>{d.part?.manufacturer ?? <span className="muted">未知</span>}</td>
+                <td>
+                  <Field name="manufacturer" />
+                </td>
               </tr>
               <tr>
                 <th>描述</th>
-                <td colSpan={3}>{d.part?.description ?? <span className="muted">未知</span>}</td>
+                <td colSpan={3}>
+                  <Field name="description" />
+                </td>
               </tr>
               <tr>
                 <th>封装</th>
-                <td>{d.part?.footprint ?? <span className="muted">未知</span>}</td>
+                <td>
+                  <Field name="footprint" />
+                </td>
                 <th>生命周期</th>
                 <td>
                   <Badge
                     tone={
-                      d.part?.lifecycle === "ACTIVE"
+                      d.fields.lifecycle.value === "ACTIVE"
                         ? "green"
-                        : d.part?.lifecycle === "NRND"
+                        : d.fields.lifecycle.value === "NRND"
                           ? "amber"
-                          : d.part?.lifecycle === "UNKNOWN" || !d.part
+                          : d.fields.lifecycle.source === null
                             ? "gray"
                             : "red"
                     }
                   >
-                    {d.part?.lifecycle ?? "UNKNOWN"}
-                  </Badge>
-                  {d.source === "ezplm" ? (
-                    <span className="small muted"> · ezPLM 接口不提供生命周期</span>
-                  ) : null}
+                    {(d.fields.lifecycle.value as string) ?? "UNKNOWN"}
+                  </Badge>{" "}
+                  {d.fields.lifecycle.source ? (
+                    <Badge
+                      tone={FIELD_SOURCE_LABEL[d.fields.lifecycle.source]?.tone ?? "gray"}
+                    >
+                      {FIELD_SOURCE_LABEL[d.fields.lifecycle.source]?.text ??
+                        d.fields.lifecycle.source}
+                    </Badge>
+                  ) : (
+                    <span className="small muted">各数据源均无(ezPLM 接口不提供)</span>
+                  )}
                 </td>
               </tr>
               <tr>
@@ -156,11 +198,7 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
                 <td>{d.part?.internalPn ?? <span className="muted">ezPLM 接口不提供</span>}</td>
                 <th>RoHS / REACH</th>
                 <td>
-                  {d.part?.rohs === null || d.part?.rohs === undefined ? (
-                    <span className="muted">ezPLM 接口不提供</span>
-                  ) : (
-                    `${d.part.rohs ? "合规" : "不合规"} / ${d.part.reach === null ? "未知" : d.part.reach ? "合规" : "不合规"}`
-                  )}
+                  <Field name="rohs" /> / <Field name="reach" />
                 </td>
               </tr>
               <tr>
@@ -315,7 +353,7 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
               <tr>
                 <th>替代型号</th>
                 <th>制造商</th>
-                <th>等级 / 说明</th>
+                <th>判断依据</th>
                 <th>来源</th>
               </tr>
             </thead>
@@ -323,23 +361,31 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
               {d.alternates.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="muted small" style={{ textAlign: "center", padding: 20 }}>
-                    暂无替代料记录
+                    暂无替代料候选
                   </td>
                 </tr>
               ) : (
                 d.alternates.map((a, i) => (
-                  <tr key={`${a.mpn}-${i}`}>
+                  <tr key={`${a.candidate.mpn}-${i}`}>
                     <td>
-                      <MpnLink mpn={a.mpn} />
+                      <MpnLink mpn={a.candidate.mpn} />
+                      {a.readyToOrder ? (
+                        <div>
+                          <Badge tone="green">可直接下单</Badge>
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="small">{a.manufacturer ?? "-"}</td>
-                    <td className="small">
-                      {a.grade ? <Badge tone="green">{a.grade}</Badge> : null} {a.note ?? ""}
-                    </td>
+                    <td className="small">{a.candidate.manufacturer ?? "-"}</td>
+                    <td className="small muted">{a.reasons.join(" · ")}</td>
                     <td>
-                      <Badge tone={a.source === "local" ? "blue" : "purple"}>
-                        {a.source === "local" ? "本地维护" : "DigiKey"}
+                      <Badge tone={a.candidate.origin === "LOCAL" ? "green" : "purple"}>
+                        {a.candidate.origin === "LOCAL"
+                          ? "本系统物料库"
+                          : a.candidate.origin === "EZPLM"
+                            ? "ezPLM"
+                            : a.candidate.origin}
                       </Badge>
+                      <div className="small muted">评分 {(a.score * 100).toFixed(0)}</div>
                     </td>
                   </tr>
                 ))

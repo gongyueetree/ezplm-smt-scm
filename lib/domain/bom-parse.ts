@@ -131,6 +131,28 @@ export function countRefDes(refDes: string | null | undefined): number {
     .filter((x) => x.trim() !== "").length;
 }
 
+/** 页脚:`Page 1 of 3` / `第 1 页,共 3 页`。多页 PDF 每页都有,不是数据 */
+export function isPageFooter(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return /^page\s*\d+\s*(of|\/)\s*\d+$/i.test(t) || /^第\s*\d+\s*页(\s*[,,]?\s*共\s*\d+\s*页)?$/.test(t);
+}
+
+/**
+ * 单元格内容是否可能是 MPN。
+ *
+ * 用来挡住整段落进料号列的正文 —— PDF 页尾的法律声明会被表格重建
+ * 当成某一列的内容(实测 TI 的 BOM 就把"These resources are subject to change…"
+ * 落进了 PartNumber 列)。真实 MPN 不会是一个句子。
+ */
+export function looksLikeMpnCell(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  if (t.length > 50) return false;
+  if ((t.match(/\s/g) ?? []).length >= 3) return false;
+  return true;
+}
+
 /** MPN 的来源:来自独立列,还是从 Value 推断出来的(推断的必须人工确认) */
 export type MpnSource = "column" | "inferred-from-value";
 
@@ -157,7 +179,20 @@ export interface ParsedBomLine {
 }
 
 /** 数量:支持 "10"、"10.0"、"10 pcs"、全角数字;失败返回 null 并记 issue */
-export function parseQty(raw: string | null): { qty: number | null; issue?: string } {
+/**
+ * 解析数量。
+ *
+ * **数量 0 是合法且有意义的**:BOM 里的不贴装件(DNP / Do Not Populate)
+ * 就是写 0 —— TI 的规范 BOM 正是这么标的。
+ * 把它当成"数量非法"会做两件错事:丢掉这一行的物料信息,
+ * 以及在错误列表里刷屏,把真正的错误淹掉。
+ * 因此 0 保留为 0 并给一条**提示**(不是错误);负数才是错误。
+ */
+export function parseQty(raw: string | null): {
+  qty: number | null;
+  issue?: string;
+  notice?: string;
+} {
   if (raw === null) return { qty: null, issue: "数量为空" };
   const halfWidth = raw.replace(/[０-９．]/g, (c) =>
     String.fromCharCode(c.charCodeAt(0) - 0xfee0),
@@ -166,7 +201,8 @@ export function parseQty(raw: string | null): { qty: number | null; issue?: stri
   if (!m) return { qty: null, issue: `数量无法解析:${raw}` };
   const n = Number(m[0]);
   if (!Number.isFinite(n)) return { qty: null, issue: `数量无法解析:${raw}` };
-  if (n <= 0) return { qty: null, issue: `数量必须大于 0:${raw}` };
+  if (n < 0) return { qty: null, issue: `数量不能为负:${raw}` };
+  if (n === 0) return { qty: 0, notice: "数量为 0:不贴装件(DNP),不产生采购需求" };
   return { qty: n };
 }
 
@@ -179,13 +215,27 @@ function buildLines(
   const out: ParsedBomLine[] = [];
   let lineNo = 0;
 
+  const headerKey = (rows[mapping.headerRowIndex] ?? [])
+    .map((c) => (c ?? "").trim().toUpperCase())
+    .join("\u0001");
+
   for (let r = mapping.headerRowIndex + 1; r < rows.length; r++) {
     const row = rows[r] ?? [];
     if (row.every((c) => (c ?? "").trim() === "")) continue;
+    // 翻页重复表头:多页 PDF 每页都会重复一次表头,它不是数据行。
+    // (buildPdfTable 只能与"第一行"比对,而表格上方常有标题块,
+    //  真正的表头并不在第一行 —— 所以这里按识别出来的表头再挡一次。)
+    if (
+      row.map((c) => (c ?? "").trim().toUpperCase()).join("\u0001") === headerKey
+    ) {
+      continue;
+    }
 
     const rawQty = cellText(row, mapping.fields.qty);
-    const { qty, issue } = parseQty(rawQty);
-    const mpn = cellText(row, mapping.fields.mpn);
+    const { qty, issue, notice: qtyNotice } = parseQty(rawQty);
+    const mpnCell = cellText(row, mapping.fields.mpn);
+    // 整段正文落进料号列时一律不当 MPN(见 looksLikeMpnCell)
+    const mpn = looksLikeMpnCell(mpnCell) ? mpnCell : null;
     const customerPn = cellText(row, mapping.fields.customerPn);
     const internalPn = cellText(row, mapping.fields.internalPn);
     const description = cellText(row, mapping.fields.description);
@@ -242,11 +292,25 @@ function buildLines(
       continue;
     }
 
+    /*
+     * 一条 BOM 行至少要有**位号或某种料号**。只有描述的行不是物料行:
+     * 多页 PDF 的页脚(Page 1 of 3)、以及被折行的描述片段都会长成那样。
+     * 页脚直接丢弃;其余描述片段并回上一行的描述,避免白丢信息。
+     */
+    const hasKey = Boolean(mpn || customerPn || internalPn || refDes);
+    if (!hasKey) {
+      if (description && !isPageFooter(description) && out.length > 0) {
+        const last = out[out.length - 1];
+        last.description = [last.description, description].filter(Boolean).join(" ");
+      }
+      continue;
+    }
     if (!hasIdentifier && !(refDes && otherFilled > 0)) continue;
 
     const issues: string[] = [];
     const notices: string[] = [];
     if (issue) issues.push(issue);
+    if (qtyNotice) notices.push(qtyNotice);
 
     /*
      * 工程侧 BOM 没有 MPN 列时,尝试从 Value 里认出型号。

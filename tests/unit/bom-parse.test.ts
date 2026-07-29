@@ -10,6 +10,8 @@ import {
   missingRecommendedFields,
   looksLikeRefDesList,
   countRefDes,
+  isPageFooter,
+  looksLikeMpnCell,
 } from "@/lib/domain/bom-parse";
 
 describe("CSV 解析", () => {
@@ -128,7 +130,7 @@ describe("数量解析(错误不静默填 1)", () => {
   });
 
   it("空/非法/非正数一律 null 并带 issue", () => {
-    for (const raw of [null, "abc", "0", "-3"]) {
+    for (const raw of [null, "abc", "-3"]) {
       const r = parseQty(raw);
       expect(r.qty).toBeNull();
       expect(r.issue).toBeTruthy();
@@ -412,5 +414,69 @@ describe("PDF 折行的位号列表(TI BOM 实测形态)", () => {
     const lines = toStandardLines(rows, detectColumnMapping(rows));
     expect(lines).toHaveLength(1);
     expect(lines[0].footprint).toBe("0603");
+  });
+});
+
+describe("数量 0 = 不贴装件(DNP)", () => {
+  it("0 保留为 0 并给**提示**,不是错误 —— TI 的规范 BOM 就用 0 标 DNP", () => {
+    const r = parseQty("0");
+    expect(r.qty).toBe(0);
+    expect(r.issue).toBeUndefined();
+    expect(r.notice).toContain("DNP");
+  });
+
+  it("负数仍然是错误", () => {
+    expect(parseQty("-1").issue).toBeTruthy();
+  });
+
+  it("DNP 行照常进 BOM,提示不进错误列表", () => {
+    const rows = [
+      ["位号", "数量", "MPN"],
+      ["R102", "0", "ERJPA2F1002X"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].qty).toBe(0);
+    expect(lines[0].issues).toEqual([]);
+    expect(lines[0].notices?.join()).toContain("DNP");
+  });
+});
+
+describe("多页 PDF 的噪音行", () => {
+  it("页脚被识别", () => {
+    expect(isPageFooter("Page 1 of 3")).toBe(true);
+    expect(isPageFooter("第 2 页,共 3 页")).toBe(true);
+    expect(isPageFooter("CAP, CERM, 4.7 uF")).toBe(false);
+  });
+
+  it("整段正文落进料号列时不当 MPN", () => {
+    expect(looksLikeMpnCell("LT8650SEV#PBF")).toBe(true);
+    expect(looksLikeMpnCell("GCM32DC72A475KE02L")).toBe(true);
+    expect(
+      looksLikeMpnCell("These resources are subject to change without notice."),
+    ).toBe(false);
+  });
+
+  it("翻页重复的表头行不当数据行", () => {
+    const rows = [
+      ["位号", "数量", "MPN"],
+      ["C1", "2", "GRM188"],
+      ["位号", "数量", "MPN"],
+      ["C2", "3", "GRM189"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines.map((l) => l.refDes)).toEqual(["C1", "C2"]);
+  });
+
+  it("页脚丢弃;其余只有描述的片段并回上一行,不白丢信息", () => {
+    const rows = [
+      ["位号", "数量", "MPN", "描述"],
+      ["R1", "2", "CRCW0402", "RES, 54.9 k, 1%"],
+      ["", "", "", "Page 1 of 3"],
+      ["", "", "", "AEC-Q200 Thick Film"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].description).toBe("RES, 54.9 k, 1% AEC-Q200 Thick Film");
   });
 });
