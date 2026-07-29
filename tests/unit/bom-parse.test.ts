@@ -8,6 +8,8 @@ import {
   parseQty,
   toStandardLines,
   missingRecommendedFields,
+  looksLikeRefDesList,
+  countRefDes,
 } from "@/lib/domain/bom-parse";
 
 describe("CSV 解析", () => {
@@ -343,5 +345,72 @@ describe("KiCad 工程 BOM:从 Value 列提取 IC 型号(真实样本形态)", (
     expect(l.mpn).toBe("CRCW06030000Z0EA");
     expect(l.mpnSource).toBe("column");
     expect(l.notices ?? []).toEqual([]);
+  });
+});
+
+describe("PDF 折行的位号列表(TI BOM 实测形态)", () => {
+  it("looksLikeRefDesList 认位号串,不认散文", () => {
+    expect(looksLikeRefDesList("C103, C201, C202,")).toBe(true);
+    expect(looksLikeRefDesList("!PCB700")).toBe(true);
+    expect(looksLikeRefDesList("SH-J700, SH-J701")).toBe(true); // TI 用带连字符的位号
+    expect(looksLikeRefDesList("备注:以上为主料")).toBe(false);
+    expect(looksLikeRefDesList("以下为客户指定品牌")).toBe(false);
+    expect(looksLikeRefDesList("")).toBe(false);
+  });
+
+  it("上一行还差位号时,只有位号的行并进上一行", () => {
+    const rows = [
+      ["位号", "数量", "MPN"],
+      ["C101, C102,", "4", "GCM32DC72A475KE02L"],
+      ["C103, C201", "", ""],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(1);
+    expect(countRefDes(lines[0].refDes)).toBe(4);
+    expect(lines[0].refDes).toBe("C101, C102, C103, C201");
+  });
+
+  it("上一行位号已经凑够数时**不合并** —— 那是独立的一行", () => {
+    const rows = [
+      ["位号", "数量", "封装"],
+      ["C1, C3, C5", "3", "0402"],
+      ["C2", "", "0805"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(2);
+    expect(lines[1].refDes).toBe("C2");
+  });
+
+  it("上一行没有数量时不敢合并(判据不足,宁可不并)", () => {
+    const rows = [
+      ["位号", "数量", "MPN"],
+      ["C101,", "", "GCM32"],
+      ["C102", "", ""],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines[0].refDes).toBe("C101,");
+  });
+
+  it("附注行不会被并进上一行的位号", () => {
+    const rows = [
+      ["位号", "数量", "MPN"],
+      ["C101, C102,", "4", "GCM32"],
+      ["备注:以上为主料"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].refDes).toBe("C101, C102,");
+  });
+
+  it("续行带来的封装/描述补进上一行的空位,不覆盖已有内容", () => {
+    const rows = [
+      ["位号", "数量", "MPN", "封装"],
+      ["C1, C2,", "4", "GCM32", ""],
+      ["C3, C4", "", "", "0603"],
+    ];
+    const lines = toStandardLines(rows, detectColumnMapping(rows));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].footprint).toBe("0603");
   });
 });

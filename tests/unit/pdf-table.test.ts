@@ -182,3 +182,63 @@ describe("buildPdfTable:重建表格", () => {
     expect(t.rows[0]).toEqual(["位 号", "用量"]);
   });
 });
+
+describe("列缝识别的两个实测坑(TI BOM)", () => {
+  /** 造一张 3 列表格:位号 | 数量 | 型号 */
+  function table(rows: [string, string, string][]): PdfTextItem[] {
+    const out: PdfTextItem[] = [];
+    rows.forEach((r, i) => {
+      const y = 700 - i * 12;
+      out.push(item(r[0], 18, y), item(r[1], 104, y), item(r[2], 180, y));
+    });
+    return out;
+  }
+
+  it("个别超长单元格越过列缝时,**仍然**能切出这一列", () => {
+    const items = table([
+      ["位号", "数量", "型号"],
+      ["C1", "2", "GRM188"],
+      ["C2", "3", "GRM189"],
+      ["C3", "4", "GRM190"],
+    ]);
+    // 再加一行:位号极长,右边界越过了「数量」列的左边界
+    const y = 640;
+    items.push(
+      { text: "C223, C323, C423, C523", x: 18, y, width: 90, height: 10, page: 1 },
+      { text: "5", x: 104, y, width: 5, height: 10, page: 1 },
+      { text: "GRM191", x: 180, y, width: 30, height: 10, page: 1 },
+    );
+    const t = buildPdfTable(items);
+    // 越界行不该毁掉整条缝 —— 位号与数量必须还是两列
+    expect(t.rows[1]).toEqual(["C1", "2", "GRM188"]);
+    expect(t.rows[0]).toEqual(["位号", "数量", "型号"]);
+  });
+
+  it("表格上方的标题/文件名行不参与列缝统计", () => {
+    const items = table([
+      ["位号", "数量", "型号"],
+      ["C1", "2", "GRM188"],
+      ["C2", "3", "GRM189"],
+      ["C3", "4", "GRM190"],
+    ]);
+    // 顶部元信息:一个很宽的文件名,正好压在位号与数量的缝上
+    items.push({ text: "PMP23680_TI-BOM.xlsx", x: 18, y: 760, width: 95, height: 10, page: 1 });
+    items.push({ text: "REV A", x: 300, y: 760, width: 25, height: 10, page: 1 });
+    const t = buildPdfTable(items);
+    const header = t.rows.find((r) => r.includes("位号"))!;
+    expect(header).toContain("数量");
+    // 关键:位号与数量没有被并进同一格
+    expect(header.some((c) => c.includes("位号") && c.includes("数量"))).toBe(false);
+  });
+
+  it("合并阈值远小于切列阈值 —— 否则相邻两列会被粘死", () => {
+    // 两个片段相距 6pt(字高 10):属于不同列,不该被合并
+    const t = buildPdfTable([
+      item("位号", 18, 700),
+      item("数量", 104, 700),
+      item("C1", 18, 688),
+      item("12", 104, 688),
+    ]);
+    expect(t.rows[1]).toEqual(["C1", "12"]);
+  });
+});

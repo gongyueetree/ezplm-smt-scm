@@ -84,7 +84,9 @@ export function mergeAdjacentItems(line: PdfTextItem[], maxGap: number): PdfText
     const prev = out[out.length - 1];
     if (prev && item.x - (prev.x + prev.width) <= maxGap) {
       const right = Math.max(prev.x + prev.width, item.x + item.width);
-      const needsSpace = item.x - (prev.x + prev.width) > maxGap * 0.25;
+      // 只有空隙接近阈值上限时才补空格。比例定太低会把被拆碎的型号
+      // (STM32 | F103)拼成「STM32 F103」,MPN 当场作废。
+      const needsSpace = item.x - (prev.x + prev.width) > maxGap * 0.7;
       out[out.length - 1] = {
         ...prev,
         text: needsSpace ? `${prev.text} ${item.text}` : prev.text + item.text,
@@ -99,38 +101,72 @@ export function mergeAdjacentItems(line: PdfTextItem[], maxGap: number): PdfText
 }
 
 /**
- * 推导列的分隔位置 —— 找**纵向留白走廊**,而不是按左边界聚类。
+ * 推导列的分隔位置 —— 纵向投影法(projection profile)。
  *
- * 为什么不能用左边界:表头常常居中、数据常常左对齐或右对齐,
- * 同一列里表头和数据的左边界能差出半个格。按左边界聚类会把表头
- * 和它自己的数据分到不同列(实测:表头整体右移一格,列映射全废)。
+ * 为什么不用"必须完全空白的走廊":
+ * 真实排版里总有个别超长单元格越过列缝(TI 的 BOM 里,少数很长的 Description
+ * 会伸进 PackageReference 列)。只要**有一行**越界,整条缝就消失,两列被永久粘死。
  *
- * 留白走廊法:把每行每个单元格覆盖的 [x, x+width] 区间叠起来,
- * 全表都没有文字覆盖、且宽度超过阈值的区间就是列与列之间的缝,
- * 取缝的中点作为切分线。对齐方式怎么变都不影响缝的位置。
+ * 改为统计每个横坐标被多少行覆盖,取覆盖率极低的区段作为列缝:
+ * 个别越界行不再能毁掉一条缝,而真正的列内区域覆盖率很高,不会被误切。
  *
- * 只统计**含两个及以上单元格**的行:标题、页脚这种横跨整页的单行
- * 会把所有缝糊死。
+ * 另外只统计**真正的表格行**(以单元格数中位数为门槛):
+ * 表格上方的标题/文件名/日期行也可能有两三个单元格,但它们横跨在列缝上 ——
+ * 实测一份 TI 的 BOM 就是因为顶部的 `PMP23680_TI-BOM.xlsx` 压在
+ * Designator 与 Quantity 的缝上,把这两列连同 Value 并成了一列。
+ *
+ * @param coverageTolerance 覆盖率低于「行数 × 该比例」即视为列缝(默认 0.12)
  */
-export function detectColumnBoundaries(lines: PdfTextItem[][], minGap: number): number[] {
-  const spans = lines
-    .filter((line) => line.length >= 2)
-    .flatMap((line) => line.map((i) => [i.x, i.x + Math.max(i.width, 0.1)] as [number, number]))
-    .sort((a, b) => a[0] - b[0]);
-  if (spans.length === 0) return [];
+export function detectColumnBoundaries(
+  lines: PdfTextItem[][],
+  minGap: number,
+  coverageTolerance = 0.12,
+): number[] {
+  const counts = lines.map((l) => l.length).filter((n) => n >= 2).sort((a, b) => a - b);
+  const median = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 0;
+  const minCells = Math.max(3, median);
 
-  const merged: [number, number][] = [spans[0]];
-  for (const [start, end] of spans.slice(1)) {
-    const last = merged[merged.length - 1];
-    if (start <= last[1]) last[1] = Math.max(last[1], end);
-    else merged.push([start, end]);
+  let rows = lines.filter((line) => line.length >= minCells);
+  // 门槛过严(例如整份只有两三行)时退回宽松规则,总比一条缝都找不到强
+  if (rows.length === 0) rows = lines.filter((line) => line.length >= 2);
+  if (rows.length === 0) return [];
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const row of rows) {
+    for (const it of row) {
+      minX = Math.min(minX, it.x);
+      maxX = Math.max(maxX, it.x + Math.max(it.width, 0.1));
+    }
+  }
+  if (!Number.isFinite(minX) || maxX <= minX) return [];
+
+  const BUCKET = 1; // 1pt 精度足够;页宽通常 600–850pt
+  const size = Math.ceil((maxX - minX) / BUCKET) + 1;
+  const coverage = new Array<number>(size).fill(0);
+  for (const row of rows) {
+    for (const it of row) {
+      const from = Math.max(0, Math.floor((it.x - minX) / BUCKET));
+      const to = Math.min(size, Math.ceil((it.x + Math.max(it.width, 0.1) - minX) / BUCKET));
+      for (let i = from; i < to; i++) coverage[i]++;
+    }
   }
 
+  const threshold = Math.floor(rows.length * coverageTolerance);
   const cuts: number[] = [];
-  for (let i = 1; i < merged.length; i++) {
-    const gap = merged[i][0] - merged[i - 1][1];
-    if (gap >= minGap) cuts.push((merged[i - 1][1] + merged[i][0]) / 2);
+  let runStart = -1;
+  for (let i = 0; i < size; i++) {
+    const empty = coverage[i] <= threshold;
+    if (empty && runStart < 0) runStart = i;
+    if (!empty && runStart >= 0) {
+      // 跳过左边距(runStart === 0):那不是列缝
+      if (runStart > 0 && (i - runStart) * BUCKET >= minGap) {
+        cuts.push(minX + ((runStart + i) / 2) * BUCKET);
+      }
+      runStart = -1;
+    }
   }
+  // 收尾的空白是右边距,不算列缝,故不处理 runStart >= 0 的情况
   return cuts;
 }
 
@@ -163,17 +199,33 @@ function isBlankRow(row: string[]): boolean {
 /**
  * 重建表格。
  *
- * @param columnGapFactor 列间距阈值 = 中位字高 × 该系数。默认 1.2:
- *   小于一个字宽的间隔按同列处理(单元格内的空格),更大的才切列。
+ * **合并阈值与切列阈值必须分开**,这是实测踩出来的:
+ * - 合并(把同一格被拆碎的片段拼回)只该发生在几乎贴着的片段之间,
+ *   阈值大了会把相邻两列粘死,后面再也分不开;
+ * - 切列的走廊只要比一个空格宽就够 —— 一份 TI 的 BOM 里
+ *   Designator 与 Quantity 之间的真实走廊只有 5.5pt(字高 8.3pt),
+ *   用「1.2 × 字高」当门槛会直接漏掉这道缝,把三列并成一列。
+ *
+ * 切多了不要紧:列归属按片段**中心点**判定,长描述不会被切碎,
+ * 多出来的空列在列映射里忽略即可。
+ *
+ * @param columnGapFactor 切列走廊阈值 = 中位字高 × 该系数(默认 0.5)
+ * @param mergeGapFactor  片段合并阈值 = 中位字高 × 该系数(默认 0.35,约一个空格)
  */
-export function buildPdfTable(items: PdfTextItem[], columnGapFactor = 1.2): PdfTableResult {
+export function buildPdfTable(
+  items: PdfTextItem[],
+  columnGapFactor = 0.5,
+  mergeGapFactor = 0.35,
+): PdfTableResult {
   const usable = items.filter((i) => i.text.trim() !== "");
   if (usable.length === 0) return { rows: [], pages: 0, droppedRepeatedHeaders: 0 };
 
   const tol = rowTolerance(usable);
-  const gap = tol * 2 * columnGapFactor;
-  const lines = groupIntoLines(usable, tol).map((line) => mergeAdjacentItems(line, gap));
-  const cuts = detectColumnBoundaries(lines, gap);
+  const fontHeight = tol * 2; // rowTolerance = 中位字高的一半
+  const mergeGap = fontHeight * mergeGapFactor;
+  const columnGap = fontHeight * columnGapFactor;
+  const lines = groupIntoLines(usable, tol).map((line) => mergeAdjacentItems(line, mergeGap));
+  const cuts = detectColumnBoundaries(lines, columnGap);
 
   const rows: string[][] = [];
   for (const line of lines) {

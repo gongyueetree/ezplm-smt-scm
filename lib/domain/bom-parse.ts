@@ -104,6 +104,33 @@ export function missingRequiredFields(mapping: ColumnMapping): BomField[] {
   return missingFields(mapping, REQUIRED_FIELDS);
 }
 
+/**
+ * 文本是否是一串位号(如 `C103, C201, C202,`)。
+ *
+ * 用于识别 PDF 里**换行的位号列表**:一格装不下时会折到下一行,
+ * 表格重建后表现为"只有位号列有值、其余全空"的行。
+ * 必须与"备注:以上为主料"这类附注区分开 —— 后者是散文,不是位号串。
+ */
+export function looksLikeRefDesList(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const parts = t
+    .split(/[,,;;]/)
+    .map((x) => x.trim())
+    .filter((x) => x !== "");
+  if (parts.length === 0) return false;
+  // 每一段都必须形如「字母开头 + 含数字」:R1 / C101 / U2A / !PCB700 / SH-J700。
+  // 允许连字符与下划线 —— 实测 TI 的 BOM 用 SH-J700 这种带连字符的位号。
+  return parts.every((x) => /^!?[A-Za-z][A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/.test(x));
+}
+
+/** 数一行位号里有几个位号 */
+export function countRefDes(refDes: string | null | undefined): number {
+  return (refDes ?? "")
+    .split(/[,,;;\s]+/)
+    .filter((x) => x.trim() !== "").length;
+}
+
 /** MPN 的来源:来自独立列,还是从 Value 推断出来的(推断的必须人工确认) */
 export type MpnSource = "column" | "inferred-from-value";
 
@@ -144,7 +171,11 @@ export function parseQty(raw: string | null): { qty: number | null; issue?: stri
 }
 
 /** 按映射把原始行转为标准 BOM 行(非标准 BOM → 标准结构) */
-export function toStandardLines(rows: string[][], mapping: ColumnMapping): ParsedBomLine[] {
+function buildLines(
+  rows: string[][],
+  mapping: ColumnMapping,
+  mergeContinuations: boolean,
+): ParsedBomLine[] {
   const out: ParsedBomLine[] = [];
   let lineNo = 0;
 
@@ -175,6 +206,42 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
      */
     const hasIdentifier = Boolean(mpn || customerPn || internalPn || description);
     const otherFilled = [rawQty, manufacturer, footprint].filter(Boolean).length;
+
+    /*
+     * 续行合并:PDF 里一格装不下的位号列表会折行,
+     * 表格重建后是"只有位号列有值"的行。它属于上一行,不是新物料 ——
+     * 不合并的话位号会被截断(TI 的 BOM 里 qty=12 却只剩 2 个位号)。
+     *
+     * 关键判据是**上一行还差位号**:上一行声明 qty=12 但目前只列了 2 个,
+     * 说明后面还有。这比"看起来像续行"可靠得多 ——
+     * 工程 BOM 里确实存在"有位号有封装但没填数量"的独立行,
+     * 只要上一行的位号已经凑够数,就不会把它误并进去。
+     */
+    const prev = out.length > 0 ? out[out.length - 1] : null;
+    const prevExpectsMore =
+      prev !== null &&
+      prev.qty !== null &&
+      countRefDes(prev.refDes) > 0 &&
+      countRefDes(prev.refDes) < prev.qty;
+    const isContinuation =
+      mergeContinuations &&
+      prev !== null &&
+      prevExpectsMore &&
+      qty === null &&
+      !mpn &&
+      !customerPn &&
+      !internalPn &&
+      !manufacturer &&
+      Boolean(refDes) &&
+      looksLikeRefDesList(refDes);
+    if (isContinuation) {
+      prev.refDes = [prev.refDes, refDes].filter(Boolean).join(" ");
+      // 描述/封装也可能跟着折行,补进上一行的空位(不覆盖已有内容)
+      if (description && !prev.description) prev.description = description;
+      if (footprint && !prev.footprint) prev.footprint = footprint;
+      continue;
+    }
+
     if (!hasIdentifier && !(refDes && otherFilled > 0)) continue;
 
     const issues: string[] = [];
@@ -233,4 +300,29 @@ export function countUniqueMpns(lines: ParsedBomLine[]): number {
     if (key) set.add(key);
   }
   return set.size;
+}
+
+/**
+ * 「位号数 == 数量」的吻合率。
+ * 用它来客观判断某个解析选择是不是更接近原表,而不是靠猜。
+ */
+function refDesAgreement(lines: ParsedBomLine[]): number {
+  const solid = lines.filter((l) => l.qty !== null && l.refDes);
+  if (solid.length === 0) return 0;
+  const hit = solid.filter((l) => countRefDes(l.refDes) === l.qty).length;
+  return hit / solid.length;
+}
+
+/**
+ * 按映射把原始行转为标准 BOM 行(非标准 BOM → 标准结构)。
+ *
+ * 续行合并是**自校准**的:PDF 折行的位号需要合并,但很多 BOM 的
+ * 数量根本不等于位号数(一个位号用量 10 也很常见),
+ * 那里合并就是错的。所以两种解析都算一遍,取「位号数 == 数量」吻合率更高的那个;
+ * 打平时不合并 —— 不确定就别动原始数据。
+ */
+export function toStandardLines(rows: string[][], mapping: ColumnMapping): ParsedBomLine[] {
+  const plain = buildLines(rows, mapping, false);
+  const merged = buildLines(rows, mapping, true);
+  return refDesAgreement(merged) > refDesAgreement(plain) ? merged : plain;
 }
