@@ -1,49 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { AlternateResultCard, type ScoredResult } from "@/components/alternates/result-card";
+import { useAlternateSelections } from "@/components/alternates/use-selections";
 import { Badge } from "@/components/ui/badge";
-import { MpnLink } from "@/components/ui/mpn-link";
-import { MODE_LABELS, SOURCE_LABELS, type SubstitutionMode } from "@/lib/domain/alternate-score";
+import { MODE_LABELS, type SubstitutionMode } from "@/lib/domain/alternate-score";
 
 interface Constraint {
   key: string;
   label: string;
   required: string | null;
   higherIsBetter?: boolean;
-}
-
-interface ParamRow {
-  key: string;
-  label: string;
-  actual: string | null;
-  source: keyof typeof SOURCE_LABELS;
-  score: number | null;
-  verdict: string;
-  detail: string;
-}
-
-interface Scored {
-  mpn: string;
-  manufacturer: string | null;
-  description: string | null;
-  technical: number;
-  evidence: number;
-  sourceTrust: number;
-  confidence: number;
-  rows: ParamRow[];
-  warnings: string[];
-  modeTag: string;
-  preferredVendor: boolean;
-  market: MarketSummary | null;
-}
-
-interface MarketSummary {
-  tiers: { qty: number; unitPrice: string; currency: string; provider: string }[];
-  availability: "充足" | "一般" | "紧张" | "无现货" | "未知";
-  totalStock: number | null;
-  channels: string[];
-  dataUpdatedAt: string | null;
-  mixedCurrency: boolean;
 }
 
 interface Subject {
@@ -64,58 +31,6 @@ const MODES: SubstitutionMode[] = [
   "LOW_COST",
 ];
 
-const VERDICT_TONE: Record<string, "green" | "amber" | "red" | "gray"> = {
-  一致: "green",
-  更优: "green",
-  部分覆盖: "amber",
-  有差异: "red",
-  缺失: "gray",
-  未知: "gray",
-};
-
-/** 评分环:纯 SVG,不引图表库(离线部署禁 CDN) */
-function ScoreRing({ value }: { value: number }) {
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  const tone = value >= 80 ? "var(--brand)" : value >= 60 ? "#b58105" : "var(--danger)";
-  return (
-    <svg width="46" height="46" viewBox="0 0 46 46" role="img" aria-label={`结论可信 ${value}`}>
-      <circle cx="23" cy="23" r={r} fill="none" stroke="var(--gray-200)" strokeWidth="4" />
-      <circle
-        cx="23"
-        cy="23"
-        r={r}
-        fill="none"
-        stroke={tone}
-        strokeWidth="4"
-        strokeDasharray={`${(value / 100) * c} ${c}`}
-        strokeLinecap="round"
-        transform="rotate(-90 23 23)"
-      />
-      <text x="23" y="27" textAnchor="middle" fontSize="13" fontWeight="700" fill={tone}>
-        {value}
-      </text>
-    </svg>
-  );
-}
-
-function Metric({ value, label }: { value: number; label: string }) {
-  return (
-    <div
-      style={{
-        flex: "1 1 110px",
-        border: "1px solid var(--gray-200)",
-        borderRadius: 8,
-        padding: "8px 10px",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: 17, fontWeight: 700 }}>{value}</div>
-      <div className="small muted">{label}</div>
-    </div>
-  );
-}
-
 export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
   const [mpn, setMpn] = useState(initialMpn);
   const [loadingSpec, setLoadingSpec] = useState(false);
@@ -126,12 +41,15 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
   const [mode, setMode] = useState<SubstitutionMode>("FUNCTIONAL");
   const [vendors, setVendors] = useState<string[]>([]);
   const [vendorInput, setVendorInput] = useState("");
-  const [results, setResults] = useState<Scored[] | null>(null);
+  const [results, setResults] = useState<ScoredResult[] | null>(null);
   const [degraded, setDegraded] = useState<{ provider: string; kind: string }[]>([]);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [includeMarket, setIncludeMarket] = useState(true);
   const [demandQty, setDemandQty] = useState(100);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  // 勾选清单跟着"当前分析过的型号"走 —— 输入框里边打字边换清单会闪
+  const [selectionSubject, setSelectionSubject] = useState<string | null>(null);
+  const sel = useAlternateSelections(selectionSubject, []);
 
   async function loadSpec() {
     const q = mpn.trim();
@@ -177,6 +95,7 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
         return;
       }
       setResults(body.results ?? []);
+      setSelectionSubject(body.subject?.mpn ?? q);
       setSubject((prev) => ({
         ...(prev ?? { mpn: q, manufacturer: null, description: null }),
         ...body.subject,
@@ -417,128 +336,23 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
             <p className="small muted">未找到够格的替代候选 —— 与其列一堆无关型号,不如如实说没有。</p>
           </div>
         ) : (
-          results.map((r, i) => (
-            <div className="card" key={r.mpn} style={{ padding: 14, marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <Badge tone="gray">#{i + 1}</Badge>
-                <ScoreRing value={r.confidence} />
-                <Badge tone={r.modeTag.startsWith("[P2]") ? "green" : "amber"}>{r.modeTag}</Badge>
-                <MpnLink mpn={r.mpn} />
-                {r.preferredVendor ? <Badge tone="purple">优选厂商</Badge> : null}
-                <button
-                  className="btn xs"
-                  style={{ marginLeft: "auto" }}
-                  onClick={() => setExpanded((p) => ({ ...p, [r.mpn]: !p[r.mpn] }))}
-                >
-                  {expanded[r.mpn] ? "收起参数对比" : "参数对比详情"}
-                </button>
-              </div>
-              <div className="small muted" style={{ marginTop: 4 }}>
-                {r.manufacturer ?? "制造商未知"} · {r.description ?? "无描述"}
-              </div>
-
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                <Metric value={r.technical} label="技术兼容" />
-                <Metric value={r.evidence} label="证据覆盖" />
-                <Metric value={r.sourceTrust} label="来源可信" />
-                <Metric value={r.confidence} label="结论可信" />
-              </div>
-
-              {r.market ? (
-                <div
-                  style={{
-                    marginTop: 8,
-                    padding: "8px 10px",
-                    border: "1px solid var(--gray-200)",
-                    borderRadius: 8,
-                    background: "var(--gray-50)",
-                  }}
-                >
-                  <div className="small" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <b>市场行情</b>
-                    {r.market.tiers.map((t) => (
-                      <span key={t.qty}>
-                        {t.qty}片 = {t.currency} {t.unitPrice}
-                        <span className="muted"> ({t.provider})</span>
-                      </span>
-                    ))}
-                    <span>
-                      供货:
-                      <Badge
-                        tone={
-                          r.market.availability === "充足"
-                            ? "green"
-                            : r.market.availability === "一般"
-                              ? "blue"
-                              : r.market.availability === "未知"
-                                ? "gray"
-                                : "amber"
-                        }
-                      >
-                        {r.market.availability}
-                      </Badge>
-                    </span>
-                    {r.market.totalStock !== null ? (
-                      <span className="muted">合计库存 {r.market.totalStock}</span>
-                    ) : (
-                      <span className="muted">库存未知</span>
-                    )}
-                  </div>
-                  <div className="small muted" style={{ marginTop: 4 }}>
-                    {r.market.channels.length > 0
-                      ? `渠道:${r.market.channels.join("、")}`
-                      : "暂无有货渠道"}
-                    {r.market.dataUpdatedAt
-                      ? ` · 数据更新 ${r.market.dataUpdatedAt.slice(0, 10)}`
-                      : " · 数据时间未知"}
-                    {" · "}
-                    <b>非实时行情</b>,分销商目录价,通常不含关税/运费/税费
-                    {r.market.mixedCurrency ? " · ⚠ 含多种币种,系统不做汇率换算,不可直接比较" : ""}
-                  </div>
-                </div>
-              ) : null}
-
-              {r.warnings.map((w, k) => (
-                <div className="banner warn" key={k} style={{ marginTop: 8 }}>
-                  ⚠ {w}
-                </div>
-              ))}
-
-              {expanded[r.mpn] ? (
-                <div className="tbl-scroll" style={{ marginTop: 10 }}>
-                  <table className="tbl">
-                    <thead>
-                      <tr>
-                        <th>参数</th>
-                        <th>候选值</th>
-                        <th className="num">分数</th>
-                        <th>判定</th>
-                        <th>数据来源</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {r.rows.map((row) => (
-                        <tr key={row.key}>
-                          <td className="small">{row.label}</td>
-                          <td className="small mono">{row.actual ?? "—"}</td>
-                          <td className="num small">{row.score ?? "—"}</td>
-                          <td className="small">
-                            <Badge tone={VERDICT_TONE[row.verdict] ?? "gray"}>{row.verdict}</Badge>
-                            <div className="muted">{row.detail}</div>
-                          </td>
-                          <td className="small">
-                            <Badge tone={row.source === "AI_SEARCH" ? "amber" : "blue"}>
-                              {SOURCE_LABELS[row.source]}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-            </div>
-          ))
+          <>
+            <p className="small muted" style={{ marginBottom: 8 }}>
+              勾选「选用」即把该候选存入<b>该型号的候选清单</b>(物料详情页「⑦ 替代料」可见);
+              勾选<b>不代表替代关系已成立</b>。
+            </p>
+            {sel.error ? <div className="banner warn">{sel.error}</div> : null}
+            {results.map((r, i) => (
+              <AlternateResultCard
+                key={r.mpn}
+                result={r}
+                rank={i + 1}
+                selected={sel.isSelected(r.mpn)}
+                selectBusy={sel.busyMpn === r.mpn}
+                onToggleSelect={(next) => void sel.toggle(r, mode, next)}
+              />
+            ))}
+          </>
         )}
       </div>
     </div>

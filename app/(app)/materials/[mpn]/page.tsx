@@ -6,9 +6,10 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { FIELD_LABELS, type EnrichableField } from "@/lib/domain/field-merge";
+import { listAlternateSelections } from "@/lib/server/repositories/alternate-selection";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
 import { getSession } from "@/lib/server/session";
-import { CandidateFinder } from "./candidate-finder";
+import { AlternatePicker } from "./alternate-picker";
 import { LibraryPreview, LibraryPreviewFallback } from "./library-preview";
 import { LiveOffers } from "./live-offers";
 import { Model3D } from "./model-3d";
@@ -58,6 +59,7 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
   const mpn = decodeURIComponent(raw);
   const session = (await getSession())!;
   const d = await getPartDetail(session.tenantId, mpn);
+  const selections = await listAlternateSelections(session, mpn);
 
   const model3d = d.documents.find((x) => x.kind === "MODEL_3D") ?? null;
 
@@ -339,7 +341,11 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
       </Card>
 
       {/* ⑦ 替代料 */}
-      <Card title="⑦ 替代料" sub={`${d.alternates.length} 条 · 每条标注来源`} flush>
+      <Card
+        title="⑦ 替代料"
+        sub={`已知关系 ${d.alternates.length} 条 · 已勾选候选 ${selections.length} 条`}
+        flush
+      >
         <div style={{ padding: "10px 16px 0" }}>
           <p className="small muted">
             ⚠ ezPLM API Key 查询接口<b>不提供替代料能力</b>,此处为
@@ -393,7 +399,7 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
             </tbody>
           </table>
         </div>
-        <CandidateFinder mpn={mpn} />
+        <AlternatePicker mpn={mpn} initialSelections={selections} />
       </Card>
 
       {/* ⑧ 供应与库存 */}

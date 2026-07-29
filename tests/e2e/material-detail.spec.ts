@@ -10,7 +10,8 @@ import { expect, test, type Page } from "@playwright/test";
  *    分销商价格与库存 / 数据手册与库文件 / 替代料 / 供应与库存 八块;
  * 3. 数据来源被**诚实标注**(ezPLM 实时接口 / 本地缓存 / 示例数据),不假装实时;
  * 4. 未收录的型号给出明确说明而**不是 500 或空白页**;
- * 5. 替代料区块对**任意**物料都存在(哪怕为空,也说明"暂无",不隐藏能力)。
+ * 5. 替代料区块对**任意**物料都存在(哪怕为空,也说明"暂无",不隐藏能力);
+ * 6. 替代料可在详情页内直接查询,勾选结果落库、刷新仍在,且可重复查询。
  */
 
 const PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
@@ -170,24 +171,53 @@ test("分销商价格与库存:展示数据更新时间且明示非实时", asyn
   await expect(card.getByText(/不做汇率换算/)).toBeVisible();
 });
 
-test("替代料:任意物料都能检索同系列候选,且标注为「候选·待人工判定」", async ({ page }) => {
-  test.setTimeout(120_000);
+test("替代料:详情页内可查询,勾选后进候选清单,刷新仍在,且可重新查询", async ({ page }) => {
+  test.setTimeout(180_000);
   await login(page, "procurement@demo.ezplm.cn");
   await page.goto("/materials/STM32F103C8T6");
 
-  await page.getByRole("button", { name: "检索同系列候选" }).click();
-  // 结果区:要么给出候选表,要么如实说明为什么没查(不得静默无反应)
-  await expect(page.getByText(/检索关键字|无法推导出可靠的系列前缀|检索降级/)).toBeVisible({
-    timeout: 60_000,
-  });
+  const picker = page.getByTestId("alt-picker");
+  await expect(picker).toBeVisible();
+  // 初始:不得预先声称有替代关系
+  await expect(picker.getByText("待工程确认")).toBeVisible();
 
-  const rows = page.locator("table.tbl tbody tr", { hasText: "候选 · 待人工判定" });
-  if ((await rows.count()) > 0) {
-    // 候选必须被标注为待人工判定,绝不写成"可替代"
-    await expect(rows.first()).toContainText("候选 · 待人工判定");
-    // 措辞纪律:必须写明这不是已成立的替代关系,须人工判定
-    await expect(page.getByText(/须由工程按参数、封装、合规逐项人工判定/)).toBeVisible();
-  }
+  await picker.getByRole("button", { name: "查找替代料" }).click();
+  const results = page.getByTestId("alt-picker-results");
+  await expect(results).toBeVisible({ timeout: 120_000 });
+
+  // 本地库已 seed 同族型号(STM32F103CBT6 等),此处查不到即为回归
+  const first = results.locator("[data-alt-mpn]").first();
+  await expect(first).toBeVisible();
+  const altMpn = (await first.getAttribute("data-alt-mpn"))!;
+
+  // 勾选 → 落库
+  await first.getByRole("checkbox").check();
+  const selected = page.getByTestId("alt-selected");
+  await expect(selected.getByText(altMpn, { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  // 刷新后仍在(证明是落库不是前端状态),且带勾选时间与评分快照
+  await page.reload();
+  const selectedAfter = page.getByTestId("alt-selected");
+  await expect(selectedAfter.getByText(altMpn, { exact: true })).toBeVisible();
+  await expect(selectedAfter.getByText(/技术 \d+ · 证据 \d+ · 来源 \d+/).first()).toBeVisible();
+  // 措辞纪律:勾选 ≠ 替代关系成立
+  await expect(page.getByText(/不代表替代关系已成立/)).toBeVisible();
+
+  // 可再次查询(刷新后结果区已清空,入口回到「查找替代料」);已勾选的那条应保持勾选态
+  await page.getByTestId("alt-picker").getByRole("button", { name: "查找替代料" }).click();
+  const again = page
+    .getByTestId("alt-picker-results")
+    .locator(`[data-alt-mpn="${altMpn}"]`);
+  await expect(again).toBeVisible({ timeout: 120_000 });
+  await expect(again.getByRole("checkbox")).toBeChecked();
+  // 查过一次之后,入口改为「重新查询」
+  await expect(
+    page.getByTestId("alt-picker").getByRole("button", { name: "重新查询" }),
+  ).toBeVisible();
+
+  // 移除后清单为空
+  await selectedAfter.getByRole("button", { name: "移除" }).first().click();
+  await expect(page.getByText("尚未勾选任何候选")).toBeVisible({ timeout: 30_000 });
 });
 
 test("未收录型号:给出明确说明而非报错页", async ({ page }) => {

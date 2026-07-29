@@ -118,6 +118,32 @@ async function main() {
       footprint: "0603",
       lifecycle: "ACTIVE" as const,
     },
+    // 同族型号:让「替代料」链路在无外部 Key 的环境下也有本地候选可算,
+    // 否则该能力只能靠 ezPLM/DigiKey 才看得见,离线演示与 E2E 都测不到。
+    {
+      internalPn: "QC-IC-0002",
+      mpn: "STM32F103CBT6",
+      manufacturer: "STMicroelectronics",
+      description: "MCU ARM Cortex-M3 128KB Flash LQFP-48",
+      footprint: "LQFP-48",
+      lifecycle: "ACTIVE" as const,
+    },
+    {
+      internalPn: "QC-IC-0003",
+      mpn: "STM32F103C6T6",
+      manufacturer: "STMicroelectronics",
+      description: "MCU ARM Cortex-M3 32KB Flash LQFP-48",
+      footprint: "LQFP-48",
+      lifecycle: "NRND" as const,
+    },
+    {
+      internalPn: "QC-IC-0004",
+      mpn: "STM32F103C8T7",
+      manufacturer: "STMicroelectronics",
+      description: "MCU ARM Cortex-M3 64KB Flash LQFP-48 工业级",
+      footprint: "LQFP-48",
+      lifecycle: "ACTIVE" as const,
+    },
     {
       internalPn: "QC-IC-0077",
       mpn: "MAX232CPE",

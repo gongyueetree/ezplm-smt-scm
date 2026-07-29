@@ -630,6 +630,39 @@ model BomLineDecision {
   @@unique([tenantId, bomLineId])
 }
 
+/// 替代料候选清单:人工在「替代料查询」里勾选下来的候选。
+///
+/// 语义上是**待工程确认的候选清单**,不是已成立的替代关系 ——
+/// 正式替代关系走 PartAlternate / AVL 规则,需另行审批。
+/// 存评分快照是为了事后能看到"当时是凭什么勾的",评分算法改了也不影响追溯。
+model AlternateSelection {
+  id           String   @id @default(cuid())
+  tenantId     String
+  /// 被替代件 MPN(不建 FK:该料未必在本地物料库里)
+  mpn          String
+  /// 勾选的候选型号
+  alternateMpn String
+  manufacturer String?
+  /// 勾选时用的替代模式
+  mode         String
+  /// 勾选时的四维评分快照
+  technical    Int
+  evidence     Int
+  sourceTrust  Int
+  confidence   Int
+  /// 判断依据与警示的快照
+  reasons      Json?
+  warnings     Json?
+  /// 勾选时的市场行情快照(价格/供货,非实时)
+  market       Json?
+  note         String?
+  selectedById String
+  selectedAt   DateTime @default(now())
+
+  @@unique([tenantId, mpn, alternateMpn])
+  @@index([tenantId, mpn])
+}
+
 /// 外部 API 响应缓存快照。
 /// cacheKey = provider+site+currency+mpn+manufacturer+quantity(SPEC §15)。
 /// expiresAt 派生自 fetchedAt + ttlSeconds,由写入通道统一计算(唯一写入点),仅为索引效率物化。
