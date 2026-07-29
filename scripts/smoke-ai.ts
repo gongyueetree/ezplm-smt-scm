@@ -10,6 +10,11 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+
+import { loadEnvLocal } from "./load-env";
+
+loadEnvLocal();
+
 import { getLlmProvider, llmStatus, LlmError } from "../lib/ai";
 import { getBomOcrProvider, ocrProviderMode } from "../lib/providers/ocr";
 import { MockQuoteAgent, getQuoteAgent } from "../lib/agents/quote-agent";

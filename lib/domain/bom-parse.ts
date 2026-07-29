@@ -40,20 +40,51 @@ export const BOM_FIELD_LABELS: Record<BomField, string> = {
  * 顺序即优先级:越靠前越"典型",用于多列命中同一字段时选优。
  */
 const SYNONYMS: Record<BomField, string[]> = {
-  refDes: ["位号", "refdes", "reference", "references", "designator", "designators", "部位号", "位置号"],
-  qty: ["数量", "用量", "qty", "quantity", "qty/pcs", "单板用量", "使用数量"],
-  mpn: ["mpn", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "mfgpn", "manufacturerpartnumber", "规格型号"],
-  manufacturer: ["制造商", "厂商", "品牌", "生产厂家", "manufacturer", "mfg", "mfr", "brand", "vendor"],
+  // KiCad 导出用 Reference(s);Altium 用 Designator
+  refDes: [
+    "位号", "refdes", "reference", "references", "reference(s)", "ref", "refs",
+    "designator", "designators", "部位号", "位置号", "元件位号",
+  ],
+  // KiCad 的 Qnty 是拼写省略,不是错别字;别把它漏了
+  qty: ["数量", "用量", "qty", "qnty", "quantity", "qty/pcs", "单板用量", "使用数量", "个数", "pcs"],
+  mpn: [
+    "mpn", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "part#", "partnum",
+    "mfgpn", "mfrpn", "mfgpartnumber", "manufacturerpartnumber", "manufacturerpart", "mfrpart#",
+    "规格型号", "厂家型号", "原厂料号", "supplierpartnumber",
+  ],
+  manufacturer: [
+    "制造商", "厂商", "品牌", "生产厂家", "manufacturer", "manufacture", "mfg", "mfr", "brand",
+    "vendor", "supplier", "厂牌", "生产商",
+  ],
   customerPn: ["客户料号", "客户物料编码", "customerpn", "customerpartnumber", "custpn", "客户编码"],
-  internalPn: ["内部料号", "物料编码", "料号", "internalpn", "itemcode", "partcode", "物料号"],
-  description: ["描述", "规格", "说明", "description", "desc", "spec", "specification", "品名"],
-  footprint: ["封装", "footprint", "package", "packagetype", "外形", "封装形式"],
+  internalPn: ["内部料号", "物料编码", "料号", "internalpn", "itemcode", "partcode", "物料号", "编码"],
+  // KiCad/Altium 的 Value、Comment 就是这一行的实质描述,没有它这些 BOM 全是空行
+  description: [
+    "描述", "规格", "说明", "description", "desc", "spec", "specification", "品名",
+    "value", "值", "comment", "注释", "名称", "part", "component",
+  ],
+  footprint: ["封装", "footprint", "package", "packagetype", "外形", "封装形式", "pattern"],
 };
 
 export type ColumnMapping = MappingResult<BomField>;
 
-/** 关键字段:缺任一个都不能算可用的 BOM */
-const REQUIRED_FIELDS: BomField[] = ["qty", "mpn"];
+/**
+ * 关键字段:缺它就无法形成 BOM 行。
+ *
+ * 只强制 qty —— 大量工程侧 BOM(KiCad/Altium 直接导出)只有
+ * 位号 / 数量 / Value / 封装,**根本没有 MPN 列**。
+ * 把 MPN 也设为必填会让这类文件直接 422 被拒之门外;
+ * 正确做法是让它进来,再由校验逐行提示"缺 MPN,无法匹配与比价"。
+ */
+const REQUIRED_FIELDS: BomField[] = ["qty"];
+
+/** 强烈建议但不强制的字段:缺了会在导入结果里明确提示 */
+export const RECOMMENDED_FIELDS: BomField[] = ["mpn"];
+
+/** 缺失的建议字段(用于 UI 提示,不阻断导入) */
+export function missingRecommendedFields(mapping: ColumnMapping): BomField[] {
+  return RECOMMENDED_FIELDS.filter((f) => mapping.fields[f] === undefined);
+}
 
 /**
  * 检测表头行并生成建议映射(委托通用引擎 lib/domain/column-mapping.ts)。
@@ -118,8 +149,23 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
     const internalPn = cellText(row, mapping.fields.internalPn);
     const description = cellText(row, mapping.fields.description);
 
-    // 整行没有任何可识别标识 → 视为表格附注,不当作 BOM 行
-    if (!mpn && !customerPn && !internalPn && !description) continue;
+    const refDes = cellText(row, mapping.fields.refDes);
+    const footprint = cellText(row, mapping.fields.footprint);
+    const manufacturer = cellText(row, mapping.fields.manufacturer);
+
+    /*
+     * 判断这一行是不是真的 BOM 行。
+     *
+     * - 有任一"物料标识"(MPN / 客户料号 / 内部料号 / 描述)→ 是;
+     * - 只有位号 → **要看还有没有别的列有值**:
+     *   工程侧 BOM(KiCad/Altium)常常只有 位号/数量/Value/封装,没有 MPN,
+     *   不认位号就会把整张表当附注丢光(实测导出的 BOM 会解析出 0 行);
+     *   但"备注:以上为主料"这种附注也会落在第一列,
+     *   它的特征是**整行只有这一个格有值** —— 据此区分,不靠猜文案。
+     */
+    const hasIdentifier = Boolean(mpn || customerPn || internalPn || description);
+    const otherFilled = [rawQty, manufacturer, footprint].filter(Boolean).length;
+    if (!hasIdentifier && !(refDes && otherFilled > 0)) continue;
 
     const issues: string[] = [];
     if (issue) issues.push(issue);
@@ -129,14 +175,14 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
     out.push({
       sourceRow: r + 1,
       lineNo,
-      refDes: cellText(row, mapping.fields.refDes),
+      refDes,
       qty,
       mpn,
-      manufacturer: cellText(row, mapping.fields.manufacturer),
+      manufacturer,
       customerPn,
       internalPn,
       description,
-      footprint: cellText(row, mapping.fields.footprint),
+      footprint,
       issues,
     });
   }

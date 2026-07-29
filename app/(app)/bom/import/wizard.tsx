@@ -19,6 +19,7 @@ interface ImportResponse {
   source: string;
   isDraft: boolean;
   sourceNote?: string;
+  missingRecommended: string[];
 }
 
 const SOURCE_LABEL: Record<string, { text: string; tone: "green" | "blue" | "amber" }> = {
@@ -172,6 +173,14 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
               <div className="banner warn">
                 本次表格来自<b>模型转写</b>,属识别草稿:型号可能有形近字错误、行列可能错位。
                 导入前请对照原件逐行核对;数量、单价等数值由系统按既有规则重新解析,<b>模型不参与任何计算</b>。
+              </div>
+            ) : null}
+            {result.missingRecommended?.length ? (
+              <div className="banner warn">
+                本次未识别到 <b>{result.missingRecommended.join("、")}</b> 列。
+                BOM 已导入,但缺 MPN 的行<b>无法做供应商匹配与比价</b> ——
+                可在原文件补上该列后重新导入,或逐行人工填写。
+                (工程侧直接导出的 BOM 常常只有 位号 / 数量 / Value / 封装。)
               </div>
             ) : null}
             {result.archivedOnly.length > 0 ? (

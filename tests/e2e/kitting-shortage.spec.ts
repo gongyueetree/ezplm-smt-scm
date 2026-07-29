@@ -17,24 +17,32 @@ async function login(page: Page, email: string) {
   await page.waitForURL("**/");
 }
 
-/** 确保库里至少有一个 BOM 版本 */
-async function ensureBom(page: Page) {
-  await page.goto("/bom");
-  const rows = await page.locator("table.tbl tbody tr").count();
-  const empty = await page.getByText("暂无 BOM").count();
-  if (rows === 0 || empty > 0) {
-    await page.goto("/bom/import");
-    await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
-    await page.getByRole("button", { name: "开始导入" }).click();
-    await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
-  }
+/**
+ * 导入 CSV 夹具并**返回该版本 id**。
+ *
+ * 为什么不能"库里有 BOM 就跳过":其它用例(如图片/PDF 导入)也会建 BOM,
+ * 页面默认取**最新**版本 —— 配上模型凭据后图片识别真的建出了 2 行的 BOM,
+ * 于是齐料/缺料用例断言的行直接消失。用例必须自建前置数据并锁定版本号。
+ */
+async function importBomFixture(page: Page): Promise<string> {
+  await page.goto("/bom/import");
+  await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
+  await page.getByRole("button", { name: "开始导入" }).click();
+  await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
+  const href = await page
+    .getByRole("link", { name: /进入匹配确认/ })
+    .first()
+    .getAttribute("href");
+  const id = href?.split("/").pop();
+  expect(id, "导入后应能拿到 BOM 版本 id").toBeTruthy();
+  return id!;
 }
 
 test("齐料检查:按台数核算需求,数据未知不当作有货", async ({ page }) => {
   await login(page, "procurement@demo.ezplm.cn");
-  await ensureBom(page);
+  const versionId = await importBomFixture(page);
 
-  await page.goto("/kitting?boards=100");
+  await page.goto(`/kitting?v=${versionId}&boards=100`);
   await expect(page.locator(".page-title")).toHaveText("齐料检查");
 
   // 齐套率与三类计数都在
@@ -53,9 +61,9 @@ test("齐料检查:按台数核算需求,数据未知不当作有货", async ({ 
 
 test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) => {
   await login(page, "procurement@demo.ezplm.cn");
-  await ensureBom(page);
+  const versionId = await importBomFixture(page);
 
-  await page.goto("/shortage?boards=100");
+  await page.goto(`/shortage?v=${versionId}&boards=100`);
   await expect(page.locator(".page-title")).toHaveText("缺料分析");
   await expect(page.locator(".banner")).toContainText("排在最前");
 
@@ -69,8 +77,8 @@ test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) 
 
 test("Call 料表可导出 XLSX", async ({ page }) => {
   await login(page, "procurement@demo.ezplm.cn");
-  await ensureBom(page);
-  await page.goto("/shortage?boards=100");
+  const versionId = await importBomFixture(page);
+  await page.goto(`/shortage?v=${versionId}&boards=100`);
 
   const link = page.getByRole("link", { name: /导出 Call 料表/ });
   const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);

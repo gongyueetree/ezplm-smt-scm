@@ -59,7 +59,7 @@ export default async function SettingsPage() {
       name: ai.vendor
         ? `AI 模型 · ${ai.vendor === "gemini" ? "Gemini" : "Claude"}(${ai.model})`
         : "AI 模型(未配置)",
-      status: integrationStatus(ai.configured, null),
+      status: integrationStatus(ai.configured, "2026-07-28 pnpm smoke:ai 冒烟联调通过"),
       note:
         "供 报价 QuoteAgent 分类/Markup 建议 与 图片/扫描件 BOM 转写 两处使用;" +
         "未配置时降级为本地规则,页面如实标注。模型只给建议参数,金额一律由确定性函数计算。",

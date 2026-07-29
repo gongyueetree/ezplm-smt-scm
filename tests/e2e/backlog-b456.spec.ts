@@ -20,26 +20,42 @@ async function login(page: Page, email: string) {
   await page.waitForURL("**/");
 }
 
-async function ensureBom(page: Page) {
+/**
+ * 导入 CSV 夹具并**返回该版本 id**。
+ *
+ * 用例必须锁定自己建的版本:并行 worker 与其它用例(图片/PDF 导入)都会建 BOM,
+ * 取"最新一个"会拿到别人的数据 —— 配上模型凭据后图片识别真的建出了 2 行的 BOM,
+ * B4 断言的 4 行当场变 2 行。
+ */
+async function importBomFixture(page: Page): Promise<string> {
   await page.goto("/bom/import");
   await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
   await page.getByRole("button", { name: "开始导入" }).click();
   await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
+  const href = await page
+    .getByRole("link", { name: /进入匹配确认/ })
+    .first()
+    .getAttribute("href");
+  const id = href?.split("/").pop();
+  expect(id, "导入后应能拿到 BOM 版本 id").toBeTruthy();
+  return id!;
 }
 
-async function createProcurementRfq(page: Page) {
+async function createProcurementRfq(page: Page, bomVersionId?: string) {
   await page.goto("/procurement/rfq");
   await expect(page.locator("select[multiple] option").first()).toBeVisible();
-  await page.locator("select[multiple]").selectOption({ index: 0 });
+  await page
+    .locator("select[multiple]")
+    .selectOption(bomVersionId ? { value: bomVersionId } : { index: 0 });
   await page.getByRole("button", { name: "创建采购 RFQ" }).click();
   await expect(page).toHaveURL(/\/procurement\/rfq\/[^/]+$/);
 }
 
 test("B5 线下报价导入识别 MOQ/SPQ/Lead Time 并回显列映射", async ({ page }) => {
   await login(page, "pm@demo.ezplm.cn");
-  await ensureBom(page);
+  const bomVersionId = await importBomFixture(page);
   await login(page, "procurement@demo.ezplm.cn");
-  await createProcurementRfq(page);
+  await createProcurementRfq(page, bomVersionId);
 
   await page.getByLabel("线下报价文件(CSV/XLSX)").setInputFiles(QUOTE_FIXTURE);
   await page.getByRole("button", { name: "导入线下报价" }).click();
@@ -57,9 +73,9 @@ test("B5 线下报价导入识别 MOQ/SPQ/Lead Time 并回显列映射", async (
 
 test("B4 多源询价分批推进,进度跑到 100% 且不截断", async ({ page }) => {
   await login(page, "pm@demo.ezplm.cn");
-  await ensureBom(page);
+  const bomVersionId = await importBomFixture(page);
   await login(page, "procurement@demo.ezplm.cn");
-  await createProcurementRfq(page);
+  await createProcurementRfq(page, bomVersionId);
 
   await page.getByRole("button", { name: "查询 DigiKey / Mouser" }).click();
 

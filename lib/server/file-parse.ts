@@ -12,11 +12,13 @@
  */
 import ExcelJS from "exceljs";
 import { detectDelimiter, parseCsv } from "@/lib/domain/csv";
+import { parseHtmlTable } from "@/lib/domain/html-table";
+import { sniffFormat, UNSUPPORTED_HINT } from "./file-sniff";
 import { buildPdfTable } from "@/lib/domain/pdf-table";
 import { getBomOcrProvider, OcrError, ocrProviderMode } from "@/lib/providers/ocr";
 import { extractPdfTextItems } from "./pdf-extract";
 
-export type UploadKind = "csv" | "xlsx" | "pdf" | "image" | "unsupported";
+export type UploadKind = "csv" | "xlsx" | "html" | "pdf" | "image" | "unsupported";
 
 /** 数据来源与置信度 —— UI 必须据此区分"解析"与"识别" */
 export type ExtractSource = "spreadsheet" | "pdf-text" | "ocr" | "none";
@@ -70,7 +72,62 @@ export async function extractRows(
   buffer: Buffer,
   contentType?: string,
 ): Promise<ExtractResult> {
-  const kind = detectUploadKind(fileName, contentType);
+  // **按内容判定真实格式**,扩展名只作兜底 ——
+  // 现场样本里既有叫 .xlsx 的 HTML,也有叫 .xlsx 的旧 .xls。
+  const sniffed = sniffFormat(buffer, fileName);
+
+  const hint = UNSUPPORTED_HINT[sniffed];
+  if (hint) {
+    return {
+      kind: "unsupported",
+      rows: [],
+      source: "none",
+      requiresManualTranscription: true,
+      isDraft: false,
+      note: `${fileName}:${hint}`,
+    };
+  }
+
+  if (sniffed === "html") {
+    try {
+      const rows = parseHtmlTable(buffer.toString("utf8"));
+      return {
+        kind: "html",
+        rows,
+        source: "spreadsheet",
+        requiresManualTranscription: false,
+        isDraft: false,
+        note:
+          `${fileName} 实际是 HTML 表格(常见于网页版系统的「导出 Excel」),` +
+          `已按表格结构解析出 ${rows.length} 行;列映射与每一行仍需人工确认。`,
+      };
+    } catch {
+      return {
+        kind: "unsupported",
+        rows: [],
+        source: "none",
+        requiresManualTranscription: true,
+        isDraft: false,
+        note:
+          `${fileName} 的实际内容是一个 HTML 网页,里面没有任何表格 —— ` +
+          `这通常是**下载失败后把网页另存成了文件**(例如需要登录、链接失效、或权限不足)。` +
+          `请重新下载真实的 BOM 文件后再上传。`,
+      };
+    }
+  }
+
+  // 内容优先于扩展名:纯文本一定不是工作簿,直接按 CSV 走,
+  // 免得对一个 .xlsx 名字的文本文件报"不是 zip"这种无从下手的错
+  const kind: UploadKind =
+    sniffed === "xlsx"
+      ? "xlsx"
+      : sniffed === "pdf"
+        ? "pdf"
+        : sniffed === "image"
+          ? "image"
+          : sniffed === "csv"
+            ? "csv"
+            : detectUploadKind(fileName, contentType);
 
   if (kind === "csv") {
     const text = buffer.toString("utf8");
@@ -85,7 +142,20 @@ export async function extractRows(
 
   if (kind === "xlsx") {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    try {
+      await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    } catch (e) {
+      // 走到这里说明内容嗅探认为是 xlsx 但 ExcelJS 读不了 —— 如实报出原因,
+      // 不要笼统说"未能解析出表格内容"
+      return {
+        kind,
+        rows: [],
+        source: "none",
+        requiresManualTranscription: true,
+        isDraft: false,
+        note: `${fileName} 无法作为 Excel 工作簿读取:${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
     const ws = wb.worksheets[0];
     if (!ws) {
       return {

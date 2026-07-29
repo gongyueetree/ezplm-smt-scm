@@ -8,12 +8,16 @@
  * 这是真实联调的唯一凭据 —— 未运行本脚本并贴出输出前,
  * 任何文档与汇报都不得声称已与 DigiKey/Mouser 完成联调。
  */
+import { loadEnvLocal } from "./load-env";
 import { config } from "dotenv";
 import { DigiKeyProvider } from "../lib/providers/digikey";
 import { MouserProvider } from "../lib/providers/mouser";
 import { rankOffers } from "../lib/domain/offers";
 import type { NormalizedOffer } from "../lib/providers/common/normalized-offer";
 import type { ApiUsageRecord } from "../lib/providers/common/api-usage";
+
+// 自己读 .env.local:不要求使用者在 shell 里 source(见 load-env.ts 的原因说明)
+loadEnvLocal();
 
 config({ path: ".env.local" });
 config({ path: ".env" });

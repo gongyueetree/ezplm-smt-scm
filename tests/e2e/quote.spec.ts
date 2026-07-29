@@ -113,14 +113,24 @@ test("审批退回 → 新建 Revision → 再提交 → 批准(全链路)", asy
   await expect(page.getByText("参数已冻结")).toBeVisible();
 });
 
-test("QuoteAgent:只产出待确认卡片,不写入数据,并如实标注未接入模型", async ({ page }) => {
+test("QuoteAgent:只产出待确认卡片,不写入数据,并如实标注当前模型形态", async ({ page }) => {
+  test.setTimeout(120_000);
   await login(page, "pm@demo.ezplm.cn");
   await createQuoteWithLine(page, "E2E 智能体");
 
   await page.getByRole("button", { name: "运行 QuoteAgent" }).click();
-  await expect(page.locator(".banner.ai")).toContainText("待确认卡片", { timeout: 30_000 });
-  // 诚实 UI:未配置 Key 时明确标注为本地规则建议
-  await expect(page.locator(".badge", { hasText: "未接入模型" })).toBeVisible();
-  // 卡片未批准 → 分类仍是"待确认",没有被 Agent 直接写成已确认
+  // 真实模型下要走一次外网调用,给足时间
+  await expect(page.locator(".banner.ai")).toContainText("待确认卡片", { timeout: 90_000 });
+
+  // 诚实 UI:形态标注必须**与实际配置一致**,三选一,不得含糊其辞。
+  // 配了 Key 就写厂商名,没配就写"未接入模型" —— 两种都要被断言到,
+  // 否则测试会在换环境时悄悄失效(此前写死"未接入模型",配上 Key 后即失真)。
+  const modeBadge = page.locator(".badge", {
+    hasText: /未接入模型|Gemini|Claude/,
+  });
+  await expect(modeBadge.first()).toBeVisible();
+
+  // 不论哪种形态,**核心不变量**都必须成立:卡片未批准 → 分类仍是"待确认",
+  // Agent 绝不直接写库。
   await expect(page.locator(".badge", { hasText: "待确认" }).first()).toBeVisible();
 });

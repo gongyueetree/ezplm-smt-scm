@@ -57,6 +57,11 @@ pnpm smoke:ai
 
 脚本只打印凭据**长度**,不回显任何 Key 内容。输出贴回评审记录后,才可把状态写为「已联调」。
 
+**切勿用 shell 加载 `.env.local`**(如 `. ./.env.local`):
+若某行写成 `KEY= value`(`=` 后多一个空格),shell 会把值当命令执行,
+Key 原文会出现在 `command not found: <Key>` 里,直接泄进终端历史与 CI 日志。
+冒烟脚本已改为**自己解析** `.env.local`(见 `scripts/load-env.ts`),直接 `pnpm smoke:ai` 即可。
+
 **密钥纪律**:所有 Key 只存服务端环境变量;`.gitignore` 覆盖 `.env*`(仅放行 `.env.example`);
 日志与 `ApiUsageLog` 中的端点一律经 `redactUrl()` 脱敏(Mouser 的 `apiKey` 走 query,尤其重要)。
 
@@ -206,7 +211,7 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 |---|---|---|
 | ezPLM 只读 API | **待联调** | 物料/库存走 Mock,页面标注「示例数据」 |
 | DigiKey / Mouser | **已联调**(2026-07-27 用户执行 `pnpm smoke:external` 验证) | 配置 Key 后即走真实 API |
-| AI 模型(Gemini / Claude) | **代码已接入,待真实冒烟** | 供 ①报价 QuoteAgent 分类/Markup 建议 ②图片/扫描件 BOM 转写 两处使用。无 Key 时降级为本地规则,UI 标注「未接入模型」。配好 Key 后由人执行 `pnpm smoke:ai` 留痕,方可改为「已联调」 |
+| AI 模型(Gemini / Claude) | **已联调**(2026-07-28 用户配置 `GEMINI_API_KEY` 后执行 `pnpm smoke:ai` 验证:连通性、QuoteAgent 分类建议、图片 BOM 转写三项全通) | 供 ①报价 QuoteAgent 分类/Markup 建议 ②图片/扫描件 BOM 转写 两处使用。无 Key 时降级为本地规则,UI 标注「未接入模型」 |
 | 邮件发送(催办 / 对账) | **未接入** | 只生成记录,不发送 |
 | ERP 回写 | **替代路径** | 生成 ERP 可导入 XLSX + IntegrationJob 登记;RPA/API 直写属二期 |
 
