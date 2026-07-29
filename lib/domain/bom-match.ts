@@ -16,6 +16,7 @@ import { ProviderError } from "@/lib/providers/common/errors";
 import { manufacturerMatches, normalizeMpn } from "@/lib/providers/common/mpn";
 import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
 import { getApplicablePriceBreak } from "./offers";
+import { rankBySimilarity, type SimilarityQuery } from "./similarity";
 import type { ParsedBomLine } from "./bom-parse";
 
 export type MatchSourceValue =
@@ -24,6 +25,10 @@ export type MatchSourceValue =
   | "EXACT_MPN"
   | "MFR_MPN"
   | "DESCRIPTION"
+  /** 本地物料库里按型号+封装相似度找出的候选(工程 BOM 只有 Value 时的主力) */
+  | "LOCAL_SIMILAR"
+  /** ezPLM 检索 + 相似度排序得到的候选 */
+  | "EZPLM_SIMILAR"
   | "EZPLM"
   | "DIGIKEY"
   | "MOUSER";
@@ -37,6 +42,9 @@ export const SOURCE_CONFIDENCE: Record<MatchSourceValue, number> = {
   EZPLM: 0.8,
   DIGIKEY: 0.75,
   MOUSER: 0.75,
+  /** 相似度候选:自家物料库优先于 ezPLM 全库(自家料才是能直接下单的) */
+  LOCAL_SIMILAR: 0.7,
+  EZPLM_SIMILAR: 0.6,
   DESCRIPTION: 0.55,
 };
 
@@ -46,6 +54,8 @@ export const LOCAL_HIT_CONFIDENCE = 0.95;
 /** SPEC §6 要求候选必须展示的字段 */
 export interface MatchCandidate {
   source: MatchSourceValue;
+  /** 判断依据(相似度候选必填):给人看为什么它排在这里 */
+  matchReason?: string | null;
   confidence: number;
   partId: string | null;
   mpn: string;
@@ -99,6 +109,10 @@ export interface MatchContext {
   distributors?: DistributorProvider[];
   /** 询价数量(取三方阶梯价用);缺省取 BOM 行数量 */
   quantity?: number;
+  /** 相似度候选条数上限(默认 5) */
+  similarityLimit?: number;
+  /** 送去做相似度排序前,从 ezPLM 拉多少条(默认 20) */
+  ezplmSearchLimit?: number;
 }
 
 export interface MatchResult {
@@ -152,10 +166,23 @@ export function describeSimilarity(a: string | null, b: string | null): number {
   return hit / Math.max(ta.size, tb.size);
 }
 
-/** 候选去重:同 source + 同 MPN 只留置信度最高者 */
+/** 相似度来源:它们只是"可能是这个",不该和确切命中并列展示 */
+const SIMILAR_SOURCES = new Set<MatchSourceValue>(["LOCAL_SIMILAR", "EZPLM_SIMILAR", "DESCRIPTION"]);
+
+/**
+ * 候选去重:同 source + 同 MPN 只留置信度最高者。
+ *
+ * 另外:同一个 MPN 如果**既有确切来源又有相似度来源**,只留确切的 ——
+ * 同一颗料在列表里出现两次(一次"精确命中"、一次"型号相似"),
+ * 会让人以为是两个不同的候选,平白增加确认成本。
+ */
 function dedupeCandidates(list: MatchCandidate[]): MatchCandidate[] {
+  const exactMpns = new Set(
+    list.filter((c) => !SIMILAR_SOURCES.has(c.source)).map((c) => keyOf(c.mpn)),
+  );
   const best = new Map<string, MatchCandidate>();
   for (const c of list) {
+    if (SIMILAR_SOURCES.has(c.source) && exactMpns.has(keyOf(c.mpn))) continue;
     const k = `${c.source}|${keyOf(c.mpn)}|${(c.manufacturer ?? "").toUpperCase()}`;
     const prev = best.get(k);
     if (!prev || c.confidence > prev.confidence) best.set(k, c);
@@ -242,6 +269,48 @@ export async function matchBomLine(
     }
   }
 
+  /*
+   * ⑤b 相似度候选(工程侧 BOM 的主力路径)。
+   *
+   * KiCad 这类 BOM 只有 Value(`MIC5504-3.3`)与封装(`SOT-23-5`),
+   * 精确 MPN 匹配必然落空。这里用「型号相似度 + 封装吻合度」找出最像的几个,
+   * **交人工挑** —— 打分只用于排序,绝不自动采纳。
+   *
+   * 顺序上先本地物料库:自家料号才是能直接下单的,ezPLM 全库只是补充。
+   */
+  const similarityQuery: SimilarityQuery = {
+    value: line.mpn ?? line.description,
+    packageCode: line.packageCode ?? null,
+    footprint: line.footprint,
+  };
+  if (similarityQuery.value && ctx.allParts?.length) {
+    const localRanked = rankBySimilarity(
+      similarityQuery,
+      ctx.allParts
+        .filter((p) => p.mpn)
+        .map((p) => ({
+          mpn: p.mpn!,
+          manufacturer: p.manufacturer,
+          description: p.description,
+          footprint: p.footprint,
+          _part: p,
+        })),
+      { limit: ctx.similarityLimit ?? 5 },
+    );
+    for (const r of localRanked) {
+      // 已有精确命中的同一个料就不重复给"相似"候选了
+      if (candidates.some((c) => keyOf(c.mpn) === keyOf(r.target.mpn))) continue;
+      candidates.push({
+        ...fromLocal(
+          r.target._part,
+          "LOCAL_SIMILAR",
+          Number((SOURCE_CONFIDENCE.LOCAL_SIMILAR * r.score.score).toFixed(4)),
+        ),
+        matchReason: r.score.reasons.join(" · "),
+      });
+    }
+  }
+
   const localHit = candidates.some((c) => c.confidence >= LOCAL_HIT_CONFIDENCE);
 
   // ⑥ ezPLM 候选(本地已高置信命中则跳过,省接口调用)
@@ -268,6 +337,56 @@ export async function matchBomLine(
           currency: null,
           alternates: null,
           dataUpdatedAt: part.updatedAt,
+        });
+      }
+    } catch (e) {
+      degraded.push(toDegraded(e, "EZPLM"));
+    }
+  }
+
+  /*
+   * ⑥b ezPLM 相似度检索:没有精确 MPN 时,拿 Value 当关键字去 ezPLM 搜,
+   * 再按相似度排序取前几个。ezPLM 的封装命名与 KiCad 同源(SOT-23-5 / TQFP-48_7x7mm_P0.5mm),
+   * 所以封装能直接参与打分。
+   */
+  if (!localHit && ctx.ezplm && similarityQuery.value && candidates.length < (ctx.similarityLimit ?? 5)) {
+    try {
+      const found = await ctx.ezplm.searchParts({
+        keyword: similarityQuery.value,
+        limit: ctx.ezplmSearchLimit ?? 20,
+      });
+      const ranked = rankBySimilarity(
+        similarityQuery,
+        found
+          .filter((p) => p.mpn)
+          .map((p) => ({
+            mpn: p.mpn!,
+            manufacturer: p.manufacturer,
+            description: p.description,
+            footprint: p.footprint,
+            _raw: p,
+          })),
+        { limit: ctx.similarityLimit ?? 5 },
+      );
+      for (const r of ranked) {
+        if (candidates.some((c) => keyOf(c.mpn) === keyOf(r.target.mpn))) continue;
+        candidates.push({
+          source: "EZPLM_SIMILAR",
+          confidence: Number((SOURCE_CONFIDENCE.EZPLM_SIMILAR * r.score.score).toFixed(4)),
+          partId: r.target._raw.id,
+          mpn: r.target.mpn,
+          manufacturer: r.target.manufacturer ?? null,
+          footprint: r.target.footprint ?? null,
+          lifecycle: r.target._raw.lifecycle,
+          stockQty: null,
+          slowMovingQty: null,
+          opoQty: null,
+          eta: null,
+          price: null,
+          currency: null,
+          alternates: null,
+          dataUpdatedAt: r.target._raw.updatedAt,
+          matchReason: r.score.reasons.join(" · "),
         });
       }
     } catch (e) {

@@ -222,3 +222,55 @@ describe("描述相似度", () => {
     expect(describeSimilarity("x", null)).toBe(0);
   });
 });
+
+describe("相似度候选:工程 BOM 只有 Value 时的主力路径", () => {
+  const LOCAL = [
+    { partId: "p1", internalPn: "EZP-MIC5504-1.2YM5-TR", mpn: "MIC5504-1.2YM5-TR", manufacturer: "Microchip Technology Inc.", footprint: "SOT-23-5", lifecycle: "ACTIVE" as const, description: "300mA LDO", stockQty: null, slowMovingQty: null, opoQty: null, eta: null, dataUpdatedAt: null },
+    { partId: "p2", internalPn: "EZP-STM32F103C8T6", mpn: "STM32F103C8T6", manufacturer: "STMicroelectronics", footprint: "TQFP-48_7x7mm_P0.5mm", lifecycle: "ACTIVE" as const, description: "MCU", stockQty: null, slowMovingQty: null, opoQty: null, eta: null, dataUpdatedAt: null },
+  ];
+
+  const line = (over: Record<string, unknown> = {}) => ({
+    sourceRow: 2, lineNo: 1, refDes: "U1", qty: 1, mpn: null, manufacturer: null,
+    customerPn: null, internalPn: null, description: null, footprint: null, issues: [], ...over,
+  });
+
+  it("本地库能给出同系列候选,并带上判断依据", async () => {
+    const r = await matchBomLine(
+      line({ mpn: "MIC5504-3.3", packageCode: "SOT-23-5" }) as never,
+      { allParts: LOCAL },
+    );
+    const hit = r.candidates.find((c) => c.source === "LOCAL_SIMILAR");
+    expect(hit?.mpn).toBe("MIC5504-1.2YM5-TR");
+    expect(hit?.matchReason).toContain("MIC5504");
+    expect(hit?.matchReason).toContain("封装完全一致");
+  });
+
+  it("**本地库优先于 ezPLM**:自家料号才是能直接下单的", () => {
+    expect(SOURCE_CONFIDENCE.LOCAL_SIMILAR).toBeGreaterThan(SOURCE_CONFIDENCE.EZPLM_SIMILAR);
+  });
+
+  it("相似度候选一律低于精确命中,不会盖过确切结果", () => {
+    expect(SOURCE_CONFIDENCE.LOCAL_SIMILAR).toBeLessThan(SOURCE_CONFIDENCE.EXACT_MPN);
+    expect(SOURCE_CONFIDENCE.EZPLM_SIMILAR).toBeLessThan(SOURCE_CONFIDENCE.EZPLM);
+  });
+
+  it("同一 MPN 既有精确命中又有相似候选时,只保留精确的(避免同一颗料出现两次)", async () => {
+    const r = await matchBomLine(
+      line({ mpn: "STM32F103C8T6", packageCode: "TQFP-48" }) as never,
+      { allParts: LOCAL, byMpn: new Map([["STM32F103C8T6", [LOCAL[1]]]]) },
+    );
+    const same = r.candidates.filter((c) => c.mpn === "STM32F103C8T6");
+    expect(same).toHaveLength(1);
+    expect(same[0].source).toBe("EXACT_MPN");
+  });
+
+  it("完全不相干的 Value 不产生候选 —— 宁可说没有,也不塞无关型号", async () => {
+    const r = await matchBomLine(line({ mpn: "完全不相干XYZ123" }) as never, { allParts: LOCAL });
+    expect(r.candidates).toEqual([]);
+  });
+
+  it("正式匹配恒需人工确认", async () => {
+    const r = await matchBomLine(line({ mpn: "MIC5504-3.3" }) as never, { allParts: LOCAL });
+    expect(r.requiresManualDecision).toBe(true);
+  });
+});

@@ -43,6 +43,7 @@ export default async function BomVersionPage({
       source: c.source,
       confidence: Number(c.confidence),
       mpn: c.mpn,
+      matchReason: c.matchReason,
       manufacturer: c.manufacturer,
       footprint: c.footprint,
       lifecycle: c.lifecycle,

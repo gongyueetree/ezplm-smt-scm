@@ -31,6 +31,23 @@
 | `CRON_SECRET` | — | 催办 Cron 鉴权 | **催办接口返回 503 拒绝运行**(不在无鉴权下开放) |
 | `SEED_DEMO_PASSWORD` | — | 演示种子口令 | `demo1234`。**种子在 `NODE_ENV=production` 下拒绝执行** |
 
+### 初始化物料库(BOM 匹配的第一顺位)
+
+BOM 匹配按 客户料号 → 内部料号 → 精确 MPN → **本地库型号相似** → ezPLM → DigiKey/Mouser 的顺序出候选。
+本地物料库为空时,工程侧 BOM(只有 Value)每一行都会落到"无候选"。先灌一批常用料:
+
+```bash
+pnpm seed:parts                              # 默认 50 条,每个型号家族取 2 条
+pnpm seed:parts -- --limit 100 --per-keyword 3
+```
+
+要求已配置 `EZPLM_API_BASE_URL` / `EZPLM_API_KEY`;未配置时脚本**拒绝执行**,
+不会用 Mock 数据冒充主数据。抓下来的记录 `sourcedFrom=EZPLM`、`internalPn=EZP-<MPN>`,
+标明它是 ezPLM 的**只读缓存**而非自有主数据。
+
+> 实测:ezPLM 的 API Key 接口是**白名单原厂库**,`MIC5504`/`STM32F103` 这类型号家族命中良好,
+> 而 `0603`/`电容` 返回 0 条 —— 库里基本没有通用阻容感。脚本的关键字表据此只列 IC/有源器件家族。
+
 ### AI 模型接入(两处功能共用一套凭据)
 
 ```bash

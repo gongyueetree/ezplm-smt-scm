@@ -11,9 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { loadEnvLocal } from "./load-env";
-
-loadEnvLocal();
+import "./bootstrap-env";
 
 import { getLlmProvider, llmStatus, LlmError } from "../lib/ai";
 import { getBomOcrProvider, ocrProviderMode } from "../lib/providers/ocr";

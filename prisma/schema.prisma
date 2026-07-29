@@ -117,6 +117,10 @@ enum MatchSource {
   EXACT_MPN
   MFR_MPN
   DESCRIPTION
+  /// 本地物料库按型号+封装相似度找出的候选(工程 BOM 只有 Value 时的主力)
+  LOCAL_SIMILAR
+  /// ezPLM 检索 + 相似度排序得到的候选
+  EZPLM_SIMILAR
   EZPLM
   DIGIKEY
   MOUSER
@@ -602,6 +606,8 @@ model BomMatchCandidate {
   alternates    Json?
   /// 数据更新时间(诚实 UI:显示更新时间而非暗示实时)
   dataUpdatedAt DateTime?
+  /// 判断依据(相似度候选写明为什么排在这里),供人工确认时参考
+  matchReason   String?
   createdAt     DateTime    @default(now())
 
   @@index([tenantId, bomLineId])

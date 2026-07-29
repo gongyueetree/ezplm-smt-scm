@@ -5,10 +5,29 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MpnLink } from "@/components/ui/mpn-link";
 
+/** 来源标签:相似度类候选要一眼看出"只是像",不能与精确命中混淆 */
+const SOURCE_LABEL: Record<string, string> = {
+  CUSTOMER_MAPPING: "客户料号映射",
+  INTERNAL_PN: "内部料号",
+  EXACT_MPN: "精确 MPN",
+  MFR_MPN: "制造商+MPN",
+  DESCRIPTION: "描述相似",
+  LOCAL_SIMILAR: "本地库·型号相似",
+  EZPLM_SIMILAR: "ezPLM·型号相似",
+  EZPLM: "ezPLM",
+  DIGIKEY: "DigiKey",
+  MOUSER: "Mouser",
+  MANUAL: "人工指定",
+};
+
+const SIMILAR_SOURCES = new Set(["LOCAL_SIMILAR", "EZPLM_SIMILAR", "DESCRIPTION"]);
+
 export interface ReviewCandidate {
   id: string;
   source: string;
   confidence: number;
+  /** 相似度候选的判断依据(为什么它排在这里) */
+  matchReason?: string | null;
   mpn: string;
   manufacturer: string | null;
   footprint: string | null;
@@ -136,7 +155,9 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                             }}
                           >
                             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                              <Badge tone="blue">{c.source}</Badge>
+                              <Badge tone={SIMILAR_SOURCES.has(c.source) ? "amber" : "blue"}>
+                                {SOURCE_LABEL[c.source] ?? c.source}
+                              </Badge>
                               <MpnLink mpn={c.mpn} />
                               <span className="muted">{c.manufacturer ?? "-"}</span>
                               <Badge tone={LIFECYCLE_TONE[c.lifecycle ?? "UNKNOWN"] ?? "gray"}>
@@ -144,6 +165,11 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                               </Badge>
                               <span className="muted">置信度 {(c.confidence * 100).toFixed(0)}%</span>
                             </div>
+                            {c.matchReason ? (
+                              <div className="small muted" style={{ marginTop: 2 }}>
+                                依据:{c.matchReason}
+                              </div>
+                            ) : null}
                             <div className="muted" style={{ marginTop: 2 }}>
                               库存 {c.stockQty ?? "未知"} · 呆滞 {c.slowMovingQty ?? "未知"} · OPO{" "}
                               {c.opoQty ?? "未知"} · ETA {c.eta ?? "未知"} · 价格{" "}

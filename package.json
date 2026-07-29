@@ -21,7 +21,8 @@
     "smoke:external": "tsx scripts/smoke-external.ts",
     "predev": "node scripts/copy-occt.mjs",
     "prebuild": "node scripts/copy-occt.mjs",
-    "smoke:ai": "tsx scripts/smoke-ai.ts"
+    "smoke:ai": "tsx scripts/smoke-ai.ts",
+    "seed:parts": "tsx scripts/seed-parts-from-ezplm.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",

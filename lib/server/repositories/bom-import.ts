@@ -332,6 +332,7 @@ export async function processNextBatch(
             currency: c.currency,
             alternates: (c.alternates ?? undefined) as Prisma.InputJsonValue | undefined,
             dataUpdatedAt: c.dataUpdatedAt ? new Date(c.dataUpdatedAt) : undefined,
+            matchReason: c.matchReason ?? undefined,
           }),
         ),
       });
