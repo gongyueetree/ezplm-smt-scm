@@ -19,20 +19,35 @@ async function login(page: Page, email: string) {
   await page.waitForURL("**/");
 }
 
-/** 先以 PM 导入一张 BOM,供采购比价使用 */
-async function ensureBom(page: Page) {
+/**
+ * 先以 PM 导入一张 BOM,并**返回该版本 id**。
+ *
+ * 必须锁定自己导入的版本:并行 worker 与其它用例(图片/PDF 导入)也会建 BOM,
+ * 取"最新一个"会拿到别人的数据 —— 实测配上模型凭据后图片识别真的建出了别的 BOM,
+ * 本用例的比价表当场变空。
+ */
+async function importBomFixture(page: Page): Promise<string> {
   await login(page, "pm@demo.ezplm.cn");
   await page.goto("/bom/import");
   await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
   await page.getByRole("button", { name: "开始导入" }).click();
   await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
+  const href = await page
+    .getByRole("link", { name: /进入匹配确认/ })
+    .first()
+    .getAttribute("href");
+  const id = href?.split("/").pop();
+  expect(id, "导入后应能拿到 BOM 版本 id").toBeTruthy();
+  return id!;
 }
 
-async function createProcurementRfq(page: Page) {
+async function createProcurementRfq(page: Page, bomVersionId?: string) {
   await page.goto("/procurement/rfq");
   const options = page.locator('select[multiple] option');
   await expect(options.first()).toBeVisible();
-  await page.locator('select[multiple]').selectOption({ index: 0 });
+  await page
+    .locator('select[multiple]')
+    .selectOption(bomVersionId ? { value: bomVersionId } : { index: 0 });
   await page.getByRole("button", { name: "创建采购 RFQ" }).click();
   await expect(page).toHaveURL(/\/procurement\/rfq\/[^/]+$/);
 }
@@ -41,9 +56,9 @@ test("采购创建比价单并查询多源报价,推荐与最低价分别标识(
   // 配置真实 DigiKey/Mouser 凭据时,每个料号要串行打两次外网 API,
   // 分批询价耗时远超默认 30s —— 放宽本例超时,而不是把断言改松。
   test.setTimeout(300_000);
-  await ensureBom(page);
+  const bomVersionId = await importBomFixture(page);
   await login(page, "procurement@demo.ezplm.cn");
-  await createProcurementRfq(page);
+  await createProcurementRfq(page, bomVersionId);
 
   await page.getByRole("button", { name: "查询 DigiKey / Mouser" }).click();
   await expect(page.getByText("多源比价")).toBeVisible({ timeout: 60_000 });
@@ -63,9 +78,9 @@ test("采购创建比价单并查询多源报价,推荐与最低价分别标识(
 });
 
 test("线下报价导入后固化原始异常,未处理不得反馈 PM(SPEC §17-5 + 异常闭环)", async ({ page }) => {
-  await ensureBom(page);
+  const bomVersionId = await importBomFixture(page);
   await login(page, "procurement@demo.ezplm.cn");
-  await createProcurementRfq(page);
+  await createProcurementRfq(page, bomVersionId);
 
   // 导入线下供应商报价(STM32 单价 25.5 超过演示价格线 10 → 原始异常)
   await page.getByLabel("线下报价文件(CSV/XLSX)").setInputFiles(QUOTE_FIXTURE);

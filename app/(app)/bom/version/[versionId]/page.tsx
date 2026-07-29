@@ -28,6 +28,8 @@ export default async function BomVersionPage({
     manufacturer: l.manufacturer,
     description: l.description,
     footprint: l.footprint,
+    packageCode: l.packageCode,
+    mpnSource: l.mpnSource,
     flags: {
       dupRefDes: l.dupRefDesFlag,
       eol: l.eolFlag,

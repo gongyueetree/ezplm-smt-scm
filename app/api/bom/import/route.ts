@@ -134,6 +134,8 @@ export async function POST(req: Request) {
       usesBatching: shouldUseImportJob(uniqueMpns),
       /** 未识别到的建议字段(不阻断导入,但要让人看见) */
       missingRecommended: missingRecommendedFields(mapping).map((f) => BOM_FIELD_LABELS[f]),
+      /** 由 Value 列推断出 MPN 的行数(须人工确认) */
+      inferredMpnCount: lines.filter((l) => l.mpnSource === "inferred-from-value").length,
       archivedOnly,
       extractions,
       /** 表格来自哪条路径:spreadsheet / pdf-text(确定性)/ ocr(模型草稿) */

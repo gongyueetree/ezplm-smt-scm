@@ -115,6 +115,8 @@ export async function createImportJob(
           manufacturer: l.manufacturer,
           description: l.description,
           footprint: l.footprint,
+          packageCode: l.packageCode ?? null,
+          mpnSource: l.mpnSource ?? null,
           dupRefDesFlag: validation.issues.some(
             (i) => i.code === "duplicate_refdes" && i.lineNos.includes(l.lineNo),
           ),

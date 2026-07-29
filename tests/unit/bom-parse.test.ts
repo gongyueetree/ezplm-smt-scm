@@ -282,3 +282,66 @@ describe("附注行与真实 BOM 行的区分(放宽位号规则后的护栏)", 
     expect(lines.map((l) => l.refDes)).toEqual(["C1", "C2"]);
   });
 });
+
+describe("KiCad 工程 BOM:从 Value 列提取 IC 型号(真实样本形态)", () => {
+  // 取自 SimpleDDS.xlsx 与 LPC824ModuleBom.xlsx 的真实行形态
+  const rows = [
+    ["SimpleDDS Bom List", "", "", ""],
+    ["Ref", "Qnty", "Value", "Footprint"],
+    ["C4, C1, C5,", "3", "0.1uF", "Capacitor_SMD:C_0603_1608Metric"],
+    ["R1,", "1", "10k", "Resistor_SMD:R_0603_1608Metric"],
+    ["J1,", "1", "USB_B_Micro", "Connector_USB:USB_Micro-B_Molex-105017-0001"],
+    ["SW1,", "1", "RST", "Button_Switch_SMD:SW_Push_SPST_NO_Alps_SKRK"],
+    ["D2,", "1", "PWR", "LED_SMD:LED_0603_1608Metric"],
+    ["X1,", "1", "16MHz", "Oscillator:Oscillator_SMD_Abracon_ASE-4Pin_3.2x2.5mm"],
+    ["U2,", "1", "CH340E", "Package_SO:MSOP-10_3x3mm_P0.5mm"],
+    ["U4,", "1", "MachXO2-1200-QFN32", "Package_DFN_QFN:QFN-32-1EP_5x5mm_P0.5mm_EP3.45x3.45mm"],
+    ["U5,", "1", "ADA4851-1YRJZ-RL7", "Package_TO_SOT_SMD:SOT-23-6"],
+  ];
+  const lines = toStandardLines(rows, detectColumnMapping(rows));
+  const byRef = (prefix: string) => lines.find((l) => l.refDes?.startsWith(prefix))!;
+
+  it("IC 行的 Value 被识别为 MPN,并标注来源为「推断」", () => {
+    expect(byRef("U2").mpn).toBe("CH340E");
+    expect(byRef("U2").mpnSource).toBe("inferred-from-value");
+    expect(byRef("U4").mpn).toBe("MachXO2-1200-QFN32");
+    expect(byRef("U5").mpn).toBe("ADA4851-1YRJZ-RL7");
+  });
+
+  it("推断出的 MPN 记为**提示**而不是错误 —— 待确认不等于有错", () => {
+    expect(byRef("U2").issues).toEqual([]);
+    expect(byRef("U2").notices?.join()).toContain("待人工确认");
+  });
+
+  it("阻容感/晶振的参数值不会被误当成型号", () => {
+    for (const p of ["C4", "R1", "X1"]) {
+      expect(byRef(p).mpn, p).toBeNull();
+      expect(byRef(p).mpnSource, p).toBeNull();
+    }
+  });
+
+  it("连接器符号名与丝印标签不会被误当成型号", () => {
+    for (const p of ["J1", "SW1", "D2"]) {
+      expect(byRef(p).mpn, p).toBeNull();
+    }
+  });
+
+  it("封装被归一成可用于比对的封装代码,原始串保留不动", () => {
+    expect(byRef("C4").packageCode).toBe("0603");
+    expect(byRef("C4").footprint).toBe("Capacitor_SMD:C_0603_1608Metric");
+    expect(byRef("U2").packageCode).toBe("MSOP-10");
+    expect(byRef("U4").packageCode).toBe("QFN-32");
+    expect(byRef("U5").packageCode).toBe("SOT-23-6");
+  });
+
+  it("文件本来就有 MPN 列时,来源标为 column,不做任何推断", () => {
+    const withCol = [
+      ["Reference", "Description", "Manufacturer", "PartNumber", "数量"],
+      ["R10", "RES 0R", "VISHAY", "CRCW06030000Z0EA", "3"],
+    ];
+    const l = toStandardLines(withCol, detectColumnMapping(withCol))[0];
+    expect(l.mpn).toBe("CRCW06030000Z0EA");
+    expect(l.mpnSource).toBe("column");
+    expect(l.notices ?? []).toEqual([]);
+  });
+});

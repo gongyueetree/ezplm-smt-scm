@@ -4,6 +4,7 @@ import {
   missingFields,
   type MappingResult,
 } from "./column-mapping";
+import { inferMpnFromValue, parseKicadFootprint } from "./kicad-value";
 
 /**
  * BOM 列映射与标准化(SPEC §6:列映射、非标准 BOM 转标准结构)。
@@ -103,6 +104,9 @@ export function missingRequiredFields(mapping: ColumnMapping): BomField[] {
   return missingFields(mapping, REQUIRED_FIELDS);
 }
 
+/** MPN 的来源:来自独立列,还是从 Value 推断出来的(推断的必须人工确认) */
+export type MpnSource = "column" | "inferred-from-value";
+
 export interface ParsedBomLine {
   /** 源文件行号(1 基,含表头行,便于人工回原表定位) */
   sourceRow: number;
@@ -115,8 +119,14 @@ export interface ParsedBomLine {
   internalPn: string | null;
   description: string | null;
   footprint: string | null;
+  /** MPN 来源;缺省/为 null 表示本行没有 MPN(可选:旧调用点无需构造) */
+  mpnSource?: MpnSource | null;
+  /** 从封装串归一出的封装代码(如 0603 / SOT-23-5 / QFN-32),取不出为 null */
+  packageCode?: string | null;
   /** 本行解析问题(数量非法等) */
   issues: string[];
+  /** 本行的提示(不是错误):如 MPN 由 Value 推断,需人工确认 */
+  notices?: string[];
 }
 
 /** 数量:支持 "10"、"10.0"、"10 pcs"、全角数字;失败返回 null 并记 issue */
@@ -168,8 +178,30 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
     if (!hasIdentifier && !(refDes && otherFilled > 0)) continue;
 
     const issues: string[] = [];
+    const notices: string[] = [];
     if (issue) issues.push(issue);
-    if (!mpn && !customerPn && !internalPn) issues.push("缺少 MPN / 客户料号 / 内部料号,无法匹配");
+
+    /*
+     * 工程侧 BOM 没有 MPN 列时,尝试从 Value 里认出型号。
+     *
+     * KiCad 的 Value 对不同器件含义不同:无源件是参数(0.1uF/10k),
+     * IC 则**就是型号**(CH340E/LPC824M201JHI33)。判据见 kicad-value.ts。
+     * 推断结果标记来源,**必须人工确认** —— 猜错型号会一路错到询价与报价。
+     */
+    let finalMpn = mpn;
+    let mpnSource: MpnSource | null = mpn ? "column" : null;
+    if (!finalMpn) {
+      const inferred = inferMpnFromValue({ value: description, refDes });
+      if (inferred) {
+        finalMpn = inferred.mpn;
+        mpnSource = "inferred-from-value";
+        notices.push(inferred.reason);
+      }
+    }
+
+    if (!finalMpn && !customerPn && !internalPn) {
+      issues.push("缺少 MPN / 客户料号 / 内部料号,无法匹配");
+    }
 
     lineNo += 1;
     out.push({
@@ -177,13 +209,16 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
       lineNo,
       refDes,
       qty,
-      mpn,
+      mpn: finalMpn,
       manufacturer,
       customerPn,
       internalPn,
       description,
       footprint,
+      mpnSource,
+      packageCode: parseKicadFootprint(footprint)?.packageCode ?? null,
       issues,
+      notices,
     });
   }
 

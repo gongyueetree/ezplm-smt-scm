@@ -1,3 +1,4 @@
+import path from "path";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -13,6 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
+const BOM_FIXTURE = path.join(__dirname, "fixtures", "demo-bom.csv");
 
 async function login(page: Page, email: string) {
   await page.goto("/login");
@@ -198,12 +200,25 @@ test("未收录型号:给出明确说明而非报错页", async ({ page }) => {
 });
 
 test("缺料分析页的 MPN 同样可点开详情", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
-  await page.goto("/shortage");
+  test.setTimeout(120_000);
+  await login(page, "pm@demo.ezplm.cn");
+
+  // 自建前置数据并锁定版本:靠"库里正好有缺料行"会让用例静默 skip,
+  // 那等于这条链路根本没被测到。
+  await page.goto("/bom/import");
+  await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
+  await page.getByRole("button", { name: "开始导入" }).click();
+  await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
+  const href = await page
+    .getByRole("link", { name: /进入匹配确认/ })
+    .first()
+    .getAttribute("href");
+  const versionId = href?.split("/").pop();
+  expect(versionId, "导入后应能拿到 BOM 版本 id").toBeTruthy();
+
+  await page.goto(`/shortage?v=${versionId}&boards=100`);
   const link = page.locator("a.mpn-link").first();
-  if ((await link.count()) === 0) {
-    test.skip(true, "当前库中无缺料行,跳过(列表为空不代表链接缺失)");
-  }
+  await expect(link).toBeVisible();
   const mpn = (await link.innerText()).trim();
   await link.click();
   await page.waitForURL("**/materials/**");

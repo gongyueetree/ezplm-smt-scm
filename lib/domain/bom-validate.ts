@@ -182,16 +182,26 @@ export function detectFootprintMismatch(
   return issues;
 }
 
-/** 解析阶段产生的问题(数量非法等)转为统一 issue */
+/**
+ * 解析阶段产生的问题转为统一 issue。
+ * issues = 错误(挡住流程);notices = 提示(如 MPN 由 Value 推断,需人工确认)——
+ * 两者级别必须分开,否则"待确认"会被当成"有错",人反而不看了。
+ */
 export function parseIssuesToBomIssues(lines: ParsedBomLine[]): BomIssue[] {
-  return lines.flatMap((l) =>
-    l.issues.map((message) => ({
+  return lines.flatMap((l) => [
+    ...l.issues.map((message) => ({
       level: "error" as const,
       code: "parse_issue" as const,
       message: `第 ${l.lineNo} 行:${message}`,
       lineNos: [l.lineNo],
     })),
-  );
+    ...(l.notices ?? []).map((message) => ({
+      level: "warning" as const,
+      code: "parse_issue" as const,
+      message: `第 ${l.lineNo} 行:${message}`,
+      lineNos: [l.lineNo],
+    })),
+  ]);
 }
 
 export interface ValidationContext {

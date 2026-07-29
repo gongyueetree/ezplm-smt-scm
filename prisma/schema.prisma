@@ -422,6 +422,10 @@ model BOMLine {
   manufacturer String?
   description  String?
   footprint    String?
+  /// 从封装串归一出的封装代码(0603 / SOT-23-5 / QFN-32);原始 footprint 保留不动
+  packageCode  String?
+  /// MPN 来源:column = 文件里有独立 MPN 列;inferred-from-value = 从 Value 列推断,**须人工确认**
+  mpnSource    String?
   /// 导入校验结果(事实性标记,导入完成时一次性写入)
   dupRefDesFlag     Boolean @default(false)
   eolFlag           Boolean @default(false)

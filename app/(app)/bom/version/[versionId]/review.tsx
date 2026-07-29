@@ -23,6 +23,9 @@ export interface ReviewCandidate {
 }
 
 export interface ReviewLine {
+  /** MPN 来源:inferred-from-value = 由 Value 列推断,须人工确认 */
+  mpnSource?: string | null;
+  packageCode?: string | null;
   id: string;
   lineNo: number;
   refDes: string | null;
@@ -103,9 +106,12 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                     <MpnLink mpn={l.mpn} fallback="(无 MPN)" />
                   </div>
                   <div className="muted">
-                    {l.manufacturer ?? "-"} · {l.footprint ?? "-"}
+                    {l.manufacturer ?? "-"} · {l.packageCode ?? l.footprint ?? "-"}
                   </div>
                   <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                    {l.mpnSource === "inferred-from-value" ? (
+                      <Badge tone="amber">MPN 由 Value 推断 · 待人工确认</Badge>
+                    ) : null}
                     {l.flags.dupRefDes ? <Badge tone="red">位号重复</Badge> : null}
                     {l.flags.eol ? <Badge tone="red">EOL</Badge> : null}
                     {l.flags.footprintMismatch ? <Badge tone="amber">封装不一致</Badge> : null}

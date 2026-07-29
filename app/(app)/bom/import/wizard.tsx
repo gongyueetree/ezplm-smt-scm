@@ -20,6 +20,7 @@ interface ImportResponse {
   isDraft: boolean;
   sourceNote?: string;
   missingRecommended: string[];
+  inferredMpnCount: number;
 }
 
 const SOURCE_LABEL: Record<string, { text: string; tone: "green" | "blue" | "amber" }> = {
@@ -173,6 +174,14 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
               <div className="banner warn">
                 本次表格来自<b>模型转写</b>,属识别草稿:型号可能有形近字错误、行列可能错位。
                 导入前请对照原件逐行核对;数量、单价等数值由系统按既有规则重新解析,<b>模型不参与任何计算</b>。
+              </div>
+            ) : null}
+            {result.inferredMpnCount > 0 ? (
+              <div className="banner ai">
+                其中 <b>{result.inferredMpnCount}</b> 行的 MPN 是从 <b>Value 列推断</b>出来的
+                (KiCad 这类工程 BOM 里,IC 的 Value 通常就是厂商型号,而阻容感的 Value 是参数)。
+                这些行在匹配确认页会单独标注 <b>待人工确认</b> —— 推断错的型号会一路错到询价与报价,
+                请逐行核对后再放行。
               </div>
             ) : null}
             {result.missingRecommended?.length ? (
