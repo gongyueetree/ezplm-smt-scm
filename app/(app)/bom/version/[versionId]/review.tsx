@@ -73,14 +73,21 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
   const [busyLine, setBusyLine] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function decide(lineId: string, decision: string, candidateId?: string) {
+  const [manualMpn, setManualMpn] = useState<Record<string, string>>({});
+
+  async function decide(
+    lineId: string,
+    decision: string,
+    candidateId?: string,
+    extra?: Record<string, unknown>,
+  ) {
     setBusyLine(lineId);
     setError(null);
     try {
       const res = await fetch(`/api/bom/lines/${lineId}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision, candidateId: candidateId ?? null }),
+        body: JSON.stringify({ decision, candidateId: candidateId ?? null, ...extra }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -131,7 +138,10 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                   </div>
                   {l.alternateHint && l.mpn ? (
                     <div style={{ marginTop: 4 }}>
-                      <a className="btn xs" href={`/materials/${encodeURIComponent(l.mpn)}`}>
+                      <a
+                        className="btn xs"
+                        href={`/materials/alternates?mpn=${encodeURIComponent(l.mpn)}`}
+                      >
                         查替代料
                       </a>
                     </div>
@@ -150,7 +160,9 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                 </td>
                 <td>
                   {l.candidates.length === 0 ? (
-                    <span className="small muted">无候选,需人工指定或标记无匹配</span>
+                    <span className="small muted">
+                      无候选 —— 可在右侧<b>直接填写型号</b>人工指定,或标记无匹配
+                    </span>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {l.candidates.slice(0, 4).map((c) => {
@@ -205,19 +217,47 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                 <td>
                   {l.decision ? (
                     <Badge tone="green">
-                      {l.decision.decision === "NO_MATCH" ? "已标记无匹配" : "已确认"}
+                      {l.decision.decision === "NO_MATCH"
+                        ? "已标记无匹配"
+                        : l.decision.decision === "MANUAL_ASSIGN"
+                          ? "已人工指定"
+                          : "已确认"}
                     </Badge>
                   ) : (
                     <Badge tone="gray">待确认</Badge>
                   )}
-                  <div style={{ marginTop: 6 }}>
-                    <button
-                      className="btn xs"
-                      disabled={busyLine === l.id}
-                      onClick={() => decide(l.id, "NO_MATCH")}
-                    >
-                      标记无匹配
-                    </button>
+                  <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {/* 人工指定:候选里没有想要的那颗时,直接填型号 */}
+                    <input
+                      className="input-xs"
+                      style={{ width: 168 }}
+                      placeholder="人工指定型号"
+                      aria-label={`第 ${l.lineNo} 行人工指定型号`}
+                      value={manualMpn[l.id] ?? ""}
+                      onChange={(e) =>
+                        setManualMpn((prev) => ({ ...prev, [l.id]: e.target.value }))
+                      }
+                    />
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        className="btn xs"
+                        disabled={busyLine === l.id || !(manualMpn[l.id] ?? "").trim()}
+                        onClick={() =>
+                          decide(l.id, "MANUAL_ASSIGN", undefined, {
+                            manualMpn: (manualMpn[l.id] ?? "").trim(),
+                          })
+                        }
+                      >
+                        确认指定
+                      </button>
+                      <button
+                        className="btn xs"
+                        disabled={busyLine === l.id}
+                        onClick={() => decide(l.id, "NO_MATCH")}
+                      >
+                        标记无匹配
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>

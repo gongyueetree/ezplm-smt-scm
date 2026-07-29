@@ -21,6 +21,7 @@ interface ImportResponse {
   sourceNote?: string;
   missingRecommended: string[];
   inferredMpnCount: number;
+  idempotentHit: { createdAt: string } | null;
 }
 
 const SOURCE_LABEL: Record<string, { text: string; tone: "green" | "blue" | "amber" }> = {
@@ -174,6 +175,13 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
               <div className="banner warn">
                 本次表格来自<b>模型转写</b>,属识别草稿:型号可能有形近字错误、行列可能错位。
                 导入前请对照原件逐行核对;数量、单价等数值由系统按既有规则重新解析,<b>模型不参与任何计算</b>。
+              </div>
+            ) : null}
+            {result.idempotentHit ? (
+              <div className="banner warn">
+                本次上传的文件与解析结果都与既有版本完全一致,已<b>复用既有版本</b>
+                (创建于 {result.idempotentHit.createdAt.slice(0, 19).replace("T", " ")}),
+                未新建版本。若你刚改过原始文件,请确认是否保存后再上传。
               </div>
             ) : null}
             {result.inferredMpnCount > 0 ? (

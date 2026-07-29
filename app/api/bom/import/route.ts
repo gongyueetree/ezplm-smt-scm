@@ -114,12 +114,27 @@ export async function POST(req: Request) {
   const lines = toStandardLines(rows, mapping);
   if (lines.length === 0) return badRequest("文件中没有可导入的 BOM 行");
 
-  const { job, validation, bomVersionId } = await createImportJob(auth.session, {
+  /*
+   * 幂等键 = 文件内容 + **解析结果**。
+   * 只用文件字节的话,解析器一升级,重传同一份文件仍会命中旧作业,
+   * 用户永远看不到新解析出来的信息(见 createImportJob 里的说明)。
+   */
+  const idempotencyKey = createHash("sha256")
+    .update(hash.digest())
+    .update(
+      JSON.stringify(
+        lines.map((l) => [l.lineNo, l.refDes, l.qty, l.mpn, l.manufacturer, l.footprint, l.packageCode]),
+      ),
+    )
+    .digest("hex")
+    .slice(0, 32);
+
+  const { job, validation, bomVersionId, idempotentHit } = await createImportJob(auth.session, {
     rfqId,
     bomName: sourceName || files[0].name,
     fileKeys,
     lines,
-    idempotencyKey: hash.digest("hex").slice(0, 32),
+    idempotencyKey,
     columnMapping: mapping,
   });
 
@@ -136,6 +151,8 @@ export async function POST(req: Request) {
       missingRecommended: missingRecommendedFields(mapping).map((f) => BOM_FIELD_LABELS[f]),
       /** 由 Value 列推断出 MPN 的行数(须人工确认) */
       inferredMpnCount: lines.filter((l) => l.mpnSource === "inferred-from-value").length,
+      /** 命中幂等:内容与既有版本完全一致,直接复用,未新建版本 */
+      idempotentHit: idempotentHit ?? null,
       archivedOnly,
       extractions,
       /** 表格来自哪条路径:spreadsheet / pdf-text(确定性)/ ocr(模型草稿) */

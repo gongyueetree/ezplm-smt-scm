@@ -13,6 +13,7 @@
 import { ProviderType, type Prisma } from "@prisma/client";
 import { rankAlternates, type AlternateCandidate, type RankedAlternate } from "@/lib/domain/alternate-rank";
 import { mergeFields, type MergedFields } from "@/lib/domain/field-merge";
+import { packageAgreement } from "@/lib/domain/part-spec";
 import { rankBySimilarity } from "@/lib/domain/similarity";
 import { buildOfferCacheKey, CACHE_TTL_SECONDS } from "@/lib/providers/common/cache";
 import { getDigiKeyProvider as getDk } from "@/lib/providers/digikey";
@@ -290,11 +291,13 @@ async function loadAlternates(
     candidates.push(c);
   };
 
-  const footprintMatchOf = (fp: string | null): boolean | null => {
-    if (!self.footprint || !fp) return null; // 缺一边就是未知
-    const norm = (v: string) => v.toUpperCase().replace(/[^0-9A-Z]/g, "");
-    return norm(self.footprint) === norm(fp);
-  };
+  /*
+   * 封装是否可换:不比字符串,比**封装族 + 管脚数**。
+   * `SOT-23-5` 与 `SOT-23-6` 字符串只差一位,但管脚数不同,焊上去会短路 ——
+   * 管脚数不同一律判为不可换(见 lib/domain/part-spec.ts)。
+   */
+  const footprintMatchOf = (fp: string | null): boolean | null =>
+    packageAgreement(self.footprint, fp).compatible;
 
   // 本地库:显式维护的替代关系(最可信)+ 型号相似的自家料
   const localParts = await prisma.part.findMany({ where: tenantWhere(tenantId), take: 5000 });

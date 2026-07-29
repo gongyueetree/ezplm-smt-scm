@@ -38,7 +38,10 @@ test("⑨ 外部 API 失败时展示降级信息,且不阻断其余流程(SPEC �
 
   // 降级信息如实展示
   await expect(page.getByText("外部数据源降级")).toBeVisible({ timeout: 60_000 });
-  await expect(page.locator(".banner.warn")).toContainText("MOUSER/quota_exceeded");
+  // 按内容定位到降级横幅本身:页面上可能同时有别的 warn 横幅(如幂等复用提示)
+  await expect(
+    page.locator(".banner.warn").filter({ hasText: "外部数据源降级" }),
+  ).toContainText("MOUSER/quota_exceeded");
 
   // 不阻断:进度仍跑到完成,仍可进入匹配确认
   await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });

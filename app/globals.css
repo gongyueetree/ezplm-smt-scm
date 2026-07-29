@@ -242,6 +242,13 @@ a { color: inherit; text-decoration: none; }
 }
 .fld input:focus, .fld select:focus, .fld textarea:focus { border-color: var(--brand); outline: none; }
 
+/* 表格内的小号输入框(如匹配确认页的人工指定型号) */
+.input-xs {
+  width: 100%; padding: 4px 7px; font-size: 12px;
+  border: 1px solid var(--gray-300); border-radius: 6px; background: var(--surface);
+}
+.input-xs:focus { border-color: var(--brand); outline: none; }
+
 /* ===== 杂项 ===== */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }

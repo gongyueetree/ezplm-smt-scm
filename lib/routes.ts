@@ -121,6 +121,15 @@ export const NAV_SECTIONS: NavSection[] = [
         desc: "物料主数据查询(ezPLM 只读真源 + ExternalPartSnapshot 缓存),候选显示生命周期/库存/呆滞/OPO/数据更新时间。",
         roles: ["ENGINEERING", "PROCUREMENT"],
       },
+      {
+        path: "/materials/alternates",
+        label: "替代料查询",
+        icon: "db",
+        ai: true,
+        plannedPr: "PR5+",
+        desc: "对任意型号查找替代候选:按型号系列 + 封装族 + 管脚数比对本系统物料库 / ezPLM / DigiKey;结果为候选,须人工确认。",
+        roles: ["ENGINEERING", "PROCUREMENT"],
+      },
     ],
   },
   {

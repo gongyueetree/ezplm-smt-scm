@@ -69,7 +69,22 @@ export interface ImportJobView {
 export async function createImportJob(
   session: SessionRef,
   input: CreateImportJobInput,
-): Promise<{ job: ImportJobView; validation: ValidationReport; bomVersionId: string }> {
+): Promise<{
+  job: ImportJobView;
+  validation: ValidationReport;
+  bomVersionId: string;
+  /** 命中幂等时给出既有作业的创建时间,由 UI 如实告知"复用了既有版本" */
+  idempotentHit?: { createdAt: string };
+}> {
+  /*
+   * 幂等:同一文件**且解析结果相同**时复用既有作业。
+   *
+   * 幂等键里必须包含**解析结果**,不能只有文件字节 ——
+   * 否则解析器升级之后,重传同一份文件会直接返回旧版本,
+   * 新解析出来的信息(比如从 Value 推断出的 MPN)永远看不到,
+   * 而校验报告却是按新解析算的,页面上两处对不上,人只会以为系统坏了。
+   * (实测:SimpleDDS 重传后校验说"识别到 5 个 MPN",匹配页却全是「无 MPN」。)
+   */
   const existing = await prisma.bOMImportJob.findFirst({
     where: tenantWhere(session.tenantId, { idempotencyKey: input.idempotencyKey }),
   });
@@ -82,6 +97,7 @@ export async function createImportJob(
       job: toView(existing),
       validation: await validateWithMasterData(session.tenantId, input.lines),
       bomVersionId: v?.id ?? "",
+      idempotentHit: { createdAt: existing.createdAt.toISOString() },
     };
   }
 
@@ -374,11 +390,19 @@ export async function getBomVersionDetail(session: SessionRef, bomVersionId: str
 export async function saveLineDecision(
   session: SessionRef,
   bomLineId: string,
-  input: { candidateId?: string | null; partId?: string | null; decision: "ACCEPT_CANDIDATE" | "MANUAL_ASSIGN" | "NO_MATCH"; note?: string | null },
+  input: {
+    candidateId?: string | null;
+    partId?: string | null;
+    decision: "ACCEPT_CANDIDATE" | "MANUAL_ASSIGN" | "NO_MATCH";
+    note?: string | null;
+    /** 人工直接填的型号(候选里没有想要的那颗时) */
+    manualMpn?: string | null;
+    manualManufacturer?: string | null;
+  },
 ) {
   const line = await prisma.bOMLine.findFirst({
     where: tenantWhere(session.tenantId, { id: bomLineId }),
-    select: { id: true },
+    select: { id: true, mpn: true },
   });
   if (!line) return null;
 
@@ -386,11 +410,32 @@ export async function saveLineDecision(
     const existing = await tx.bomLineDecision.findFirst({
       where: tenantWhere(session.tenantId, { bomLineId }),
     });
+    /*
+     * 人工指定型号时,把它**写回 BOM 行** —— 决定本身只是一条记录,
+     * 后续的比价、GTB、报价都读 BOMLine.mpn,不写回等于人白填了。
+     * 来源标为 manual,与"从 Value 推断"区分开:人工填的是最高可信度。
+     */
+    const manualMpn = input.manualMpn?.trim() || null;
+    if (input.decision === "MANUAL_ASSIGN" && manualMpn) {
+      await tx.bOMLine.update({
+        where: { id: bomLineId },
+        data: {
+          mpn: manualMpn,
+          mpnSource: "manual",
+          ...(input.manualManufacturer?.trim()
+            ? { manufacturer: input.manualManufacturer.trim() }
+            : {}),
+        },
+      });
+    }
+
     const data = {
       candidateId: input.candidateId ?? null,
       partId: input.partId ?? null,
       decision: input.decision,
-      note: input.note ?? null,
+      note:
+        input.note ??
+        (manualMpn ? `人工指定型号「${manualMpn}」(原值:${line.mpn ?? "无"})` : null),
       decidedById: session.userId,
       decidedAt: new Date(),
     };
