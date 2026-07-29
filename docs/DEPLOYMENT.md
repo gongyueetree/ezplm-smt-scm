@@ -22,9 +22,40 @@
 | `DIGIKEY_ACCOUNT_ID` / `DIGIKEY_SITE` / `DIGIKEY_LANGUAGE` / `DIGIKEY_CURRENCY` | — | 账户与地区 | 默认 `CN` / `zh` / `CNY` |
 | `DIGIKEY_API_BASE_URL` | — | Sandbox 凭据需设为 `https://sandbox-api.digikey.com` | 生产域名 |
 | `MOUSER_API_KEY` / `MOUSER_API_BASE_URL` | — | Mouser Search API | 走 Mock,页面标注 |
-| `ANTHROPIC_API_KEY` | — | QuoteAgent 真实模型 | 走 MockQuoteAgent,UI 标注「本地规则建议 · 未接入模型」 |
+| `GEMINI_API_KEY` | — | Gemini 模型凭据(**推荐**) | 与 `ANTHROPIC_API_KEY` 都没配时,AI 功能降级为本地规则 |
+| `GEMINI_MODEL` | — | Gemini 模型名 | `gemini-2.5-flash` |
+| `GEMINI_API_BASE_URL` | — | 自建网关/代理时覆盖 | `https://generativelanguage.googleapis.com/v1beta` |
+| `ANTHROPIC_API_KEY` | — | Claude 模型凭据 | 同上 |
+| `ANTHROPIC_MODEL` | — | Claude 模型名 | `claude-opus-5` |
+| `AI_PROVIDER` | — | 强制指定厂商:`gemini` / `anthropic` / `none` | 按 Gemini → Anthropic 顺序自动选;`none` 可强制关闭 AI |
 | `CRON_SECRET` | — | 催办 Cron 鉴权 | **催办接口返回 503 拒绝运行**(不在无鉴权下开放) |
 | `SEED_DEMO_PASSWORD` | — | 演示种子口令 | `demo1234`。**种子在 `NODE_ENV=production` 下拒绝执行** |
+
+### AI 模型接入(两处功能共用一套凭据)
+
+```bash
+# .env.local(不进版本库)
+GEMINI_API_KEY=<你的 Key>
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+配置后立即生效的功能:
+
+| 功能 | 位置 | 模型做什么 | 模型**不**做什么 |
+|---|---|---|---|
+| 报价分类与 Markup 建议 | 报价详情页「运行 QuoteAgent」 | 给物料类别 + Markup 档位 | 不算任何金额;单价/小计/总价全部由 `lib/domain/quote-calc.ts` 用 Decimal 计算 |
+| 图片 / 扫描件 BOM 转写 | BOM 导入上传图片或无文本层 PDF | 把表格逐字抄成行列 | 不猜型号、不补全、不做单位换算;数量仍由 `parseQty` 重新解析 |
+
+> PDF **有文本层**时不走模型 —— 走 `lib/domain/pdf-table.ts` 的确定性几何重建。
+> 模型只在扫描件与图片上使用。
+
+验证:
+
+```bash
+pnpm smoke:ai
+```
+
+脚本只打印凭据**长度**,不回显任何 Key 内容。输出贴回评审记录后,才可把状态写为「已联调」。
 
 **密钥纪律**:所有 Key 只存服务端环境变量;`.gitignore` 覆盖 `.env*`(仅放行 `.env.example`);
 日志与 `ApiUsageLog` 中的端点一律经 `redactUrl()` 脱敏(Mouser 的 `apiKey` 走 query,尤其重要)。
@@ -175,7 +206,7 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 |---|---|---|
 | ezPLM 只读 API | **待联调** | 物料/库存走 Mock,页面标注「示例数据」 |
 | DigiKey / Mouser | **已联调**(2026-07-27 用户执行 `pnpm smoke:external` 验证) | 配置 Key 后即走真实 API |
-| Claude(QuoteAgent) | **待接入** | 无 Key 时用本地规则建议,UI 标注「未接入模型」 |
+| AI 模型(Gemini / Claude) | **代码已接入,待真实冒烟** | 供 ①报价 QuoteAgent 分类/Markup 建议 ②图片/扫描件 BOM 转写 两处使用。无 Key 时降级为本地规则,UI 标注「未接入模型」。配好 Key 后由人执行 `pnpm smoke:ai` 留痕,方可改为「已联调」 |
 | 邮件发送(催办 / 对账) | **未接入** | 只生成记录,不发送 |
 | ERP 回写 | **替代路径** | 生成 ERP 可导入 XLSX + IntegrationJob 登记;RPA/API 直写属二期 |
 

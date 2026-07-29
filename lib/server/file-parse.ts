@@ -166,14 +166,14 @@ async function recognize(
   fileName: string,
   why: string,
 ): Promise<ExtractResult> {
-  if (ocrProviderMode() !== "claude") {
+  if (ocrProviderMode() === "unavailable") {
     return {
       kind,
       rows: [],
       source: "none",
       requiresManualTranscription: true,
       isDraft: false,
-      note: `${why};自动识别需配置 ANTHROPIC_API_KEY,当前未配置。文件已归档,请人工补录为 CSV/XLSX 后再导入。`,
+      note: `${why};自动识别需配置 GEMINI_API_KEY 或 ANTHROPIC_API_KEY,当前未配置。文件已归档,请人工补录为 CSV/XLSX 后再导入。`,
     };
   }
 
@@ -186,7 +186,7 @@ async function recognize(
       requiresManualTranscription: false,
       isDraft: true,
       note:
-        `${why},已由 ${result.model} 转写为表格草稿(${result.rows.length} 行)。` +
+        `${why},已由 ${result.vendor}/${result.model} 转写为表格草稿(${result.rows.length} 行)。` +
         `识别结果**不保证准确**,列映射与每一行都必须人工核对后才可采用。` +
         (result.note ? `提示:${result.note}` : ""),
     };

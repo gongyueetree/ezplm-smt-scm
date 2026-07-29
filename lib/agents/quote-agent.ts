@@ -6,13 +6,16 @@
  * - **绝不产出金额**:总价/单价/PPV 一律由 lib/domain/quote-calc.ts 重算;
  * - 建议落地为"写提案",必须经人工确认卡片批准后才写库。
  *
- * ⚠ 状态:MockQuoteAgent 已可用;ClaudeQuoteAgent 需 ANTHROPIC_API_KEY,
+ * ⚠ 状态:MockQuoteAgent(本地确定性规则)始终可用;
+ * LlmQuoteAgent 需 GEMINI_API_KEY 或 ANTHROPIC_API_KEY,
  * 无 Key 时构造即抛结构化错误,**不伪造已接通模型**。
  */
 import { z } from "zod";
+import { extractJson, getLlmProvider, llmVendor } from "@/lib/ai";
 import { summarizeQuote, type QuoteLineForCalc } from "@/lib/domain/quote-calc";
 import type {
   AgentEvidenceRecord,
+  AgentMode,
   AgentRunResult,
   AgentStepRecord,
   AgentToolDef,
@@ -84,7 +87,7 @@ export interface QuoteAgentInput {
 }
 
 export interface QuoteAgent {
-  readonly mode: "mock" | "claude";
+  readonly mode: AgentMode;
   run(input: QuoteAgentInput): Promise<AgentRunResult>;
 }
 
@@ -207,34 +210,237 @@ export class MockQuoteAgent implements QuoteAgent {
 }
 
 // ============================================================
-// ClaudeQuoteAgent(待联调)
+// LlmQuoteAgent(真实模型;Gemini / Claude 通吃)
 // ============================================================
 
-/**
- * 真实模型实现 —— 状态:**待联调**。
- * 需 ANTHROPIC_API_KEY(仅服务端环境变量);无 Key 时构造即抛错,
- * 绝不静默回落到 Mock 并对外声称"已接入模型"。
- */
-export class ClaudeQuoteAgent implements QuoteAgent {
-  readonly mode = "claude" as const;
+/** 允许的 Markup 区间;模型给的档位必须落在这里,否则回落到本地规则档位 */
+const MARKUP_MIN = 0;
+const MARKUP_MAX = 1;
 
-  constructor() {
-    if (!process.env.ANTHROPIC_API_KEY) {
+const AGENT_SYSTEM =
+  "你是 SMT 报价的物料分类助手。你只输出物料类别与 Markup 档位建议," +
+  "**绝不计算任何金额**(单价、总价、PPV 一律由系统的确定性函数计算)。" +
+  "拿不准的行必须给低置信度并归入「其它」,不要猜。";
+
+function buildAgentPrompt(input: QuoteAgentInput): string {
+  const catalog = Object.entries(CATEGORY_MARKUP)
+    .map(([c, m]) => `${c}(参考 Markup ${m})`)
+    .join("、");
+  const lines = input.lines.map((l) => ({
+    lineNo: l.lineNo,
+    mpn: l.mpn,
+    manufacturer: l.manufacturer,
+    description: l.description,
+  }));
+  return [
+    `可选类别:${catalog}。`,
+    "为下列每一行给出物料类别与建议 Markup(0–1 的小数字符串,如 \"0.12\")。",
+    "必须为**每一行**都给出结果,行号不得遗漏、不得新增。",
+    "rationale 用中文一句话说明依据;confidence 为 0–1 的小数。",
+    '只输出 JSON:{"suggestions":[{"lineNo":1,"materialCategory":"IC","suggestedMarkupPct":"0.08","rationale":"...","confidence":0.8}]}',
+    "",
+    "待分类行:",
+    JSON.stringify(lines),
+  ].join("\n");
+}
+
+const LlmSuggestionsSchema = z.object({
+  suggestions: z.array(
+    z.object({
+      lineNo: z.number().int(),
+      materialCategory: z.string().min(1),
+      suggestedMarkupPct: z.string(),
+      rationale: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.5),
+    }),
+  ),
+});
+
+/**
+ * 把模型输出对齐成"每行一条建议"。
+ *
+ * 纪律:
+ * - 模型漏掉的行**用本地规则补齐**,绝不静默丢行(丢行=这行悄悄没有报价参数);
+ * - Markup 非法(非小数字符串 / 超出 0–1)时回落到该类别的本地档位,
+ *   并把置信度压到 0.3 —— 参数不合规不能当作可信建议;
+ * - 模型多给的行号直接丢弃。
+ */
+export function reconcileSuggestions(
+  lines: QuoteAgentLine[],
+  raw: { lineNo: number; materialCategory: string; suggestedMarkupPct: string; rationale: string; confidence: number }[],
+): { suggestions: CategorySuggestion[]; repaired: number } {
+  const byLine = new Map(raw.map((r) => [r.lineNo, r]));
+  let repaired = 0;
+
+  const suggestions = lines.map((l) => {
+    const hit = byLine.get(l.lineNo);
+    if (!hit) {
+      repaired++;
+      const { category, confidence } = classifyLine(l);
+      return {
+        lineNo: l.lineNo,
+        materialCategory: category,
+        suggestedMarkupPct: CATEGORY_MARKUP[category] ?? CATEGORY_MARKUP["其它"],
+        rationale: "模型未返回该行,已用本地规则补齐",
+        confidence: Math.min(confidence, 0.4),
+      };
+    }
+
+    const parsed = Number(hit.suggestedMarkupPct);
+    const legal =
+      /^\d+(\.\d+)?$/.test(hit.suggestedMarkupPct.trim()) &&
+      Number.isFinite(parsed) &&
+      parsed >= MARKUP_MIN &&
+      parsed <= MARKUP_MAX;
+    if (legal) {
+      return {
+        lineNo: l.lineNo,
+        materialCategory: hit.materialCategory,
+        suggestedMarkupPct: hit.suggestedMarkupPct.trim(),
+        rationale: hit.rationale,
+        confidence: hit.confidence,
+      };
+    }
+
+    repaired++;
+    const fallback = CATEGORY_MARKUP[hit.materialCategory] ?? CATEGORY_MARKUP["其它"];
+    return {
+      lineNo: l.lineNo,
+      materialCategory: hit.materialCategory,
+      suggestedMarkupPct: fallback,
+      rationale: `模型给出的 Markup「${hit.suggestedMarkupPct}」不合规,已回落到该类别档位 ${fallback}`,
+      confidence: Math.min(hit.confidence, 0.3),
+    };
+  });
+
+  return { suggestions, repaired };
+}
+
+/**
+ * 真实模型实现。厂商由 lib/ai 决定(Gemini / Claude),业务代码不感知差异。
+ * 无凭据时构造即抛错,**绝不静默回落到 Mock 并对外声称"已接入模型"**。
+ */
+export class LlmQuoteAgent implements QuoteAgent {
+  readonly mode: Exclude<AgentMode, "mock">;
+
+  constructor(private readonly now: () => Date = () => new Date()) {
+    const vendor = llmVendor();
+    if (!vendor) {
       throw new Error(
-        "ClaudeQuoteAgent 不可用:ANTHROPIC_API_KEY 未配置(状态:待联调)。" +
+        "LlmQuoteAgent 不可用:未配置 GEMINI_API_KEY 或 ANTHROPIC_API_KEY。" +
           "未配置时系统使用 MockQuoteAgent,页面会如实标注为本地规则建议。",
       );
     }
+    this.mode = vendor;
   }
 
-  async run(_input: QuoteAgentInput): Promise<AgentRunResult> {
-    void _input;
-    // 待联调:接入 Vercel AI SDK + Claude 后在此实现;
-    // 实现时必须保持:工具用 Zod schema、写工具只产出提案、金额一律由确定性函数重算。
-    throw new Error("ClaudeQuoteAgent 尚未接入真实模型(状态:待联调)");
+  async run(input: QuoteAgentInput): Promise<AgentRunResult> {
+    const startedAt = this.now().toISOString();
+    const steps: AgentStepRecord[] = [];
+    const evidences: AgentEvidenceRecord[] = [];
+    const llm = getLlmProvider();
+
+    let suggestions: CategorySuggestion[];
+    let repaired = 0;
+    let tokenUsage = null as AgentRunResult["tokenUsage"];
+
+    try {
+      const res = await llm.generateText({
+        system: AGENT_SYSTEM,
+        prompt: buildAgentPrompt(input),
+        json: true,
+        maxOutputTokens: 8192,
+      });
+      tokenUsage = res.usage;
+      const parsed = LlmSuggestionsSchema.safeParse(extractJson(res.text));
+      if (!parsed.success) {
+        throw new Error("模型输出结构不符合预期(应为 {suggestions:[...]})");
+      }
+      const reconciled = reconcileSuggestions(input.lines, parsed.data.suggestions);
+      suggestions = reconciled.suggestions;
+      repaired = reconciled.repaired;
+
+      steps.push({
+        stepNo: 1,
+        toolName: suggestCategoriesTool.name,
+        input: { lines: input.lines.length, model: res.model, vendor: res.vendor },
+        output: { suggestions: suggestions.length, repaired },
+        status: "SUCCEEDED",
+      });
+      evidences.push({
+        source: null,
+        uri: null,
+        payload: { vendor: res.vendor, model: res.model, repairedLines: repaired },
+      });
+    } catch (e) {
+      // 模型不可用/输出不可信:如实记失败步骤,并**回落到本地规则**继续给建议,
+      // 而不是让整个报价流程卡死。UI 会显示 repaired 数量。
+      const reason = e instanceof Error ? e.message : String(e);
+      steps.push({
+        stepNo: 1,
+        toolName: suggestCategoriesTool.name,
+        input: { lines: input.lines.length },
+        output: { error: reason },
+        status: "FAILED",
+      });
+      const reconciled = reconcileSuggestions(input.lines, []);
+      suggestions = reconciled.suggestions;
+      repaired = reconciled.repaired;
+      evidences.push({
+        source: null,
+        uri: null,
+        payload: { fallback: "本地分类规则表", reason },
+      });
+    }
+
+    // 用建议参数**由确定性函数**试算,给人工看影响面(仍不落库)
+    const calcLines: QuoteLineForCalc[] = input.lines.map((l) => {
+      const s = suggestions.find((x) => x.lineNo === l.lineNo)!;
+      return {
+        lineNo: l.lineNo,
+        category: "MATERIAL",
+        qty: l.qty,
+        purchaseCost: l.purchaseCost,
+        markupPct: s.suggestedMarkupPct,
+      };
+    });
+    const preview = summarizeQuote(calcLines, { currency: input.currency });
+    steps.push({
+      stepNo: 2,
+      toolName: null,
+      input: { note: "以建议 Markup 由确定性函数试算(AI 不产出金额)" },
+      output: { materialTotal: preview.byCategory.MATERIAL, grandTotal: preview.grandTotal },
+      status: "SUCCEEDED",
+    });
+
+    const writeProposals: AgentWriteProposal[] = [
+      {
+        toolName: applySuggestionsTool.name,
+        payload: { versionId: input.versionId, suggestions },
+        summary:
+          `拟为 ${suggestions.length} 行写入物料分类与 Markup 建议;` +
+          `按此试算材料小计 ${input.currency} ${preview.byCategory.MATERIAL}。` +
+          (repaired > 0 ? `其中 ${repaired} 行由本地规则补齐或修正。` : "") +
+          `分类仍需逐行人工确认后方可提交审批。`,
+      },
+    ];
+
+    return {
+      agentType: "QUOTE",
+      status: "SUCCEEDED",
+      input,
+      output: { suggestions, preview, repaired },
+      steps,
+      evidences,
+      writeProposals,
+      error: null,
+      tokenUsage,
+      startedAt,
+      finishedAt: this.now().toISOString(),
+    };
   }
 }
 
 export function getQuoteAgent(): QuoteAgent {
-  return process.env.ANTHROPIC_API_KEY ? new ClaudeQuoteAgent() : new MockQuoteAgent();
+  return llmVendor() ? new LlmQuoteAgent() : new MockQuoteAgent();
 }

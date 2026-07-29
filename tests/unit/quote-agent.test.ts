@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  ClaudeQuoteAgent,
+  LlmQuoteAgent,
+  reconcileSuggestions,
   MockQuoteAgent,
   QUOTE_AGENT_TOOLS,
   applySuggestionsTool,
@@ -91,24 +92,85 @@ describe("MockQuoteAgent 运行(AI 只建议,不落库、不出金额)", () => {
   });
 });
 
-describe("ClaudeQuoteAgent:无 Key 时不伪装已接通", () => {
-  it("未配置 ANTHROPIC_API_KEY 时构造即抛结构化错误", () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
+describe("LlmQuoteAgent:无 Key 时不伪装已接通", () => {
+  const KEYS = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "AI_PROVIDER"] as const;
+
+  function withoutKeys(fn: () => void) {
+    const saved = KEYS.map((k) => [k, process.env[k]] as const);
+    for (const k of KEYS) delete process.env[k];
     try {
-      expect(() => new ClaudeQuoteAgent()).toThrow(/待联调/);
+      fn();
     } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+      for (const [k, v] of saved) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
     }
+  }
+
+  it("未配置任何模型凭据时构造即抛结构化错误", () => {
+    withoutKeys(() => {
+      expect(() => new LlmQuoteAgent()).toThrow(/GEMINI_API_KEY 或 ANTHROPIC_API_KEY/);
+    });
   });
 
   it("无 Key 时工厂回落到 Mock,并以 mode 字段如实标注", () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    try {
+    withoutKeys(() => {
       expect(getQuoteAgent().mode).toBe("mock");
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
-    }
+    });
+  });
+
+  it("配置 GEMINI_API_KEY 后工厂给出 gemini 形态", () => {
+    withoutKeys(() => {
+      process.env.GEMINI_API_KEY = "test-key-not-real";
+      expect(getQuoteAgent().mode).toBe("gemini");
+    });
+  });
+});
+
+describe("reconcileSuggestions:模型输出对齐(AI 只给参数,且参数必须可信)", () => {
+  it("模型漏行时用本地规则补齐,绝不静默丢行", () => {
+    const { suggestions, repaired } = reconcileSuggestions(LINES, [
+      { lineNo: 1, materialCategory: "阻容感", suggestedMarkupPct: "0.15", rationale: "电阻", confidence: 0.9 },
+    ]);
+    expect(suggestions).toHaveLength(3);
+    expect(repaired).toBe(2);
+    expect(suggestions[1].rationale).toContain("模型未返回该行");
+    // 补齐的行置信度必须被压低,不能冒充可信建议
+    expect(suggestions[1].confidence).toBeLessThanOrEqual(0.4);
+  });
+
+  it("Markup 不是合法小数字符串时回落到类别档位并压低置信度", () => {
+    const { suggestions, repaired } = reconcileSuggestions([LINES[0]], [
+      { lineNo: 1, materialCategory: "IC", suggestedMarkupPct: "百分之十五", rationale: "", confidence: 0.95 },
+    ]);
+    expect(repaired).toBe(1);
+    expect(suggestions[0].suggestedMarkupPct).toBe("0.08"); // IC 档位
+    expect(suggestions[0].confidence).toBeLessThanOrEqual(0.3);
+  });
+
+  it("Markup 超出 0–1 区间时同样回落 —— 防止模型把 15% 写成 15", () => {
+    const { suggestions } = reconcileSuggestions([LINES[0]], [
+      { lineNo: 1, materialCategory: "阻容感", suggestedMarkupPct: "15", rationale: "", confidence: 0.9 },
+    ]);
+    expect(suggestions[0].suggestedMarkupPct).toBe("0.15");
+    expect(suggestions[0].rationale).toContain("不合规");
+  });
+
+  it("模型多给的行号被丢弃,不会凭空多出报价行", () => {
+    const { suggestions } = reconcileSuggestions([LINES[0]], [
+      { lineNo: 1, materialCategory: "阻容感", suggestedMarkupPct: "0.15", rationale: "", confidence: 0.9 },
+      { lineNo: 99, materialCategory: "IC", suggestedMarkupPct: "0.08", rationale: "", confidence: 0.9 },
+    ]);
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0].lineNo).toBe(1);
+  });
+
+  it("合法输出原样保留", () => {
+    const { suggestions, repaired } = reconcileSuggestions([LINES[1]], [
+      { lineNo: 2, materialCategory: "IC", suggestedMarkupPct: "0.09", rationale: "MCU", confidence: 0.88 },
+    ]);
+    expect(repaired).toBe(0);
+    expect(suggestions[0]).toMatchObject({ materialCategory: "IC", suggestedMarkupPct: "0.09" });
   });
 });

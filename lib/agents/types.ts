@@ -10,6 +10,7 @@
  *    最终写入结果 / 失败 / token 成本 / 时间。
  */
 import { z } from "zod";
+import { llmVendor, type LlmVendor } from "@/lib/ai";
 
 export type AgentTypeValue = "RFQ_INTAKE" | "BOM_MATCHING" | "SOURCING" | "QUOTE" | "OPO";
 
@@ -70,9 +71,13 @@ export interface AgentRunResult {
   finishedAt: string;
 }
 
-/** 模型形态:mock = 本地确定性建议;claude = 真实模型(需 ANTHROPIC_API_KEY) */
-export type AgentMode = "mock" | "claude";
+/**
+ * 模型形态:mock = 本地确定性规则建议(未接入模型);
+ * gemini / anthropic = 已接入对应厂商的真实模型。
+ * 判定统一交给 lib/ai,业务代码不直接读环境变量。
+ */
+export type AgentMode = "mock" | LlmVendor;
 
 export function agentMode(): AgentMode {
-  return process.env.ANTHROPIC_API_KEY ? "claude" : "mock";
+  return llmVendor() ?? "mock";
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOcrTable } from "@/lib/providers/ocr/claude";
+import { parseOcrTable } from "@/lib/providers/ocr/recognize";
 import { OcrError, ocrProviderMode } from "@/lib/providers/ocr/provider";
 
 const OK = JSON.stringify({
@@ -50,11 +50,11 @@ describe("parseOcrTable:模型转写结果的解析与护栏", () => {
 
   it("不是 JSON 时报错,绝不猜内容", () => {
     expect(() => parseOcrTable("这张图我看不清")).toThrow(OcrError);
-    expect(() => parseOcrTable("这张图我看不清")).toThrow(/不是 JSON/);
+    expect(() => parseOcrTable("这张图我看不清")).toThrow(/找不到 JSON/);
   });
 
   it("JSON 语法错误时报错而不是返回半张表", () => {
-    expect(() => parseOcrTable('{"rows": [["a","b"],}')).toThrow(/解析失败/);
+    expect(() => parseOcrTable('{"rows": [["a","b"],}')).toThrow(/解析失败|不完整/);
   });
 
   it("结构不符(rows 不是二维字符串数组)时报错", () => {
@@ -68,18 +68,33 @@ describe("parseOcrTable:模型转写结果的解析与护栏", () => {
 });
 
 describe("ocrProviderMode:无凭据时不假装可用", () => {
-  const original = process.env.ANTHROPIC_API_KEY;
+  const KEYS = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "AI_PROVIDER"] as const;
 
-  it("未配置 ANTHROPIC_API_KEY 时为 unavailable", () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    expect(ocrProviderMode()).toBe("unavailable");
-    if (original !== undefined) process.env.ANTHROPIC_API_KEY = original;
+  function withEnv(patch: Partial<Record<(typeof KEYS)[number], string>>, fn: () => void) {
+    const saved = KEYS.map((k) => [k, process.env[k]] as const);
+    for (const k of KEYS) delete process.env[k];
+    Object.assign(process.env, patch);
+    try {
+      fn();
+    } finally {
+      for (const k of KEYS) delete process.env[k];
+      for (const [k, v] of saved) if (v !== undefined) process.env[k] = v;
+    }
+  }
+
+  it("未配置任何模型凭据时为 unavailable", () => {
+    withEnv({}, () => expect(ocrProviderMode()).toBe("unavailable"));
   });
 
-  it("配置后为 claude", () => {
-    process.env.ANTHROPIC_API_KEY = "test-key-not-real";
-    expect(ocrProviderMode()).toBe("claude");
-    if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = original;
+  it("配置 GEMINI_API_KEY 后为 gemini", () => {
+    withEnv({ GEMINI_API_KEY: "test-key-not-real" }, () =>
+      expect(ocrProviderMode()).toBe("gemini"),
+    );
+  });
+
+  it("只配 ANTHROPIC_API_KEY 时为 anthropic", () => {
+    withEnv({ ANTHROPIC_API_KEY: "test-key-not-real" }, () =>
+      expect(ocrProviderMode()).toBe("anthropic"),
+    );
   });
 });

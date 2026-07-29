@@ -310,7 +310,13 @@ export function QuoteEditor({
           </button>
           {agentMode ? (
             <Badge tone={agentMode === "mock" ? "amber" : "purple"}>
-              {agentMode === "mock" ? "本地规则建议 · 未接入模型" : "Claude"}
+              {agentMode === "mock"
+                ? "本地规则建议 · 未接入模型"
+                : agentMode === "gemini"
+                  ? "Gemini"
+                  : agentMode === "anthropic"
+                    ? "Claude"
+                    : agentMode}
             </Badge>
           ) : null}
           {pendingApprovals > 0 ? (

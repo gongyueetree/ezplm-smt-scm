@@ -8,10 +8,14 @@
  *   不得直接落库成正式 BOM 行;
  * - 无凭据时**不回落到任何"假装识别"的实现** —— 明确报"未配置",
  *   由 UI 如实告诉用户"该文件已归档,需人工补录"。
+ *
+ * 厂商无关:走 lib/ai 的统一接入层,Gemini / Claude 都能用。
  */
 import { z } from "zod";
+import { llmVendor, type LlmVendor } from "@/lib/ai";
 
-export type OcrMode = "claude" | "unavailable";
+/** 当前识别形态;unavailable = 未配置任何模型凭据 */
+export type OcrMode = LlmVendor | "unavailable";
 
 export const OcrTableSchema = z.object({
   rows: z.array(z.array(z.string())),
@@ -29,6 +33,7 @@ export interface OcrRecognizeResult {
   /** 模型自报的完整度提示;仅供 UI 提示强度,不作为放行依据 */
   note: string | null;
   model: string;
+  vendor: LlmVendor;
 }
 
 export class OcrError extends Error {
@@ -47,5 +52,5 @@ export interface BomOcrProvider {
 }
 
 export function ocrProviderMode(): OcrMode {
-  return process.env.ANTHROPIC_API_KEY ? "claude" : "unavailable";
+  return llmVendor() ?? "unavailable";
 }

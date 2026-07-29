@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ezplmProviderMode } from "@/lib/providers/ezplm";
 import { digiKeyMode } from "@/lib/providers/digikey";
 import { mouserMode } from "@/lib/providers/mouser";
+import { llmStatus } from "@/lib/ai";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -36,6 +37,8 @@ export default async function SettingsPage() {
     Promise.resolve(!!process.env.CRON_SECRET),
   ]);
 
+  const ai = llmStatus();
+
   const integrations = [
     {
       name: "ezPLM",
@@ -53,9 +56,13 @@ export default async function SettingsPage() {
       note: "Search API v1(限流 + 日配额)",
     },
     {
-      name: "Claude(QuoteAgent)",
-      status: integrationStatus(!!process.env.ANTHROPIC_API_KEY, null),
-      note: "未配置时使用本地规则建议,页面如实标注",
+      name: ai.vendor
+        ? `AI 模型 · ${ai.vendor === "gemini" ? "Gemini" : "Claude"}(${ai.model})`
+        : "AI 模型(未配置)",
+      status: integrationStatus(ai.configured, null),
+      note:
+        "供 报价 QuoteAgent 分类/Markup 建议 与 图片/扫描件 BOM 转写 两处使用;" +
+        "未配置时降级为本地规则,页面如实标注。模型只给建议参数,金额一律由确定性函数计算。",
     },
     {
       name: "催办 Cron",
