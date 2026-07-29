@@ -1,6 +1,5 @@
 import { BackLink } from "@/components/shell/back-link";
 import { Banner } from "@/components/ui/banner";
-import { Card } from "@/components/ui/card";
 import { AlternateFinder } from "./finder";
 
 export const dynamic = "force-dynamic";
@@ -27,18 +26,18 @@ export default async function AlternatesPage({
 
       <Banner tone="ai">
         <span>
-          候选排序优先级:<b>本系统物料库 &gt; 有现货 &gt; 在产 &gt; 性价比</b>,
-          其中<b>型号相似度权重最高</b>。
-          封装比对不比字符串,而是比<b>封装族 + 管脚数</b> ——
-          <b>管脚数不同一律判为不可换</b>(SOT-23-5 与 SOT-23-6 只差一个字符,焊上去会短路)。
+          评分拆成四维:<b>技术兼容</b>(按参数优先级加权的逐项比对)、
+          <b>证据覆盖</b>(有多少参数真的拿到了数据)、
+          <b>来源可信</b>(本地库/ezPLM 高于 AI 检索)、
+          <b>结论可信</b>(取三者的短板,几何平均)。
+          <b>未知参数不按 0 分计入</b>,而是扣「证据覆盖」—— 未知不等于不满足。
+          Pin-to-Pin 模式下,引脚映射未经人工核对<b>永远不判「可直接替换」</b>。
           ⚠ 结果只是候选,<b>是否可替代必须由工程按参数、封装、合规逐项人工确认</b>,
           系统不会自动替换任何料。
         </span>
       </Banner>
 
-      <Card title="查询" sub="支持任意型号,不要求它已存在于本系统">
-        <AlternateFinder initialMpn={mpn ?? ""} />
-      </Card>
+      <AlternateFinder initialMpn={mpn ?? ""} />
     </div>
   );
 }

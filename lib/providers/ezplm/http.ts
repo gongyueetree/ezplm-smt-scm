@@ -261,6 +261,18 @@ export class HttpEzplmProvider implements EzplmPartsProvider {
     return body.data.map((p) => this.toCanonical(p, fetchedAt));
   }
 
+  async searchPartsWithParameters(
+    input: SearchPartsInput,
+  ): Promise<{ part: CanonicalPart; parameters: PartParameter[] }[]> {
+    const { keyword, limit } = SearchPartsInputSchema.parse(input);
+    // 一次调用拿回全部信息:attributes 就在检索结果里,不需要再逐个查
+    const raw = await this.searchRaw(keyword, limit);
+    return raw.parts.map((p) => ({
+      part: this.toCanonical(p, raw.fetchedAt),
+      parameters: this.toParameters(p),
+    }));
+  }
+
   async getPartByMpn(input: GetPartByMpnInput): Promise<CanonicalPart | null> {
     const raw = await this.searchRaw(input.mpn, 20);
     const hit = raw.parts.find((p) => normalizeMpn(p.mpn) === normalizeMpn(input.mpn));

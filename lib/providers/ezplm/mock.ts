@@ -282,6 +282,13 @@ export class MockEzplmProvider implements EzplmPartsProvider {
     });
   }
 
+  async searchPartsWithParameters(
+    input: SearchPartsInput,
+  ): Promise<{ part: CanonicalPart; parameters: PartParameter[] }[]> {
+    const parts = await this.searchParts(input);
+    return parts.map((part) => ({ part, parameters: MOCK_PARAMETERS[part.id] ?? [] }));
+  }
+
   async getParameters(partId: string): Promise<PartParameter[]> {
     return MOCK_PARAMETERS[partId] ?? [];
   }
