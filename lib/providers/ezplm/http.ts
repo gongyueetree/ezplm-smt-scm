@@ -203,6 +203,7 @@ export class HttpEzplmProvider implements EzplmPartsProvider {
       manufacturer: p.manufacturer?.name ?? null,
       description: p.description ?? null,
       footprint: p.footprint?.name ?? null,
+      category: p.category?.name ?? null,
       lifecycle: "UNKNOWN",
       rohs: null,
       reach: null,

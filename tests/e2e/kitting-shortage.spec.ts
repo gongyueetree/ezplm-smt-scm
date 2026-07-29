@@ -102,7 +102,9 @@ test("物料查询:可按关键字检索并显示数据更新时间", async ({ p
   // EOL 料被标红(demo 数据含 MAX232CPE)
   await page.getByLabel(/关键字/).fill("MAX232");
   await page.getByRole("button", { name: "查询" }).click();
-  // 查询是整页导航,先等新结果集落地再断言,否则并发跑满时会断言到上一轮的表格
-  await expect(table).toContainText("MAX232CPE", { timeout: 15_000 });
+  // 查询是整页导航:先等 URL 真的变了,再等新结果集落地。
+  // 只等内容的话,并发跑满时会在旧表格上超时,看起来像功能坏了。
+  await page.waitForURL(/[?&]q=MAX232/, { timeout: 30_000 });
+  await expect(table).toContainText("MAX232CPE", { timeout: 30_000 });
   await expect(table.locator(".badge", { hasText: "EOL" })).toBeVisible({ timeout: 15_000 });
 });

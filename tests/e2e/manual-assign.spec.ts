@@ -65,25 +65,71 @@ test("替代料查询:两段式流程,四维评分,Pin-to-Pin 未验证引脚必
   // 优先级可调整(顺序即权重)
   await expect(page.getByRole("button", { name: /^下移/ }).first()).toBeVisible();
 
+  // 分类徽标(来自 ezPLM 的 category)
+  await expect(page.getByText(/微控制器|MCU/).first()).toBeVisible();
+
+  // 参数优先级可拖拽(拖拽手柄存在),↑↓ 作为键盘可达的等价操作
+  await expect(page.getByRole("button", { name: /^上移/ }).first()).toBeVisible();
+
   // ② 选 Pin-to-Pin 模式后分析
   await page.getByRole("button", { name: "Pin-to-Pin", exact: true }).click();
   await page.getByRole("button", { name: "开始替代分析" }).click();
 
-  // 要么出候选,要么如实说没有 —— 不得静默无反应
+  /*
+   * 只在**结果区**里找 —— 页面说明与左栏也含"结论可信""市场行情"这些词,
+   * 用全页定位会在结果还没回来时就误判成功。
+   */
+  const panel = page.getByTestId("alt-results");
   await expect
     .poll(
       async () =>
-        (await page.getByText("结论可信").count()) +
-        (await page.getByText(/未找到够格的替代候选/).count()),
+        (await panel.getByText("结论可信").count()) +
+        (await panel.getByText(/未找到够格的替代候选/).count()),
       { timeout: 180_000 },
     )
     .toBeGreaterThan(0);
 
   // 有候选时:四个维度都要在,且 Pin-to-Pin 必须给引脚未验证的警示
-  if ((await page.getByText("结论可信").count()) > 0) {
+  if ((await panel.getByText("结论可信").count()) > 0) {
     for (const label of ["技术兼容", "证据覆盖", "来源可信", "结论可信"]) {
-      await expect(page.getByText(label).first()).toBeVisible();
+      await expect(panel.getByText(label).first()).toBeVisible();
     }
-    await expect(page.getByText(/引脚映射尚未验证/).first()).toBeVisible();
+    await expect(panel.getByText(/引脚映射尚未验证/).first()).toBeVisible();
+  }
+});
+
+test("市场行情:显示阶梯价与供货,并明示非实时且不做汇率换算", async ({ page }) => {
+  test.setTimeout(300_000);
+  await login(page, "engineering@demo.ezplm.cn");
+  await page.goto("/materials/alternates");
+
+  await page.getByLabel("待查型号").fill("STM32F103C8T6");
+  await page.getByRole("button", { name: "读取规格与参数" }).click();
+  await expect(page.getByText("参数优先级与范围")).toBeVisible({ timeout: 120_000 });
+
+  // 行情开关默认开启,并写明它会消耗配额
+  const toggle = page.getByRole("checkbox", { name: /查询市场行情/ });
+  await expect(toggle).toBeChecked();
+  await expect(page.getByText(/会消耗配额/)).toBeVisible();
+
+  // 询价数量决定供货档位基准
+  await page.getByLabel(/询价数量/).fill("100");
+  await page.getByRole("button", { name: "开始替代分析" }).click();
+
+  const panel = page.getByTestId("alt-results");
+  await expect
+    .poll(
+      async () =>
+        (await panel.getByText("市场行情").count()) +
+        (await panel.getByText(/未找到够格的替代候选/).count()),
+      { timeout: 240_000 },
+    )
+    .toBeGreaterThan(0);
+
+  if ((await panel.getByText("市场行情").count()) > 0) {
+    // 诚实 UI:非实时、目录价、不含税费
+    await expect(panel.getByText(/非实时行情/).first()).toBeVisible();
+    await expect(panel.getByText(/不含关税/).first()).toBeVisible();
+    await expect(panel.getByText(/供货:/).first()).toBeVisible();
   }
 });

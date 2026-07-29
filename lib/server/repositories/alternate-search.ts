@@ -18,10 +18,13 @@ import {
   type ScoredAlternate,
   type SubstitutionMode,
 } from "@/lib/domain/alternate-score";
+import { summarizeMarket, type MarketSummary } from "@/lib/domain/market-summary";
 import { matchParamName } from "@/lib/domain/param-compare";
+import type { NormalizedOffer } from "@/lib/providers/common/normalized-offer";
 import { normalizeMpn } from "@/lib/providers/common/mpn";
 import { rankBySimilarity } from "@/lib/domain/similarity";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
+import { getMouserProvider } from "@/lib/providers/mouser";
 import { ezplmProviderMode, getEzplmPartsProvider } from "@/lib/providers/ezplm";
 import { prisma } from "@/lib/server/db";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
@@ -35,6 +38,13 @@ export interface AlternateSearchInput {
   constraints?: ParamConstraint[];
   preferredManufacturers?: string[];
   limit?: number;
+  /**
+   * 是否为**最终入选的** Top N 查询市场行情。
+   * 只查入选的几条 —— 给每个候选都打一次分销商接口会瞬间烧完日配额。
+   */
+  includeMarket?: boolean;
+  /** 询价数量,决定供货档位的判断基准(库存 5000 对样品充足,对量产紧张) */
+  demandQty?: number;
 }
 
 export interface AlternateSearchResult {
@@ -48,7 +58,7 @@ export interface AlternateSearchResult {
   constraints: ParamConstraint[];
   mode: SubstitutionMode;
   modeLabel: { title: string; desc: string };
-  results: ScoredAlternate[];
+  results: (ScoredAlternate & { market: MarketSummary | null })[];
   candidateCount: number;
   degraded: { provider: string; kind: string; message: string }[];
 }
@@ -81,6 +91,7 @@ export async function searchAlternates(
   const degraded: AlternateSearchResult["degraded"] = [];
   const detail = await getPartDetail(input.tenantId, input.mpn);
   degraded.push(...detail.degraded);
+  const subjectCategory = detail.part?.category ?? null;
 
   const subjectFootprint = (detail.fields.footprint.value as string | null) ?? null;
   const constraints =
@@ -229,19 +240,49 @@ export async function searchAlternates(
       preferredManufacturers: input.preferredManufacturers,
     }),
   );
+  const ranked = rankScored(scored, specs, { mode: input.mode, limit: input.limit ?? 5 });
+
+  /*
+   * 市场行情:**只查最终入选的这几条**。
+   * 候选池有十几条,给每条都打一次 DigiKey+Mouser 就是二三十次调用,
+   * 几次分析下来配额就没了。走既有的 15 分钟缓存,页面显示数据更新时间。
+   */
+  const withMarket: (ScoredAlternate & { market: MarketSummary | null })[] = [];
+  for (const r of ranked) {
+    if (!input.includeMarket) {
+      withMarket.push({ ...r, market: null });
+      continue;
+    }
+    const offers: NormalizedOffer[] = [];
+    for (const provider of [getDigiKeyProvider(), getMouserProvider()]) {
+      try {
+        offers.push(...(await provider.getOffersByMpn({ mpn: r.mpn })));
+      } catch (e) {
+        degraded.push({
+          provider: provider.name,
+          kind: "unknown",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    withMarket.push({
+      ...r,
+      market: offers.length > 0 ? summarizeMarket(offers, { demandQty: input.demandQty }) : null,
+    });
+  }
 
   return {
     subject: {
       mpn: input.mpn,
       manufacturer: (detail.fields.manufacturer.value as string | null) ?? null,
       description: (detail.fields.description.value as string | null) ?? null,
-      category: null,
+      category: subjectCategory,
       localHit,
     },
     constraints,
     mode: input.mode,
     modeLabel: MODE_LABELS[input.mode],
-    results: rankScored(scored, specs, { mode: input.mode, limit: input.limit ?? 5 }),
+    results: withMarket,
     candidateCount: specs.length,
     degraded,
   };

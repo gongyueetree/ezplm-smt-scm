@@ -30,6 +30,10 @@ const BodySchema = z.object({
     .optional(),
   preferredManufacturers: z.array(z.string()).optional(),
   limit: z.number().int().min(1).max(20).optional(),
+  /** 是否查询市场行情(只对最终入选的 Top N 查,消耗分销商配额) */
+  includeMarket: z.boolean().default(false),
+  /** 询价数量:决定供货档位的判断基准 */
+  demandQty: z.number().int().min(1).max(10_000_000).optional(),
 });
 
 /**
@@ -53,6 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ mpn: st
       manufacturer: (detail.fields.manufacturer.value as string | null) ?? null,
       description: (detail.fields.description.value as string | null) ?? null,
       lifecycle: (detail.fields.lifecycle.value as string | null) ?? null,
+      category: detail.part?.category ?? null,
       footprint,
     },
     constraints: buildConstraintsFromParams(detail.parameters, footprint),
@@ -77,6 +82,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ mpn: st
     constraints: parsed.data.constraints,
     preferredManufacturers: parsed.data.preferredManufacturers,
     limit: parsed.data.limit,
+    includeMarket: parsed.data.includeMarket,
+    demandQty: parsed.data.demandQty,
   });
   return NextResponse.json(result);
 }

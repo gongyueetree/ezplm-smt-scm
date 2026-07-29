@@ -34,6 +34,16 @@ interface Scored {
   warnings: string[];
   modeTag: string;
   preferredVendor: boolean;
+  market: MarketSummary | null;
+}
+
+interface MarketSummary {
+  tiers: { qty: number; unitPrice: string; currency: string; provider: string }[];
+  availability: "充足" | "一般" | "紧张" | "无现货" | "未知";
+  totalStock: number | null;
+  channels: string[];
+  dataUpdatedAt: string | null;
+  mixedCurrency: boolean;
 }
 
 interface Subject {
@@ -43,6 +53,7 @@ interface Subject {
   lifecycle?: string | null;
   footprint?: string | null;
   localHit?: boolean;
+  category?: string | null;
 }
 
 const MODES: SubstitutionMode[] = [
@@ -118,6 +129,9 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
   const [results, setResults] = useState<Scored[] | null>(null);
   const [degraded, setDegraded] = useState<{ provider: string; kind: string }[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [includeMarket, setIncludeMarket] = useState(true);
+  const [demandQty, setDemandQty] = useState(100);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   async function loadSpec() {
     const q = mpn.trim();
@@ -149,7 +163,13 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
       const res = await fetch(`/api/materials/${encodeURIComponent(q)}/alternates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, constraints, preferredManufacturers: vendors }),
+        body: JSON.stringify({
+          mode,
+          constraints,
+          preferredManufacturers: vendors,
+          includeMarket,
+          demandQty,
+        }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
@@ -165,6 +185,17 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** 拖拽重排;↑↓ 按钮保留为键盘可达的等价操作 */
+  function reorder(from: number, to: number) {
+    setConstraints((prev) => {
+      if (from === to || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
 
   function move(index: number, delta: number) {
@@ -211,6 +242,11 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
 
           {subject ? (
             <div style={{ marginTop: 12 }}>
+              {subject.category ? (
+                <div style={{ marginBottom: 4 }}>
+                  <Badge tone="green">{subject.category}</Badge>
+                </div>
+              ) : null}
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <b className="mono">{subject.mpn}</b>
                 {subject.localHit ? <Badge tone="amber">本地库命中</Badge> : null}
@@ -262,19 +298,32 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
           <div className="card" style={{ padding: 14 }}>
             <b className="small">参数优先级与范围</b>
             <p className="small muted" style={{ margin: "4px 0 8px" }}>
-              顺序即权重,越靠前越重要;用 ↑↓ 调整
+              顺序即权重,越靠前越重要;<b>可直接拖拽</b>,或用 ↑↓ 调整
             </p>
             {constraints.map((c, i) => (
               <div
                 key={c.key}
+                draggable
+                onDragStart={() => setDragIndex(i)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (dragIndex !== null) reorder(dragIndex, i);
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
                 style={{
                   display: "flex",
                   gap: 6,
                   alignItems: "center",
                   padding: "5px 0",
                   borderBottom: "1px solid var(--gray-100)",
+                  cursor: "grab",
+                  opacity: dragIndex === i ? 0.45 : 1,
                 }}
               >
+                <span className="muted" aria-hidden="true">
+                  ⠿
+                </span>
                 <Badge tone="green">{i + 1}</Badge>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="small" style={{ fontWeight: 600 }}>
@@ -312,6 +361,28 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
           <p className="small muted" style={{ marginTop: 6 }}>
             {MODE_LABELS[mode].desc}
           </p>
+
+          <div className="divider" style={{ margin: "10px 0" }} />
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={includeMarket}
+              onChange={(e) => setIncludeMarket(e.target.checked)}
+            />
+            <span className="small">查询市场行情</span>
+          </label>
+          <p className="small muted" style={{ margin: "4px 0 8px" }}>
+            只对<b>最终入选的 Top 5</b> 调 DigiKey / Mouser(会消耗配额,结果按 15 分钟缓存)
+          </p>
+          <label className="fld" style={{ marginBottom: 0 }}>
+            <span>询价数量(决定供货档位基准)</span>
+            <input
+              type="number"
+              min={1}
+              value={demandQty}
+              onChange={(e) => setDemandQty(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </label>
         </div>
 
         <button className="btn primary" onClick={() => void run()} disabled={busy || !mpn.trim()}>
@@ -320,7 +391,7 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
       </div>
 
       {/* 右栏:结果 */}
-      <div style={{ flex: "1 1 520px", minWidth: 340 }}>
+      <div data-testid="alt-results" style={{ flex: "1 1 520px", minWidth: 340 }}>
         {error ? <div className="banner warn">{error}</div> : null}
         {degraded.length > 0 ? (
           <div className="banner warn">
@@ -372,6 +443,60 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
                 <Metric value={r.sourceTrust} label="来源可信" />
                 <Metric value={r.confidence} label="结论可信" />
               </div>
+
+              {r.market ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "8px 10px",
+                    border: "1px solid var(--gray-200)",
+                    borderRadius: 8,
+                    background: "var(--gray-50)",
+                  }}
+                >
+                  <div className="small" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <b>市场行情</b>
+                    {r.market.tiers.map((t) => (
+                      <span key={t.qty}>
+                        {t.qty}片 = {t.currency} {t.unitPrice}
+                        <span className="muted"> ({t.provider})</span>
+                      </span>
+                    ))}
+                    <span>
+                      供货:
+                      <Badge
+                        tone={
+                          r.market.availability === "充足"
+                            ? "green"
+                            : r.market.availability === "一般"
+                              ? "blue"
+                              : r.market.availability === "未知"
+                                ? "gray"
+                                : "amber"
+                        }
+                      >
+                        {r.market.availability}
+                      </Badge>
+                    </span>
+                    {r.market.totalStock !== null ? (
+                      <span className="muted">合计库存 {r.market.totalStock}</span>
+                    ) : (
+                      <span className="muted">库存未知</span>
+                    )}
+                  </div>
+                  <div className="small muted" style={{ marginTop: 4 }}>
+                    {r.market.channels.length > 0
+                      ? `渠道:${r.market.channels.join("、")}`
+                      : "暂无有货渠道"}
+                    {r.market.dataUpdatedAt
+                      ? ` · 数据更新 ${r.market.dataUpdatedAt.slice(0, 10)}`
+                      : " · 数据时间未知"}
+                    {" · "}
+                    <b>非实时行情</b>,分销商目录价,通常不含关税/运费/税费
+                    {r.market.mixedCurrency ? " · ⚠ 含多种币种,系统不做汇率换算,不可直接比较" : ""}
+                  </div>
+                </div>
+              ) : null}
 
               {r.warnings.map((w, k) => (
                 <div className="banner warn" key={k} style={{ marginTop: 8 }}>

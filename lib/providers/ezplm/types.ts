@@ -15,6 +15,8 @@ export const CanonicalPartSchema = z.object({
   manufacturer: z.string().nullable(),
   description: z.string().nullable(),
   footprint: z.string().nullable(),
+  /** 器件分类(ezPLM 提供;用于 UI 徽标与后续按品类定参数硬约束) */
+  category: z.string().nullable().default(null),
   lifecycle: LifecycleSchema,
   rohs: z.boolean().nullable(),
   reach: z.boolean().nullable(),

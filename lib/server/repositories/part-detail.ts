@@ -454,6 +454,7 @@ export async function getPartDetail(tenantId: string, mpn: string): Promise<Part
       manufacturer: local.manufacturer,
       description: local.description,
       footprint: local.footprint,
+      category: null, // 本地 Part 表没有分类字段;不猜
       lifecycle: local.lifecycle,
       rohs: local.rohs,
       reach: local.reach,
