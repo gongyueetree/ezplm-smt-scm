@@ -86,9 +86,11 @@ RUN mkdir -p /app/.storage && chown -R nextjs:nodejs /app/.storage
 USER nextjs
 EXPOSE 3000
 
-# 健康检查:登录页为静态页,不依赖数据库
+# 健康检查:登录页为静态页,不依赖数据库。
+# 端口必须读 process.env.PORT —— 平台会在运行时注入自己的端口(Railway 实测 8080),
+# 写死 3000 会让健康检查永远失败,而应用其实是好的。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000'+(process.env.NEXT_PUBLIC_BASE_PATH||'')+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+(process.env.NEXT_PUBLIC_BASE_PATH||'')+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["./entrypoint.sh"]
 CMD ["node", "server.js"]

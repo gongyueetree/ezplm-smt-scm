@@ -37,6 +37,12 @@ describe("Dockerfile:PaaS 兼容性", () => {
     expect(pathEnv.join("\n")).toContain("/app/node_modules/.bin");
   });
 
+  it("**健康检查端口必须读 process.env.PORT** —— 平台运行时会注入自己的端口(Railway 实测 8080),写死 3000 会让健康检查永远失败", () => {
+    const hc = DOCKERFILE.slice(DOCKERFILE.indexOf("HEALTHCHECK"));
+    expect(hc).toContain("process.env.PORT");
+    expect(hc).not.toMatch(/127\.0\.0\.1:3000/);
+  });
+
   it("构建期不连数据库:只 prisma generate,migrate 留给启动脚本", () => {
     expect(DOCKERFILE).toMatch(/prisma generate/);
     expect(DOCKERFILE).not.toMatch(/RUN\s+.*migrate\s+deploy/);
