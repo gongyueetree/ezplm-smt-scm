@@ -9,6 +9,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { SaveCompareRun } from "./save-run";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,66 @@ export default async function BomComparePage({
     take: 50,
   });
 
+  const runs = await prisma.bomCompareRun.findMany({
+    where: tenantWhere(session.tenantId),
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+
+  const Ledger = () => (
+    <Card
+      title="历史比对台账"
+      sub={`${runs.length} 条 · 点「重新打开」直接回到同一对版本,不用再选`}
+      flush
+    >
+      <div className="tbl-scroll">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>比对</th>
+              <th className="num">新增</th>
+              <th className="num">删除</th>
+              <th className="num">数量变更</th>
+              <th className="num">料号变更</th>
+              <th>比对时间</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {runs.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="muted small" style={{ textAlign: "center", padding: 20 }}>
+                  台账为空 —— 选定两个版本比对后,点上方的保存按钮即可留存快照
+                </td>
+              </tr>
+            ) : (
+              runs.map((r) => (
+                <tr key={r.id}>
+                  <td className="small">{r.label}</td>
+                  <td className="num">{r.addedCount}</td>
+                  <td className="num">{r.removedCount}</td>
+                  <td className="num">{r.qtyChangedCount}</td>
+                  <td className="num">{r.partChangedCount}</td>
+                  <td className="small muted">
+                    {r.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                  </td>
+                  <td>
+                    <Link
+                      className="btn xs"
+                      href={`/bom/compare?from=${r.fromVersionId}&to=${r.toVersionId}`}
+                    >
+                      重新打开
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+
   if (!from || !to) {
     return (
       <div>
@@ -63,6 +124,7 @@ export default async function BomComparePage({
           从 <Link href="/bom">BOM 台账</Link> 选择同一 BOM 的两个版本进入比对,或用
           <span className="mono"> ?from=版本ID&to=版本ID </span>访问本页。
         </Banner>
+        <Ledger />
         <Card title="可选版本" sub={`${versions.length} 个`} flush>
           <div className="tbl-scroll">
             <table className="tbl">
@@ -99,6 +161,9 @@ export default async function BomComparePage({
   return (
     <div>
       <PageHeader path="/bom/compare" />
+      <Card title="本次比对" sub="比对结果可存入台账留档">
+        <SaveCompareRun from={from} to={to} />
+      </Card>
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label">新增</div>
@@ -174,6 +239,8 @@ export default async function BomComparePage({
           </table>
         </div>
       </Card>
+
+      <Ledger />
     </div>
   );
 }

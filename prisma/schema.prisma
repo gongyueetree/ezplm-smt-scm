@@ -536,6 +536,10 @@ model Part {
   description  String?
   footprint    String?
   lifecycle    Lifecycle @default(UNKNOWN)
+  /// 物料分类两级(客户 docx:仅一级大类不够,IC 要能细分到 MCU/USB/电源 IC)。
+  /// **本地人工维护**:ezPLM 的 category 只作建议来源,映射不确定时留空,不猜。
+  categoryL1   String?
+  categoryL2   String?
   /// DC/MSL/包装字段(整合方案 3.2,客户需求)
   dateCode     String?
   msl          String?
@@ -552,9 +556,66 @@ model Part {
   alternates  PartAlternate[]  @relation("PartToAlternates")
   alternateOf PartAlternate[]  @relation("AlternateToParts")
 
+  tagLinks PartTagLink[]
+
   @@unique([tenantId, internalPn])
   @@index([tenantId, mpn])
   @@index([tenantId, manufacturer, mpn])
+  @@index([tenantId, categoryL1, categoryL2])
+}
+
+/// 自定义物料分类标签(客户 docx:要能自定义「国产替代物料」「关键 A 类客户物料」这类分组)。
+/// 标签是**租户自己维护的目录**,不是从外部同步来的,故可增删改。
+model PartTag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  /// 展示色(CSS 变量名或色值);留空用默认
+  color     String?
+  note      String?
+  createdById String
+  createdAt DateTime @default(now())
+
+  links PartTagLink[]
+
+  @@unique([tenantId, name])
+}
+
+model PartTagLink {
+  id       String  @id @default(cuid())
+  tenantId String
+  partId   String
+  part     Part    @relation(fields: [partId], references: [id], onDelete: Cascade)
+  tagId    String
+  tag      PartTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdById String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, partId, tagId])
+  @@index([tenantId, tagId])
+}
+
+/// BOM 版本比对台账(客户 docx:「增加历史比对记录台账,每次比对需要重新选择版本,历史快照留存」)。
+/// 存的是**当时的比对快照**:两个版本之后再改也不影响已存的记录。
+model BomCompareRun {
+  id           String   @id @default(cuid())
+  tenantId     String
+  fromVersionId String
+  toVersionId   String
+  /// 便于台账直接显示,不必回查
+  label        String
+  addedCount     Int
+  removedCount   Int
+  qtyChangedCount Int
+  partChangedCount Int
+  unchangedCount  Int
+  /// 差异明细快照
+  snapshot     Json
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, fromVersionId, toVersionId])
 }
 
 /// 物料标识(内部料号/MPN/客户料号等多标识索引)

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/shell/back-link";
+import { VersionActions } from "./version-actions";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
@@ -83,6 +84,10 @@ export default async function BomVersionPage({
             {decided === lines.length ? "全部已确认" : "待人工确认"}
           </Badge>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <VersionActions versionId={detail.version.id} allConfirmed={decided === lines.length} />
       </div>
 
       <Banner tone="ai">

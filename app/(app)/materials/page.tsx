@@ -9,6 +9,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { CATEGORY_L1 } from "@/lib/domain/part-category";
 
 export const dynamic = "force-dynamic";
 
@@ -48,11 +49,18 @@ const SOURCES = [
 export default async function MaterialsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; l1?: string; l2?: string; tag?: string }>;
 }) {
-  const { q } = await searchParams;
+  const { q, l1, l2, tag } = await searchParams;
   const session = (await getSession())!;
   const keyword = (q ?? "").trim();
+
+  // 分类与标签可与关键字**组合**筛选(客户 docx 抱怨过筛选区块彼此独立、无法联动)
+  const categoryWhere = {
+    ...(l1 ? { categoryL1: l1 } : {}),
+    ...(l2 ? { categoryL2: l2 } : {}),
+    ...(tag ? { tagLinks: { some: { tagId: tag } } } : {}),
+  };
 
   const parts = await prisma.part.findMany({
     where: tenantWhere(
@@ -65,8 +73,9 @@ export default async function MaterialsPage({
               { manufacturer: { contains: keyword, mode: "insensitive" as const } },
               { description: { contains: keyword, mode: "insensitive" as const } },
             ],
+            ...categoryWhere,
           }
-        : {},
+        : categoryWhere,
     ),
     orderBy: { internalPn: "asc" },
     take: 100,
@@ -81,6 +90,36 @@ export default async function MaterialsPage({
   const latestByPart = new Map<string, (typeof snapshots)[number]>();
   for (const s of snapshots) if (!latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
 
+  const [tags, l2Options, tagLinks] = await Promise.all([
+    prisma.partTag.findMany({
+      where: tenantWhere(session.tenantId),
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    // 二级细分是开放集合 —— 选项由库里已有的值派生,不硬编码一份清单
+    prisma.part.findMany({
+      where: tenantWhere(session.tenantId, {
+        categoryL2: { not: null },
+        ...(l1 ? { categoryL1: l1 } : {}),
+      }),
+      select: { categoryL2: true },
+      distinct: ["categoryL2"],
+      orderBy: { categoryL2: "asc" },
+    }),
+    parts.length
+      ? prisma.partTagLink.findMany({
+          where: tenantWhere(session.tenantId, { partId: { in: parts.map((p) => p.id) } }),
+          select: { partId: true, tag: { select: { id: true, name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const tagsByPart = new Map<string, { id: string; name: string }[]>();
+  for (const link of tagLinks) {
+    const arr = tagsByPart.get(link.partId) ?? [];
+    arr.push(link.tag);
+    tagsByPart.set(link.partId, arr);
+  }
+
   const rows = SOURCES.map((s) => ({ ...s, mode: s.mode() }));
   const anyHttp = rows.some((r) => r.mode === "http");
 
@@ -94,10 +133,48 @@ export default async function MaterialsPage({
             <span>关键字(MPN / 内部料号 / 制造商 / 描述)</span>
             <input name="q" defaultValue={keyword} placeholder="如 STM32 / 0603 / Murata" />
           </label>
+          <label className="fld" style={{ marginBottom: 0 }}>
+            <span>一级大类</span>
+            <select name="l1" defaultValue={l1 ?? ""}>
+              <option value="">全部</option>
+              {CATEGORY_L1.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="fld" style={{ marginBottom: 0 }}>
+            <span>二级细分</span>
+            <select name="l2" defaultValue={l2 ?? ""}>
+              <option value="">全部</option>
+              {l2Options.map((o) => (
+                <option key={o.categoryL2!} value={o.categoryL2!}>
+                  {o.categoryL2}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="fld" style={{ marginBottom: 0 }}>
+            <span>自定义标签</span>
+            <select name="tag" defaultValue={tag ?? ""}>
+              <option value="">全部</option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn primary" type="submit">
             查询
           </button>
         </form>
+        <p className="small muted" style={{ marginTop: 8 }}>
+          关键字、一级大类、二级细分、自定义标签<b>可组合</b>筛选。
+          分类为<b>本地人工维护</b>:ezPLM 的分类串只作建议来源,映射不确定时留空 ——
+          猜错的分类会一路带偏分组统计与替代料筛选。
+        </p>
       </Card>
 
       <Card title="查询结果" sub={`${parts.length} 条${parts.length >= 100 ? "(已截断至 100 条)" : ""}`} flush>
@@ -110,6 +187,7 @@ export default async function MaterialsPage({
                 <th>制造商</th>
                 <th>描述</th>
                 <th>封装</th>
+                <th>分类 / 标签</th>
                 <th>生命周期</th>
                 <th>DC</th>
                 <th className="num">库存</th>
@@ -120,7 +198,7 @@ export default async function MaterialsPage({
             <tbody>
               {parts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={11} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     {keyword ? "无匹配物料" : "暂无物料缓存"}
                   </td>
                 </tr>
@@ -136,6 +214,21 @@ export default async function MaterialsPage({
                       <td className="small">{p.manufacturer ?? "-"}</td>
                       <td className="small">{p.description ?? "-"}</td>
                       <td className="small">{p.footprint ?? "-"}</td>
+                      <td className="small">
+                        {p.categoryL1 ? (
+                          <div>
+                            {p.categoryL1}
+                            {p.categoryL2 ? <span className="muted"> / {p.categoryL2}</span> : null}
+                          </div>
+                        ) : (
+                          <div className="muted">未分类</div>
+                        )}
+                        {(tagsByPart.get(p.id) ?? []).map((t) => (
+                          <Badge key={t.id} tone="purple">
+                            {t.name}
+                          </Badge>
+                        ))}
+                      </td>
                       <td>
                         <Badge
                           tone={
