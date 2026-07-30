@@ -121,8 +121,20 @@ export default async function BomComparePage({
       <div>
         <PageHeader path="/bom/compare" />
         <Banner tone="soft">
-          从 <Link href="/bom">BOM 台账</Link> 选择同一 BOM 的两个版本进入比对,或用
-          <span className="mono"> ?from=版本ID&to=版本ID </span>访问本页。
+          {to ? (
+            <span>
+              已把刚导入的版本选为<b>变更后</b>,请在下表挑一个<b>变更前</b>版本。
+            </span>
+          ) : from ? (
+            <span>
+              已选定<b>变更前</b>版本,请在下表挑一个<b>变更后</b>版本。
+            </span>
+          ) : (
+            <span>
+              选择两个版本进入比对(可跨 BOM);也可从 <Link href="/bom">BOM 台账</Link> 或
+              导入完成页直接进入。
+            </span>
+          )}
         </Banner>
         <Ledger />
         <Card title="可选版本" sub={`${versions.length} 个`} flush>
@@ -133,6 +145,7 @@ export default async function BomComparePage({
                   <th>BOM</th>
                   <th className="num">版本</th>
                   <th>版本 ID</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,6 +154,19 @@ export default async function BomComparePage({
                     <td>{v.bom.name}</td>
                     <td className="num">V{v.versionNo}</td>
                     <td className="mono small">{v.id}</td>
+                    <td>
+                      {to && v.id !== to ? (
+                        <Link className="btn xs" href={`/bom/compare?from=${v.id}&to=${to}`}>
+                          选为变更前
+                        </Link>
+                      ) : from && v.id !== from ? (
+                        <Link className="btn xs" href={`/bom/compare?from=${from}&to=${v.id}`}>
+                          选为变更后
+                        </Link>
+                      ) : (
+                        <span className="muted small">已选定</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -503,6 +503,9 @@ model BOMImportJob {
   idempotencyKey String
   /// 原始上传文件键列表(多文件批量)
   fileKeys       Json?
+  /// 上传时的**原始文件名**列表。存储键带 UUID,看不出用户传的是哪个文件,
+  /// 而客户要的正是"追溯过往上传 BOM 文件",故单独留存。
+  fileNames      Json?
   totalLines     Int       @default(0)
   processedLines Int       @default(0)
   batchSize      Int       @default(20)

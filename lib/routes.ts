@@ -106,6 +106,15 @@ export const NAV_SECTIONS: NavSection[] = [
             desc: "CSV/XLSX/图片/PDF 多文件导入、列映射、校验、智能匹配(人工确认)。大 BOM 走 ImportJob 分批。",
           },
           {
+            path: "/bom/imports",
+            label: "导入历史",
+            icon: "clock",
+            plannedPr: "PR5",
+            desc: "BOM 导入历史台账:原始文件、处理进度、结果与错误,可追溯并直达匹配确认/版本比对。",
+            implemented: true,
+            roles: ["PM", "ENGINEERING", "PROCUREMENT"],
+          },
+          {
             path: "/bom/compare",
             label: "版本比对",
             plannedPr: "PR5",

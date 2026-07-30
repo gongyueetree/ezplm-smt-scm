@@ -133,6 +133,7 @@ export async function POST(req: Request) {
     rfqId,
     bomName: sourceName || files[0].name,
     fileKeys,
+    fileNames: files.map((f) => f.name),
     lines,
     idempotencyKey,
     columnMapping: mapping,

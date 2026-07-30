@@ -23,6 +23,8 @@ export interface CreateImportJobInput {
   rfqId?: string | null;
   bomName: string;
   fileKeys: string[];
+  /** 原始文件名(用于导入历史台账追溯;存储键带 UUID 看不出传的是哪个文件) */
+  fileNames?: string[];
   lines: ParsedBomLine[];
   /** 幂等键:同一文件重复提交不产生第二个作业 */
   idempotencyKey: string;
@@ -152,6 +154,7 @@ export async function createImportJob(
         status: "PENDING",
         idempotencyKey: input.idempotencyKey,
         fileKeys: input.fileKeys as Prisma.InputJsonValue,
+        fileNames: (input.fileNames ?? []) as unknown as Prisma.InputJsonValue,
         totalLines: input.lines.length,
         processedLines: 0,
         columnMapping: (input.columnMapping ?? null) as Prisma.InputJsonValue,

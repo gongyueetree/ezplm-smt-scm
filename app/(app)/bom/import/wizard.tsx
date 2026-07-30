@@ -268,11 +268,23 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
             ) : null}
 
             {progress?.done ? (
-              <div style={{ marginTop: 14 }}>
+              <>
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Link className="btn primary" href={`/bom/version/${result.bomVersionId}`}>
                   进入匹配确认(需人工确认)
                 </Link>
+                <Link className="btn" href={`/bom/compare?to=${result.bomVersionId}`}>
+                  与其它版本比对
+                </Link>
+                <a className="btn" href={`/api/bom/version/${result.bomVersionId}/export`}>
+                  导出标准模板 BOM
+                </a>
               </div>
+              <p className="small muted" style={{ marginTop: 6 }}>
+                每次导入都会新建一个 BOM(版本从 V1 起),所以这里不预设「上一版本」——
+                点「与其它版本比对」后本次版本已选为<b>变更后</b>,再挑一个<b>变更前</b>版本即可。
+              </p>
+              </>
             ) : null}
           </Card>
         </>
