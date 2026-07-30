@@ -171,6 +171,25 @@ enum PurchaseRequestStatus {
   CLOSED
 }
 
+/// 采购订单状态(见 lib/domain/po-status.ts 的状态机)。
+/// 注意:**没有「已下单」** —— ERP 才是下单执行的真源,本系统只到
+/// APPROVED(已审批·待 ERP 录入)与 EXPORTED(已导出 ERP 可导入模板)。
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_PRICE_REVIEW
+  PENDING_APPROVAL
+  APPROVED
+  EXPORTED
+  REJECTED
+  CANCELLED
+}
+
+/// PO 审批环节:价格复核 与 终审 是两道不同的关
+enum PoApprovalStage {
+  PRICE_REVIEW
+  FINAL
+}
+
 /// OPO 供应商回复渠道
 enum ReplySource {
   EMAIL
@@ -969,6 +988,107 @@ model PurchaseRequest {
   @@unique([tenantId, code])
   @@index([tenantId, status])
   @@index([tenantId, mpn])
+}
+
+/// 采购订单(客户 xlsx「采购订单全流程创建、审批、跟踪」)。
+///
+/// 位置:PurchaseRequest(PM 申请)→ ProcurementRFQ(比价选型)→ **PurchaseOrder** → OPOLine(在途)。
+/// 数据主权:本系统是**采购订单流程**的唯一真源;ERP 是**下单执行**的真源。
+/// 因此本表不记"是否已在 ERP 下单成功",只记本系统产出的 ERP 模板导出事实,
+/// 并在审批通过后**一次性**生成 OPOLine 交给在途协同(禁止双写)。
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  tenantId      String
+  /// 单号(租户内唯一);与 OPOLine.poNo 对齐,便于在途协同回查
+  poNo          String
+  supplierId    String
+  /// 比价币种口径;行级币种与之不同即为异常(系统不做汇率换算)
+  currency      String              @default("CNY")
+  status        PurchaseOrderStatus @default(DRAFT)
+  /// 来源(可空:也允许采购直接建单)
+  procurementRfqId String?
+  purchaseRequestId String?
+  createdById   String
+  /// 退回原因(最近一次);历史留在 PurchaseOrderApproval
+  rejectReason  String?
+  /// 作废原因
+  cancelReason  String?
+  /// 被哪张单取代(已批准单要改只能作废后新建,规则 5)
+  supersededById String?
+  /// 提交复核时固化的复核快照(行项 + 判定依据),审批与导出只用快照
+  reviewSnapshot Json?
+  /// 终审通过时固化的快照
+  approvedSnapshot Json?
+  /// 已导出 ERP 模板的时间(**不代表 ERP 已接单**)
+  erpExportedAt DateTime?
+  /// 导出后登记的集成作业引用
+  erpIntegrationJobId String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  lines     PurchaseOrderLine[]
+  approvals PurchaseOrderApproval[]
+
+  @@unique([tenantId, poNo])
+  @@index([tenantId, status])
+  @@index([tenantId, supplierId])
+}
+
+/// 采购订单行。行级是唯一数据源 —— 台账 KPI、异常清单全部由本表派生,
+/// 不落任何冗余计数字段(与 OPO 同一条纪律)。
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  tenantId        String
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  lineNo          Int
+  partId          String?
+  mpn             String?
+  manufacturer    String?
+  description     String?
+  /// 采购数量(经 MOQ 下限 + SPQ 向上圆整)
+  qty             Decimal       @db.Decimal(18, 4)
+  unitPrice       Decimal?      @db.Decimal(18, 6)
+  /// 行币种;与单头 currency 不一致时判异常
+  currency        String        @default("CNY")
+  moq             Int?
+  spq             Int?
+  leadTimeDays    Int?
+  /// 需求日期(反推下单日的输入)
+  requestDate     DateTime?
+  /// 建议下单日 = 需求日 − 交期;交期未知时为空(不猜)
+  orderByDate     DateTime?
+  sourcingMode    SourcingMode  @default(FUTURES)
+  /// 复核时固化的**原始异常集合**(与比价页 wasFlagged 同一条纪律:
+  /// 此后不随阈值变化而增减)
+  wasFlagged      Boolean       @default(false)
+  flagReasons     Json?
+  /// 历史价对比快照(参照单据、变化率、判定);无可比时也要存,存的是"为何不可比"
+  historySnapshot Json?
+  /// 异常处理结论(默认空,逐项人工选)
+  resolution      String?
+  resolutionNote  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([tenantId, purchaseOrderId, lineNo])
+  @@index([tenantId, mpn])
+}
+
+/// PO 审批记录(价格复核 + 终审两道关,各自留痕)
+model PurchaseOrderApproval {
+  id              String           @id @default(cuid())
+  tenantId        String
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  stage           PoApprovalStage
+  approverId      String
+  decision        ApprovalDecision @default(PENDING)
+  comment         String?
+  decidedAt       DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([tenantId, purchaseOrderId])
 }
 
 // ============================================================

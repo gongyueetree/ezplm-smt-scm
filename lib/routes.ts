@@ -162,11 +162,11 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         path: "/procurement/orders",
-        implemented: false,
+        implemented: true,
         label: "采购订单",
         icon: "cart",
         plannedPr: "PR6/PR8",
-        desc: "采购订单台账与 ERP 导出模板(API 不可回写时的替代路径)。",
+        desc: "采购订单全流程:批量录入、历史价对比与异常预警、价格复核 + 终审两级审批、ERP 批量下单模板导出(API 不可回写时的替代路径)。",
         roles: ["PROCUREMENT"],
       },
       {
