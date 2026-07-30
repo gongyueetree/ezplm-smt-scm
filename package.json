@@ -22,7 +22,8 @@
     "predev": "node scripts/copy-occt.mjs",
     "prebuild": "node scripts/copy-occt.mjs && prisma generate",
     "smoke:ai": "tsx scripts/smoke-ai.ts",
-    "seed:parts": "tsx scripts/seed-parts-from-ezplm.ts"
+    "seed:parts": "tsx scripts/seed-parts-from-ezplm.ts",
+    "seed:remote": "sh scripts/seed-remote.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",

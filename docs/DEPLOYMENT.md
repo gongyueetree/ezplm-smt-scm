@@ -186,15 +186,23 @@ Railway 跑的是**长驻容器**(直接用仓库根目录的 `Dockerfile`),这�
 6. 灌种子(演示账号 + 示例物料):**从运维机器连库执行,不在容器内跑**。
 
    ```bash
-   read -rs "PGURL?粘贴 DATABASE_PUBLIC_URL 后回车:" && echo && read -rs "PW?设置演示口令后回车:" && echo && SEED_DEMO_PASSWORD="$PW" DATABASE_URL="$PGURL" pnpm exec prisma db seed; unset PGURL PW
+   pnpm seed:remote
    ```
 
-   - 连接串取 Postgres 服务的 **`DATABASE_PUBLIC_URL`**;`DATABASE_URL` 是
-     `postgres.railway.internal`,只能容器内访问。SSL 报错时 URL 末尾加 `?sslmode=require`;
-   - **公网部署务必设 `SEED_DEMO_PASSWORD`**,不要用缺省 `demo1234` —— 那是把门敞开;
-   - `prisma/seed.ts` 用 dotenv 且**不覆盖**已存在变量,故命令行传入的 `DATABASE_URL` 会生效,
+   脚本(`scripts/seed-remote.sh`)交互式索取连接串与演示口令,**输入不回显、不进 shell 历史**,
+   写库前先显示 `host:port/dbname` 让人确认。想先只校验不写库:`pnpm seed:remote --dry-run`。
+
+   - 连接串取 Postgres 服务的 **`DATABASE_PUBLIC_URL`**(主机名含 `proxy.rlwy.net`);
+     `DATABASE_URL` 是 `postgres.railway.internal`,只能容器内访问 —— 脚本会直接拒绝并提示;
+   - **公网部署必须设强口令**;脚本拒绝空口令与仓库里公开的缺省 `demo1234`;
+   - SSL 报错时 URL 末尾加 `?sslmode=require`;
+   - `prisma/seed.ts` 用 dotenv 且**不覆盖**已存在变量,故传入的 `DATABASE_URL` 会生效,
      不会误灌本地开发库;
-   - 表结构已由容器启动时的 `migrate deploy` 建好,这一步只灌数据。
+   - 表结构已由容器启动时的 `migrate deploy` 建好,这一步只灌数据;
+   - 护栏由 `tests/unit/seed-remote-guards.test.ts` 看守(全部走 `--dry-run`,不连库)。
+
+   > 不要手拼等效的一行命令 —— zsh 的 `read "VAR?prompt"` 语法配上嵌套引号极易把 URL 当成
+   > 变量名(实测报 `zsh: not an identifier: postgresql:...`)。
 
    **为什么不在容器里跑**(实测结论,2026-07-29):运行层是 standalone 产物,
    **不含应用源码**(没有 `lib/`、没有 `tsconfig.json`),而 `prisma/seed.ts` 依赖
