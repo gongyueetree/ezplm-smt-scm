@@ -247,6 +247,15 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["MANAGEMENT"],
         children: [
           {
+            path: "/settings/quote-templates",
+            label: "报价模板与客户分级",
+            icon: "quote",
+            plannedPr: "PR7",
+            desc: "A/B/C 客户分级与多套报价模板预设;系统不预设百分比,口径未确认时全程标注。",
+            implemented: true,
+            roles: ["MANAGEMENT", "PM"],
+          },
+          {
             path: "/settings/sync-log",
             label: "ERP 同步日志",
             icon: "clock",

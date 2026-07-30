@@ -27,6 +27,7 @@ import {
 } from "@/lib/domain/quote-status";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
+import { pickQuoteTemplate } from "@/lib/domain/quote-template";
 import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 import type { SessionRef } from "./rfq";
 
@@ -55,9 +56,40 @@ export interface CreateQuoteInput {
 
 /** 新建报价:Quote + Revision 1(DRAFT) */
 export async function createQuote(session: SessionRef, input: CreateQuoteInput) {
+  // 按客户等级挑报价模板(客户 xlsx:A/B/C 差异化报价规则)。
+  // 模板只提供**默认值**:选中的人工费率模板会带入,默认 Markup 由 UI 展示给人确认,
+  // 系统**不替人把 Markup 写进报价行** —— 金额一律由确定性函数按人工确认的参数算。
+  const customer = await prisma.customer.findFirst({
+    where: tenantWhere(session.tenantId, { id: input.customerId }),
+    select: { tier: true },
+  });
+  const templates = await prisma.quoteTemplate.findMany({
+    where: tenantWhere(session.tenantId),
+    select: {
+      id: true,
+      name: true,
+      tier: true,
+      defaultMarkupPct: true,
+      laborTemplateId: true,
+      confirmedByBusiness: true,
+    },
+  });
+  const pick = pickQuoteTemplate(
+    templates.map((t) => ({
+      id: t.id,
+      name: t.name,
+      tier: t.tier,
+      defaultMarkupPct: t.defaultMarkupPct?.toString() ?? null,
+      laborTemplateId: t.laborTemplateId,
+      confirmedByBusiness: t.confirmedByBusiness,
+    })),
+    customer?.tier ?? null,
+  );
+
   const template =
-    BUILTIN_LABOR_TEMPLATES.find((t) => t.id === input.laborTemplateId) ??
-    BUILTIN_LABOR_TEMPLATES[0];
+    BUILTIN_LABOR_TEMPLATES.find(
+      (t) => t.id === (input.laborTemplateId ?? pick.template?.laborTemplateId),
+    ) ?? BUILTIN_LABOR_TEMPLATES[0];
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {

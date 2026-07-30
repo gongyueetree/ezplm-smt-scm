@@ -313,11 +313,21 @@ model UserRole {
 }
 
 /// 客户(如示例数据中的联创科技)
+/// 客户等级(客户 xlsx:「A/B/C 类客户差异化报价规则配置」)。
+/// 三档;**具体 Markup 数值不写死在代码里**,由 QuoteTemplate 维护并标注口径是否已确认。
+enum CustomerTier {
+  A
+  B
+  C
+}
+
 model Customer {
   id        String   @id @default(cuid())
   tenantId  String
   code      String
   name      String
+  /// 客户等级;未评级时为空 —— **空不等于 C**,不猜
+  tier      CustomerTier?
   contact   String?
   email     String?
   phone     String?
@@ -1348,6 +1358,34 @@ model ScrapExportTemplate {
   updatedAt   DateTime @updatedAt
 
   @@unique([tenantId, name])
+}
+
+/// 报价模板(客户 xlsx:「A/B/C 类客户差异化报价规则配置,多套报价模板预设」)。
+///
+/// 纪律:
+/// - **默认 Markup 初始为空**,不预设任何百分比 —— 未经甲方确认的数字一旦写进代码,
+///   就会被当成"系统给的标准";
+/// - confirmedByBusiness=false 时 UI 必须标「口径待确认」;
+/// - 模板只提供**默认值**,报价行仍可人工覆盖,且金额一律由确定性函数计算。
+model QuoteTemplate {
+  id          String        @id @default(cuid())
+  tenantId    String
+  name        String
+  /// 适用客户等级;为空表示通用模板
+  tier        CustomerTier?
+  /// 默认 Markup(小数,如 0.15 = 15%);**初始为空,须人工维护**
+  defaultMarkupPct Decimal? @db.Decimal(10, 6)
+  /// 人工费率模板 id(对应 BUILTIN_LABOR_TEMPLATES)
+  laborTemplateId  String?
+  /// 口径是否经业务确认;false 时 UI 标注"待确认,非正式定价规则"
+  confirmedByBusiness Boolean @default(false)
+  note        String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, tier])
 }
 
 // ============================================================
