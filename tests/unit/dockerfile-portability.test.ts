@@ -31,6 +31,12 @@ describe("Dockerfile:PaaS 兼容性", () => {
     expect(instructions.some((l) => /^USER\s+nextjs$/i.test(l))).toBe(true);
   });
 
+  it("**运行层 PATH 必须含 /app/node_modules/.bin** —— prisma db seed 会 spawn `tsx`,否则容器内灌种子报 spawn tsx ENOENT", () => {
+    const pathEnv = instructions.filter((l) => /^ENV\s+PATH=/i.test(l));
+    expect(pathEnv.length).toBeGreaterThan(0);
+    expect(pathEnv.join("\n")).toContain("/app/node_modules/.bin");
+  });
+
   it("构建期不连数据库:只 prisma generate,migrate 留给启动脚本", () => {
     expect(DOCKERFILE).toMatch(/prisma generate/);
     expect(DOCKERFILE).not.toMatch(/RUN\s+.*migrate\s+deploy/);

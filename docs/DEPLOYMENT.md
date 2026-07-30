@@ -183,15 +183,24 @@ Railway 跑的是**长驻容器**(直接用仓库根目录的 `Dockerfile`),这�
    > 持久化本来也不靠该声明:自建主机用 `-v ezplm-storage:/app/.storage`,Railway 用上面这个卷。
 
 5. Settings → Networking → **Generate Domain** 得到公网地址;
-6. 灌种子(演示账号 + 示例物料):Railway 面板的服务 Shell 里执行
+6. 灌种子(演示账号 + 示例物料):Railway 面板的服务 Console 里执行
 
    ```bash
-   pnpm exec prisma db seed
+   NODE_ENV=development ./node_modules/.bin/prisma db seed
    ```
 
-   > 种子在 `NODE_ENV=production` 下会**自行拒绝执行**(防止把演示口令带进生产)。
-   > 要在 Railway 上做演示环境,临时设 `NODE_ENV=development` 跑一次种子后再改回来,
-   > 或改用自建的正式初始化数据。
+   要点(都是实测踩出来的):
+
+   - 运行镜像**没有启用 corepack**,`pnpm` 不在 PATH,用 `./node_modules/.bin/prisma`
+     (entrypoint 用的就是这条路径,可靠);
+   - 种子在 `NODE_ENV=production` 下会**自行拒绝执行**(防止把演示口令带进生产)。
+     守卫是运行时读 `NODE_ENV`,所以像上面那样**内联覆盖**即可,不必改服务变量、不必重新部署;
+   - `prisma db seed` 会 spawn `tsx`(见 `prisma.config.ts` 的 `migrations.seed`),
+     镜像已把 `/app/node_modules/.bin` 加进 `PATH`;若用旧镜像会报 `spawn tsx ENOENT`,
+     临时解法是 `PATH="/app/node_modules/.bin:$PATH"` 前置。
+
+7. **不要在平台上写死 `PORT`**:Railway 运行时会注入自己的 `PORT`(实测 8080),
+   `server.js` 跟随环境变量。手工设成 3000 会造成代理端口与监听端口错配,直接打不开。
 
 ### 3.2 定时任务
 

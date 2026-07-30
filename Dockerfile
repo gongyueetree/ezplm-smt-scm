@@ -41,8 +41,13 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# PORT 是**默认值**:Railway 等平台会在运行时注入自己的 PORT(实测注入 8080),
+# server.js 跟随环境变量,不要在平台上再写死一个不同的值,否则代理端口与监听端口错配。
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# node_modules/.bin 必须在 PATH 上:`prisma db seed` 会 spawn `tsx`(见 prisma.config.ts 的
+# migrations.seed),PATH 里没有它就报 `spawn tsx ENOENT` —— 实测 Railway 容器内灌种子失败。
+ENV PATH="/app/node_modules/.bin:$PATH"
 
 # 非 root 运行
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
