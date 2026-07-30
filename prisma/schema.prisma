@@ -171,6 +171,37 @@ enum PurchaseRequestStatus {
   CLOSED
 }
 
+/// 对账类型:AR = 应收(对客户,PM 侧);AP = 应付(对供应商,采购侧)
+enum ReconciliationKind {
+  AR
+  AP
+}
+
+enum ReconciliationStatus {
+  DRAFT
+  MATCHED
+  CONFIRMED
+  CLOSED
+}
+
+/// 我方基准来源。**本系统不拥有出货/入库数据**(属 ERP 数据主权),
+/// 故基准要么由本系统已有单据派生,要么由 ERP 导出明细上传。
+enum ReconBaselineSource {
+  DERIVED
+  UPLOADED
+}
+
+/// 对账行判定(与 lib/domain/recon-match.ts 的 verdict 一一对应)
+enum ReconLineVerdict {
+  CONSISTENT
+  QTY_DIFF
+  PRICE_DIFF
+  AMOUNT_DIFF
+  CURRENCY_MISMATCH
+  ONLY_THEIRS
+  ONLY_OURS
+}
+
 /// 采购订单状态(见 lib/domain/po-status.ts 的状态机)。
 /// 注意:**没有「已下单」** —— ERP 才是下单执行的真源,本系统只到
 /// APPROVED(已审批·待 ERP 录入)与 EXPORTED(已导出 ERP 可导入模板)。
@@ -1089,6 +1120,78 @@ model PurchaseOrderApproval {
   createdAt       DateTime         @default(now())
 
   @@index([tenantId, purchaseOrderId])
+}
+
+/// AR/AP 对账单(客户 xlsx「应收应付自动对账」;差异识别与账龄原标注为「无」)。
+///
+/// 数据主权:本系统**没有出货/入库/发票模型** —— 那是 ERP 的范围。
+/// 因此"我方基准"只能来自 ①本系统已批准单据派生(AP=PO 行,AR=报价快照)
+/// 或 ②ERP 导出明细上传,由 baselineSource 如实记录是哪一种。
+model ReconciliationStatement {
+  id             String               @id @default(cuid())
+  tenantId       String
+  kind           ReconciliationKind
+  code           String
+  /// AR 用 customerId;AP 用 supplierId(跨聚合引用,受控标量)
+  customerId     String?
+  supplierId     String?
+  currency       String               @default("CNY")
+  periodFrom     DateTime?
+  periodTo       DateTime?
+  status         ReconciliationStatus @default(DRAFT)
+  baselineSource ReconBaselineSource  @default(DERIVED)
+  /// 金额容差(口径,不是魔法数;UI 必须标注)
+  amountTolerance Decimal             @default("0.01") @db.Decimal(18, 6)
+  /// 匹配时固化的汇总快照(双方合计/差额/各类计数)
+  matchSnapshot  Json?
+  matchedAt      DateTime?
+  /// 对账单发送记录:**只到预览/模拟**,不代表已发送
+  lastPreviewAt  DateTime?
+  createdById    String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  lines ReconciliationLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, kind, status])
+}
+
+/// 对账行:双方明细并列 + 判定。台账与账龄全部由本表派生,不落冗余计数。
+model ReconciliationLine {
+  id          String                  @id @default(cuid())
+  tenantId    String
+  statementId String
+  statement   ReconciliationStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  lineNo      Int
+  /// 匹配键(便于人工回查为何这两行被配到一起)
+  matchKey    String
+  docNo       String?
+  docLineNo   Int?
+  mpn         String?
+  theirQty       Decimal? @db.Decimal(18, 4)
+  theirUnitPrice Decimal? @db.Decimal(18, 6)
+  theirAmount    Decimal? @db.Decimal(18, 4)
+  theirCurrency  String?
+  ourQty         Decimal? @db.Decimal(18, 4)
+  ourUnitPrice   Decimal? @db.Decimal(18, 6)
+  ourAmount      Decimal? @db.Decimal(18, 4)
+  ourCurrency    String?
+  verdict     ReconLineVerdict
+  /// 对方 − 我方(同币种);不可比时为空
+  diffAmount  Decimal? @db.Decimal(18, 4)
+  severity    String
+  details     Json?
+  /// 账龄输入;识别不出时留空,由账龄模块归入「到期日未知」
+  dueDate     DateTime?
+  /// 差异处理结论(默认空,逐项人工选)
+  resolution     String?
+  resolutionNote String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, statementId, lineNo])
+  @@index([tenantId, verdict])
 }
 
 // ============================================================

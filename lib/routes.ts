@@ -184,11 +184,11 @@ export const NAV_SECTIONS: NavSection[] = [
     routes: [
       {
         path: "/reconciliation",
-        implemented: false,
+        implemented: true,
         label: "AR/AP 对账",
         icon: "ledger",
         plannedPr: "PR8",
-        desc: "AR 与 AP 按角色与 Tab 区分,对账单发送走邮件适配器(预览/模拟)。",
+        desc: "AR/AP 按角色与 Tab 区分;对账单上传后自动识别差异(含金额相同但数量单价对不上的情形)与账龄分桶;导出可供人工发送的附件 —— 邮件通道未接入。",
         roles: ["PM", "PROCUREMENT"],
       },
       {
