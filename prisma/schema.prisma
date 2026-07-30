@@ -873,6 +873,8 @@ model QuoteVersion {
   quote             Quote       @relation(fields: [quoteId], references: [id])
   revision          Int
   status            QuoteStatus @default(DRAFT)
+  /// 报价有效期(正式报价单必备项;提交时随快照冻结)
+  validUntil        DateTime?
   currency          String      @default("CNY")
   /// 人工费率模板快照(多模板可选,允许手工调整;模板本体后续 PR 建维护页)
   laborRateTemplate Json?

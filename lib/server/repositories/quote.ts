@@ -14,6 +14,8 @@ import {
 } from "@/lib/domain/quote-calc";
 import {
   buildQuoteSnapshot,
+  type QuoteDocHeader,
+  type QuoteDocLine,
   checkParameterMutation,
   checkQuoteTransition,
   checkRevisionWrite,
@@ -263,6 +265,44 @@ export async function confirmLineCategory(
   return { ok: true, data: { id: lineId } };
 }
 
+
+/**
+ * 正式报价单表头与明细描述字段 —— 随快照一起冻结。
+ *
+ * 为什么要冻结:正式文件只用快照(SPEC §12)。若渲染时才去查客户名与有效期,
+ * 提交后改了客户名,已批准的报价单也会跟着变,那就不叫冻结了。
+ */
+async function buildDocFields(
+  tenantId: string,
+  version: NonNullable<Awaited<ReturnType<typeof getQuoteVersion>>>,
+): Promise<{ doc: QuoteDocHeader; docLines: QuoteDocLine[] }> {
+  const customer = await prisma.customer.findFirst({
+    where: tenantWhere(tenantId, { id: version.quote.customerId }),
+    select: { name: true, code: true },
+  });
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId },
+    select: { name: true },
+  });
+  return {
+    doc: {
+      customerName: customer?.name ?? null,
+      customerCode: customer?.code ?? null,
+      validUntil: version.validUntil ? version.validUntil.toISOString().slice(0, 10) : null,
+      sellerName: tenant?.name ?? "本公司",
+    },
+    docLines: version.lines.map((l) => ({
+      lineNo: l.lineNo,
+      quotedMfg: l.quotedMfg ?? null,
+      quotedMpn: l.quotedMpn ?? null,
+      materialCategory: l.materialCategory ?? null,
+      altMfg: l.altMfg ?? null,
+      altMpn: l.altMpn ?? null,
+      note: l.note ?? null,
+    })),
+  };
+}
+
 export type TransitionOutcome =
   | { ok: true; status: QuoteStatusValue }
   | { ok: false; code: string; message: string; unconfirmedLines?: number[] };
@@ -298,7 +338,10 @@ export async function submitQuoteForApproval(
   }
 
   const summary = summarizeQuote(toCalcLines(version.lines), { currency: version.currency });
+  const { doc, docLines } = await buildDocFields(session.tenantId, version);
   const snapshot = buildQuoteSnapshot({
+    doc,
+    docLines,
     quoteCode: version.quote.code,
     revision: version.revision,
     status: "PENDING_APPROVAL",
@@ -361,9 +404,13 @@ export async function decideQuoteApproval(
   if (!check.ok) return { ok: false, code: check.code, message: check.message };
 
   const summary = summarizeQuote(toCalcLines(version.lines), { currency: version.currency });
+  const docFields =
+    decision === "APPROVED" ? await buildDocFields(session.tenantId, version) : null;
   const approvedSnapshot =
     decision === "APPROVED"
       ? buildQuoteSnapshot({
+          doc: docFields!.doc,
+          docLines: docFields!.docLines,
           quoteCode: version.quote.code,
           revision: version.revision,
           status: "APPROVED",

@@ -134,3 +134,53 @@ test("QuoteAgent:只产出待确认卡片,不写入数据,并如实标注当前�
   // Agent 绝不直接写库。
   await expect(page.locator(".badge", { hasText: "待确认" }).first()).toBeVisible();
 });
+
+test("正式报价单按固定格式生成:甲乙方 / 有效期 / 替代料列 / 条款 / 签署栏", async ({ page }) => {
+  test.setTimeout(180_000);
+  // 客户 docx 原话:「PDF 报价单目前是 copy 的系统界面,没有按照固定模式生成」
+  await login(page, "pm@demo.ezplm.cn");
+  await createQuoteWithLine(page, "E2E 固定格式报价单");
+  const versionId = page.url().split("/").pop()!;
+
+  // 先设有效期(正式报价单必备项),再提交冻结 —— 有效期必须随快照冻结
+  await page.getByLabel("有效期至").fill("2026-12-31");
+  await page.getByRole("button", { name: "保存有效期" }).click();
+  await expect(page.getByText("已保存")).toBeVisible({ timeout: 20_000 });
+
+  page.once("dialog", (d) => d.accept("阻容感"));
+  await page.getByRole("button", { name: "确认分类" }).first().click();
+  await expect(page.locator(".badge", { hasText: "已人工确认" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "提交审批" }).click();
+  await expect(page.locator(".page-actions .badge")).toHaveText("待审批");
+
+  await page.goto(`/quotes/${versionId}/print`);
+  // 固定报价单要件
+  await expect(page.getByRole("heading", { name: "报价单" })).toBeVisible();
+  // 用 exact:「需求方(甲方)」在页面上出现两次(表头标签 + 签章栏),
+  // 不收窄会同时匹配两个元素
+  await expect(page.getByText("需求方(甲方)", { exact: true })).toBeVisible();
+  await expect(page.getByText("报价方(乙方)", { exact: true })).toBeVisible();
+  await expect(page.getByText("2026-12-31").first()).toBeVisible();
+  // exact:页脚也有「报价有效期与商务条款以双方书面合同为准」这句
+  await expect(page.getByText("商务条款", { exact: true })).toBeVisible();
+  await expect(page.getByText("需求方(甲方)确认签章")).toBeVisible();
+  // 客户要求的明细列
+  for (const col of ["物料类别", "报价 MFG / MPN", "替代料 MFG / MPN"]) {
+    await expect(page.getByRole("columnheader", { name: col })).toBeVisible();
+  }
+  // 交付边界仍要如实写明:这是打印视图,不是服务端直出 PDF
+  // (「另存为 PDF」按钮与说明文字都含这几个字,故断说明文字里的完整句子)
+  await expect(page.getByText(/浏览器打印对话框中选择/)).toBeVisible();
+});
+
+test("有效期在冻结后不可修改(随快照冻结)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "pm@demo.ezplm.cn");
+  await createQuoteWithLine(page, "E2E 有效期冻结");
+  page.once("dialog", (d) => d.accept("阻容感"));
+  await page.getByRole("button", { name: "确认分类" }).first().click();
+  await expect(page.locator(".badge", { hasText: "已人工确认" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "提交审批" }).click();
+  await expect(page.locator(".page-actions .badge")).toHaveText("待审批");
+  await expect(page.getByLabel("有效期至")).toBeDisabled();
+});

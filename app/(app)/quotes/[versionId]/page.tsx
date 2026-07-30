@@ -130,12 +130,16 @@ export default async function QuoteVersionPage({
         versionId={version.id}
         status={status}
         currency={version.currency}
+        validUntil={version.validUntil ? version.validUntil.toISOString().slice(0, 10) : null}
         frozen={isFrozen(status)}
         transitions={transitions}
         lines={version.lines.map((l) => ({
           id: l.id,
           lineNo: l.lineNo,
           quotedMpn: l.quotedMpn,
+          quotedMfg: l.quotedMfg,
+          altMfg: l.altMfg,
+          altMpn: l.altMpn,
           category: l.category,
           materialCategory: l.materialCategory,
           categoryConfirmed: l.categoryConfirmed,

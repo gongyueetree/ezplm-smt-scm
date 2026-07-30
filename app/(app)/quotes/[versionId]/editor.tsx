@@ -12,6 +12,9 @@ interface EditorLine {
   id: string;
   lineNo: number;
   quotedMpn: string | null;
+  quotedMfg: string | null;
+  altMfg: string | null;
+  altMpn: string | null;
   category: string;
   materialCategory: string | null;
   categoryConfirmed: boolean;
@@ -24,6 +27,7 @@ export function QuoteEditor({
   versionId,
   status,
   currency,
+  validUntil,
   frozen,
   transitions,
   lines,
@@ -34,6 +38,8 @@ export function QuoteEditor({
   versionId: string;
   status: QuoteStatusValue;
   currency: string;
+  /** 报价有效期(YYYY-MM-DD);未设置为 null */
+  validUntil: string | null;
   frozen: boolean;
   transitions: { to: QuoteStatusValue; label: string; requiresReason: boolean }[];
   lines: EditorLine[];
@@ -42,6 +48,8 @@ export function QuoteEditor({
   canExport: boolean;
 }) {
   const [bomVersionId, setBomVersionId] = useState(bomVersions[0]?.id ?? "");
+  const [validity, setValidity] = useState(validUntil ?? "");
+  const [validityMsg, setValidityMsg] = useState<string | null>(null);
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +229,49 @@ export function QuoteEditor({
 
   return (
     <div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-head">
+          <span className="card-title">报价有效期</span>
+          <span className="card-sub">正式报价单必备项;提交后随快照冻结,不可再改</span>
+        </div>
+        <div className="card-body">
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label className="fld" style={{ marginBottom: 0 }}>
+              <span>有效期至</span>
+              <input
+                type="date"
+                value={validity}
+                disabled={frozen}
+                onChange={(e) => setValidity(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn"
+              disabled={frozen || busy}
+              onClick={async () => {
+                setValidityMsg(null);
+                const res = await fetch(`/api/quotes/${versionId}/valid-until`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ validUntil: validity || null }),
+                });
+                const body = await res.json().catch(() => null);
+                setValidityMsg(res.ok ? "已保存" : (body?.error ?? "保存失败"));
+                if (res.ok) router.refresh();
+              }}
+            >
+              保存有效期
+            </button>
+            {validityMsg ? <span className="small muted">{validityMsg}</span> : null}
+          </div>
+          {!validity ? (
+            <p className="small muted" style={{ marginTop: 6 }}>
+              未设置时正式报价单会如实写「未设置(以双方书面确认为准)」,<b>不会编一个日期</b>。
+            </p>
+          ) : null}
+        </div>
+      </div>
+
       {error ? (
         <div className="banner warn" role="alert">
           {error}
@@ -238,7 +289,8 @@ export function QuoteEditor({
             <thead>
               <tr>
                 <th>行</th>
-                <th>MPN</th>
+                <th>报价 MFG / MPN</th>
+                <th>替代料 MFG / MPN</th>
                 <th>成本分类</th>
                 <th>物料类别</th>
                 <th className="num">数量</th>
@@ -252,7 +304,7 @@ export function QuoteEditor({
             <tbody>
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={11} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     暂无报价行
                   </td>
                 </tr>
@@ -263,7 +315,18 @@ export function QuoteEditor({
                     <tr key={l.id} className={!l.categoryConfirmed ? "row-warn" : undefined}>
                       <td className="num">{l.lineNo}</td>
                       <td className="small">
+                        <div className="muted">{l.quotedMfg ?? "—"}</div>
                         <MpnLink mpn={l.quotedMpn} />
+                      </td>
+                      <td className="small">
+                        {l.altMpn ? (
+                          <>
+                            <div className="muted">{l.altMfg ?? "—"}</div>
+                            <MpnLink mpn={l.altMpn} />
+                          </>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
                       <td className="small">{CATEGORY_LABELS[l.category as keyof typeof CATEGORY_LABELS] ?? l.category}</td>
                       <td className="small">

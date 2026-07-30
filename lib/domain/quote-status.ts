@@ -187,6 +187,35 @@ export function checkParameterMutation(
 // 快照(规则 3、5)
 // ============================================================
 
+/**
+ * 正式报价单的表头信息(客户 docx:「PDF 报价单目前是 copy 的系统界面,没有按照固定模式生成」)。
+ * 必须随快照冻结 —— 正式文件只用快照,提交后改客户名或有效期不得影响已冻结的单据。
+ * 可选:旧快照没有这一段,渲染时如实标注"该快照未包含此信息"而不是补一个当前值。
+ */
+export interface QuoteDocHeader {
+  customerName: string | null;
+  customerCode: string | null;
+  /** 报价有效期(ISO 日期);未设置时为 null */
+  validUntil: string | null;
+  /** 报价方主体 */
+  sellerName: string;
+}
+
+/**
+ * 正式报价单明细行的**描述性字段**(MPN/制造商/物料类别/替代料)。
+ * 与 QuoteSummary 分开存:后者是纯计算结果、单测覆盖密集,不往里塞展示字段。
+ * 按 lineNo 与 summary.lines 对齐。
+ */
+export interface QuoteDocLine {
+  lineNo: number;
+  quotedMfg: string | null;
+  quotedMpn: string | null;
+  materialCategory: string | null;
+  altMfg: string | null;
+  altMpn: string | null;
+  note: string | null;
+}
+
 export interface QuoteSnapshot {
   /** 快照生成时点 */
   frozenAt: string;
@@ -198,6 +227,10 @@ export interface QuoteSnapshot {
   laborTemplate: unknown;
   /** 生成快照的人 */
   frozenById: string;
+  /** 正式报价单表头;旧快照可能没有 */
+  doc?: QuoteDocHeader;
+  /** 正式报价单明细的描述性字段;旧快照可能没有 */
+  docLines?: QuoteDocLine[];
 }
 
 export interface BuildSnapshotInput {
@@ -209,6 +242,8 @@ export interface BuildSnapshotInput {
   laborTemplate: unknown;
   frozenById: string;
   frozenAt: string;
+  doc?: QuoteDocHeader;
+  docLines?: QuoteDocLine[];
 }
 
 /** 构建冻结快照(整单文档,逐字节固化) */
@@ -222,6 +257,8 @@ export function buildQuoteSnapshot(input: BuildSnapshotInput): QuoteSnapshot {
     summary: input.summary,
     laborTemplate: input.laborTemplate,
     frozenById: input.frozenById,
+    ...(input.doc ? { doc: input.doc } : {}),
+    ...(input.docLines ? { docLines: input.docLines } : {}),
   };
 }
 
