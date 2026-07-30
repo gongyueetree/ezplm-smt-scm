@@ -179,6 +179,15 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["PROCUREMENT"],
       },
       {
+        path: "/suppliers/collab",
+        label: "供应商协同",
+        icon: "handshake",
+        plannedPr: "PR8",
+        desc: "批量生成订单邮件草稿、供应商建档邀请、接单回执登记;邮件通道未接入,系统不发送邮件。",
+        implemented: true,
+        roles: ["PROCUREMENT", "MANAGEMENT"],
+      },
+      {
         path: "/suppliers/opo",
         label: "OPO 交期协同",
         icon: "clock",

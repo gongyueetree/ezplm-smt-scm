@@ -1458,6 +1458,79 @@ model ReminderLog {
   @@index([tenantId, opoLineId])
 }
 
+/// 邮件草稿(客户 docx 三项:批量发送订单 / 订单接受通知 / 供应商资料邮件直发建档)。
+///
+/// **邮件通道未接入** —— 本表只登记"要发什么给谁",状态止于 DRAFT/PREVIEWED,
+/// 永远不会变成"已发送"。真正发送需接入邮件服务后再实现,届时新增 SENT 状态与发送记录。
+/// 这与 ReminderLog 的处理方式一致:宁可少报,不可虚报。
+model EmailDraft {
+  id          String   @id @default(cuid())
+  tenantId    String
+  /// PO_DISPATCH=批量发送订单;PO_ACK=订单接受通知;SUPPLIER_ONBOARD=供应商建档邀请
+  kind        String
+  /// 关联单据(PO 号 / 供应商 id 等),便于回查
+  refType     String?
+  refId       String?
+  toName      String?
+  toEmail     String?
+  subject     String
+  body        String
+  /// 附件说明(本系统只列出应附哪些文件,不代发)
+  attachments Json?
+  /// DRAFT=已生成草稿;PREVIEWED=已被人工预览过。**没有 SENT**
+  status      String   @default("DRAFT")
+  previewedAt DateTime?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, kind, status])
+  @@index([tenantId, refType, refId])
+}
+
+/// 供应商建档邀请(客户 docx:「供应商的资料是否可以在添加供应商时由供应商直接邮件发出,
+/// 点击到建立 CUSTOMER CODE 的同事处」)。
+///
+/// 一期:生成**邀请链接 + 邮件草稿**,供应商经链接回填资料 → 落 SupplierContact;
+/// 自动解析来信属二期(InboundEmailAdapter)。
+model SupplierOnboardInvite {
+  id         String    @id @default(cuid())
+  tenantId   String
+  supplierId String?
+  /// 邀请码(URL 用);一次性、可过期
+  token      String    @unique
+  toEmail    String?
+  companyName String?
+  /// PENDING=待回填;SUBMITTED=供应商已提交;ACCEPTED=已建档
+  status     String    @default("PENDING")
+  /// 供应商提交的资料原文(未经采纳前不写入主数据)
+  submitted  Json?
+  expiresAt  DateTime?
+  createdById String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId, status])
+}
+
+/// 订单接受通知(客户 docx:「订单接受通知」)。
+/// 供应商确认收到并接受订单的登记;来源可以是邮件回复人工登记,或经邀请链接自助确认。
+model PoAcknowledgement {
+  id         String   @id @default(cuid())
+  tenantId   String
+  poNo       String
+  supplierId String
+  /// ACCEPTED / REJECTED / PARTIAL
+  decision   String
+  note       String?
+  /// 登记渠道:EMAIL_MANUAL / PORTAL / PHONE
+  source     String   @default("EMAIL_MANUAL")
+  recordedById String
+  recordedAt DateTime @default(now())
+
+  @@unique([tenantId, poNo, supplierId])
+  @@index([tenantId, poNo])
+}
+
 // ============================================================
 // 9. 智能体域(SPEC §13;全部为本系统新增)
 // ============================================================
