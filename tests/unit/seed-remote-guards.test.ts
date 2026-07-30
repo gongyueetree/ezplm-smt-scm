@@ -55,6 +55,21 @@ describe("seed-remote.sh:输入护栏", () => {
     expect(run("postgresql://postgres@localhost:5433/ezplm_scm_dev\n").code).not.toBe(0);
   });
 
+  it("**重复粘贴必须拦掉,且输出里绝不能出现密码明文**(实测踩过:两串首尾相接,库名变成 railway+第二串)", () => {
+    const PW = "S3cretPasswordThatMustNotLeak";
+    const doubled = `postgresql://postgres:${PW}@x.proxy.rlwy.net:41234/railwaypostgresql://postgres:${PW}@x.proxy.rlwy.net:41234/railway`;
+    const { code, out } = run(`${doubled}\n`);
+    expect(code).not.toBe(0);
+    expect(out).toContain("重复粘贴");
+    // 最关键的一条:畸形串一旦被回显就等于把密码打进屏幕与终端历史
+    expect(out).not.toContain(PW);
+  });
+
+  it("单串里混入多余的 @ 也拒绝(无法安全地判断哪段是凭据)", () => {
+    const { code } = run("postgresql://postgres:p@ss@x.proxy.rlwy.net:41234/railway\n");
+    expect(code).not.toBe(0);
+  });
+
   it("**口令不得为空、不得是仓库里公开的 demo1234**", () => {
     expect(run(`${GOOD_URL}\n\n`).code).not.toBe(0);
     const { code, out } = run(`${GOOD_URL}\ndemo1234\n`);
