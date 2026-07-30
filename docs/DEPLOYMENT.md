@@ -318,6 +318,26 @@ CI 的 `docker-build` job 会同时构建根路径与 `/scm` 两种形态,防止
 
 ⚠ **migration SQL 生成后不得手改**;需要调整就改 schema 重新生成。
 
+### 构建期不得依赖 DATABASE_URL
+
+Next 构建期(collect page data)会 import 每一个路由模块。Prisma 客户端因此必须**懒构造**
+(`lib/server/db.ts` 用 Proxy 延迟到首次属性访问),否则没有 `DATABASE_URL` 的构建环境会整个失败:
+
+```
+[Error: Failed to collect page data for /api/auth/logout]
+Error: DATABASE_URL 未配置(仅存服务端环境变量)
+```
+
+由 `tests/unit/db-lazy-client.test.ts` 看守两条:①无连接串时 import 不抛错;
+②**生产下仍是单例** —— 懒构造若只查 `globalThis`(那是给开发热重载的),
+生产下每次属性访问都会新建客户端与 pg 连接池,连接数迅速打满。
+
+自查(推荐在提交前跑一次,等价于云端构建环境):
+
+```bash
+mv .env .env.bak && mv .env.local .env.local.bak && pnpm build; mv .env.bak .env && mv .env.local.bak .env.local
+```
+
 ---
 
 ## 八、定时任务(催办)
