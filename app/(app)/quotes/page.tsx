@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { CreateQuoteForm } from "./create-form";
+import { BatchUpdateQuotes } from "./batch-update";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ const TONE: Record<QuoteStatusValue, "gray" | "amber" | "green" | "red"> = {
 
 export default async function QuotesPage() {
   const session = (await getSession())!;
-  const [quotes, rfqs] = await Promise.all([
+  const [quotes, rfqs, bomVersions] = await Promise.all([
     prisma.quote.findMany({
       where: tenantWhere(session.tenantId),
       orderBy: { createdAt: "desc" },
@@ -31,6 +32,12 @@ export default async function QuotesPage() {
       where: tenantWhere(session.tenantId),
       orderBy: { createdAt: "desc" },
       select: { id: true, code: true, title: true, customerId: true },
+      take: 50,
+    }),
+    prisma.bOMVersion.findMany({
+      where: tenantWhere(session.tenantId),
+      orderBy: { createdAt: "desc" },
+      include: { bom: { select: { name: true } } },
       take: 50,
     }),
   ]);
@@ -48,6 +55,14 @@ export default async function QuotesPage() {
       </Banner>
 
       {canCreate ? <CreateQuoteForm rfqs={rfqs} /> : <Banner tone="soft">仅 PM 与管理层可创建报价。</Banner>}
+      {canCreate ? (
+        <BatchUpdateQuotes
+          bomVersions={bomVersions.map((v) => ({
+            id: v.id,
+            label: `${v.bom.name} V${v.versionNo}`,
+          }))}
+        />
+      ) : null}
 
       <Card title="报价列表" sub={`${quotes.length} 个`} flush>
         <div className="tbl-scroll">

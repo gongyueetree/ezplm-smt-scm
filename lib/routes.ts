@@ -224,6 +224,15 @@ export const NAV_SECTIONS: NavSection[] = [
         desc: "库存与呆滞总览(ezPLM 只读数据源),按客户/日期筛选。",
         roles: ["PROCUREMENT", "MANAGEMENT"],
       },
+      {
+        path: "/scrap",
+        label: "损耗报告",
+        icon: "scale",
+        plannedPr: "PR8",
+        desc: "损耗数据导入、按期间/客户/物料分析、按客户模板导出;本系统无工单投料,数据为人工导入。",
+        implemented: true,
+        roles: ["MANAGEMENT", "PROCUREMENT", "ENGINEERING"],
+      },
     ],
   },
   {

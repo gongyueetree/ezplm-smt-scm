@@ -1287,6 +1287,69 @@ model ReconciliationLine {
   @@index([tenantId, verdict])
 }
 
+/// 批量 update 报价作业(客户 xlsx 新增需求:「批量导入 BOM,生成单个单个 BOM 列明的 update 的报价单」)。
+///
+/// 语义是 **update**:已有报价的 BOM 走**新建 Revision**(遵守"已批准版本禁止覆盖"),
+/// 没有报价的 BOM 才新建报价。逐 BOM 独立成败,一条失败不拖垮整批。
+model QuoteBatchUpdateJob {
+  id           String    @id @default(cuid())
+  tenantId     String
+  status       JobStatus @default(PENDING)
+  totalBoms    Int       @default(0)
+  processedBoms Int      @default(0)
+  /// 逐 BOM 结果明细(成功/失败与原因),便于人工回查
+  results      Json?
+  error        String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([tenantId, status])
+}
+
+/// 损耗记录(客户 xlsx:「损耗报告 —— 筛选条件进行损耗分析 / 依据客户模板导出损耗」,原标注均为「无」)。
+///
+/// 数据主权:真正的投料/报废数据在 MES/ERP,本系统没有工单投料。
+/// 一期做「导入 + 分析 + 按模板导出」,来源如实记为 IMPORTED,不假装是系统自己算出来的。
+model ScrapRecord {
+  id          String   @id @default(cuid())
+  tenantId    String
+  /// 期间标签(如 2026-07),用于按期筛选
+  period      String
+  customerId  String?
+  workOrder   String?
+  mpn         String?
+  /// 发料数量(损耗率分母)
+  issuedQty   Decimal  @db.Decimal(18, 4)
+  /// 报废/损耗数量
+  scrapQty    Decimal  @db.Decimal(18, 4)
+  reason      String?
+  note        String?
+  /// 数据来源:一期只有 IMPORTED(人工导入);待 MES 接通后再扩
+  source      String   @default("IMPORTED")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, period])
+  @@index([tenantId, mpn])
+}
+
+/// 客户损耗导出模板(客户要求「依据客户模版导出损耗」)。
+/// 模板只定义**列集合与表头别名**,不改变数值口径。
+model ScrapExportTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  customerId  String?
+  /// [{ field, header }] 有序列定义
+  columns     Json
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, name])
+}
+
 // ============================================================
 // 8. OPO 域(行级唯一数据源)
 // ============================================================
