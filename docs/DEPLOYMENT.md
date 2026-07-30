@@ -176,6 +176,12 @@ Railway 跑的是**长驻容器**(直接用仓库根目录的 `Dockerfile`),这�
 
 4. Settings → **Volumes** 新建卷,挂载点 `/app/.storage`
    —— **不挂就会在每次重建后丢附件与原始 BOM 文件**;
+
+   > Railway **拒绝含 `VOLUME` 指令的 Dockerfile**(构建期直接报
+   > `docker VOLUME at Line N is not supported, use Railway Volumes`),
+   > 故本项目 Dockerfile 不写 `VOLUME`,由 `tests/unit/dockerfile-portability.test.ts` 看守。
+   > 持久化本来也不靠该声明:自建主机用 `-v ezplm-storage:/app/.storage`,Railway 用上面这个卷。
+
 5. Settings → Networking → **Generate Domain** 得到公网地址;
 6. 灌种子(演示账号 + 示例物料):Railway 面板的服务 Shell 里执行
 

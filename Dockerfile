@@ -68,9 +68,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# 本地文件存储目录(FILE_STORAGE_PROVIDER=local 时使用;生产建议挂卷或改用对象存储)
+# 本地文件存储目录(FILE_STORAGE_PROVIDER=local 时使用)
 RUN mkdir -p /app/.storage && chown -R nextjs:nodejs /app/.storage
-VOLUME ["/app/.storage"]
+
+# ⚠ 这里**不写 `VOLUME ["/app/.storage"]`** —— Railway 直接拒绝含 VOLUME 的 Dockerfile
+# (构建期报 `docker VOLUME at Line N is not supported, use Railway Volumes`),
+# 请勿加回来。持久化本来也不靠 VOLUME 声明,而靠部署时真的挂一个**具名**卷:
+#   docker run -v ezplm-storage:/app/.storage ...     # 自建主机
+#   Railway:Settings → Volumes,挂载点填 /app/.storage
+# VOLUME 只会创建匿名卷,容器重建后照样找不回来,等于没保护。
 
 USER nextjs
 EXPOSE 3000
