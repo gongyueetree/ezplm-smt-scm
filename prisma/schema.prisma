@@ -560,11 +560,38 @@ model Part {
   alternateOf PartAlternate[]  @relation("AlternateToParts")
 
   tagLinks PartTagLink[]
+  processAttr PartProcessAttr?
 
   @@unique([tenantId, internalPn])
   @@index([tenantId, mpn])
   @@index([tenantId, manufacturer, mpn])
   @@index([tenantId, categoryL1, categoryL2])
+}
+
+/// SMT 工艺属性(客户 docx:「SMT 工艺字段:包装规格、MSL 湿敏等级、盘装数量」)。
+///
+/// **为什么单独一张表**:Part 是 ezPLM 只读缓存,schema 纪律禁止业务代码改写主数据字段;
+/// 而实测真实 ezPLM 接口**不提供** MSL/包装/DC(只有 Mock 有)。
+/// 这些又本来就是本厂自己的工艺数据 —— 所以本地维护、与只读缓存分离,
+/// 展示时本地值优先、缺失回落缓存值,并标注取自哪一侧。
+model PartProcessAttr {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// 一对一:每颗料至多一份本地工艺属性
+  partId    String   @unique
+  part      Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// 湿敏等级 MSL1–MSL6
+  msl       String?
+  /// 包装规格:T&R / Tray / Tube / Bulk 等
+  packaging String?
+  /// 盘装数量(每盘颗数)
+  reelQty   Int?
+  note      String?
+  updatedById String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, partId])
 }
 
 /// 自定义物料分类标签(客户 docx:要能自定义「国产替代物料」「关键 A 类客户物料」这类分组)。

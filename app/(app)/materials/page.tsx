@@ -79,6 +79,7 @@ export default async function MaterialsPage({
     ),
     orderBy: { internalPn: "asc" },
     take: 100,
+    include: { processAttr: true },
   });
 
   const snapshots = parts.length
@@ -188,6 +189,7 @@ export default async function MaterialsPage({
                 <th>描述</th>
                 <th>封装</th>
                 <th>分类 / 标签</th>
+                <th>SMT 工艺(MSL / 包装 / 盘装)</th>
                 <th>生命周期</th>
                 <th>DC</th>
                 <th className="num">库存</th>
@@ -198,7 +200,7 @@ export default async function MaterialsPage({
             <tbody>
               {parts.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={12} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     {keyword ? "无匹配物料" : "暂无物料缓存"}
                   </td>
                 </tr>
@@ -228,6 +230,36 @@ export default async function MaterialsPage({
                             {t.name}
                           </Badge>
                         ))}
+                      </td>
+                      <td className="small">
+                        {(() => {
+                          const a = p.processAttr;
+                          const msl = a?.msl ?? p.msl;
+                          const pkg = a?.packaging ?? p.packaging;
+                          const reel = a?.reelQty ?? null;
+                          const localUsed =
+                            (a?.msl ?? null) !== null ||
+                            (a?.packaging ?? null) !== null ||
+                            (a?.reelQty ?? null) !== null;
+                          if (!msl && !pkg && reel === null) {
+                            return (
+                              <span className="muted">
+                                未维护
+                                <div>ezPLM 接口不提供,需本地填写</div>
+                              </span>
+                            );
+                          }
+                          return (
+                            <>
+                              <div>
+                                {msl ?? "—"} / {pkg ?? "—"} / {reel ?? "—"}
+                              </div>
+                              <Badge tone={localUsed ? "green" : "amber"}>
+                                {localUsed ? "本地维护" : "ezPLM 缓存"}
+                              </Badge>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td>
                         <Badge

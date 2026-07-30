@@ -71,6 +71,28 @@ export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) 
         </Link>
       </div>
 
+      <Card
+        title="库存总览与呆滞分析"
+        sub="客户 docx:「请转移到管理层模块」;支持按客户 / 日期查看"
+      >
+        <p className="small muted" style={{ marginBottom: 8 }}>
+          库存与呆滞明细在库存页,已支持<b>按客户</b>与<b>按截至日期</b>筛选。
+          按客户的口径是「该客户的 BOM 用到的物料」——
+          <b>库存快照本身没有客户维度</b>,不代表这些库存是为该客户备的。
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link className="btn" href="/inventory">
+            库存总览
+          </Link>
+          <Link className="btn" href="/inventory?asOf=">
+            按日期查看
+          </Link>
+          <Link className="btn" href="/settings">
+            ERP 同步日志
+          </Link>
+        </div>
+      </Card>
+
       <Card title="报价状态分布" sub="点击上方卡片可下钻" flush>
         <div className="tbl-scroll">
           <table className="tbl">
