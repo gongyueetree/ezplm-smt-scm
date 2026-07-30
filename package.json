@@ -20,7 +20,7 @@
     "db:validate": "prisma validate",
     "smoke:external": "tsx scripts/smoke-external.ts",
     "predev": "node scripts/copy-occt.mjs",
-    "prebuild": "node scripts/copy-occt.mjs",
+    "prebuild": "node scripts/copy-occt.mjs && prisma generate",
     "smoke:ai": "tsx scripts/smoke-ai.ts",
     "seed:parts": "tsx scripts/seed-parts-from-ezplm.ts"
   },

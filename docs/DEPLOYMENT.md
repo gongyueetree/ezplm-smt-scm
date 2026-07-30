@@ -12,7 +12,7 @@
 |---|---|---|---|
 | `DATABASE_URL` | ✅ | PostgreSQL 连接串 | 应用启动失败(容器 entrypoint 直接退出) |
 | `AUTH_SECRET` | ✅ | 会话 JWT(HS256)签名密钥 | 登录/验签抛错。**生产必须为强随机值** |
-| `NEXT_PUBLIC_BASE_PATH` | — | 子路径部署,如 `/scm` | 根路径部署。⚠ **构建期生效**,见第四节 |
+| `NEXT_PUBLIC_BASE_PATH` | — | 子路径部署,如 `/scm` | 根路径部署。⚠ **构建期生效**,见第六节 |
 | `BUILD_STANDALONE` | — | 设 `1` 产出 standalone(Docker 用) | Vercel 部署不需要 |
 | `FILE_STORAGE_PROVIDER` | — | `local` \| `vercel-blob` | `local` |
 | `FILE_STORAGE_DIR` | — | 本地存储根目录 | `.storage` |
@@ -84,21 +84,136 @@ Key 原文会出现在 `command not found: <Key>` 里,直接泄进终端历史�
 
 ---
 
-## 二、Vercel(开发 / Preview)
+## 二、推送到 GitHub
+
+### 2.1 先自检:密钥没有进版本库
+
+```bash
+git check-ignore -v .env.local          # 必须命中 .gitignore 规则
+git ls-files | grep -i env              # 只应出现 .env.example / scripts/*env*.ts
+```
+
+`.gitignore` 覆盖 `.env` 与 `.env.*`(仅放行 `.env.example`)。
+**仓库建议设为 Private**:`legacy-static/` 与 `docs/customer-feedback/`、`docs/SPEC.pdf`
+含客户原件与业务细节,不适合公开。
+
+### 2.2 换到新账号的仓库
+
+`origin` 目前仍指向旧账号(`eehubio/ezplm_smt_full`)。两条路任选:
+
+**A. 用 gh CLI**(需先自行登录;**不要**把 token 贴进任何对话或日志)
+
+```bash
+gh auth login
+```
+
+登录后建仓并推送:
+
+```bash
+gh repo create <新账号>/ezplm-smt-scm --private --source=. --remote=origin --push
+```
+
+若 `origin` 已存在会报错,先改指向再推:
+
+```bash
+git remote set-url origin https://github.com/<新账号>/ezplm-smt-scm.git
+git push -u origin main
+git push -u origin feature/nextjs-agent-v1
+```
+
+**B. 网页建空仓库**(New repository,不要勾 README/.gitignore/License),然后执行上面的
+`git remote set-url` + 两条 `git push`。
+
+> HTTPS 推送时 GitHub 要的密码是 **Personal Access Token**(Settings → Developer settings →
+> Tokens),不是账号密码。让 git 记住它:`git config --global credential.helper osxkeychain`。
+
+### 2.3 分支现状
+
+`main` 是旧账号仓库的历史;开发成果全在 `feature/nextjs-agent-v1`(领先 `main` 数十个提交)。
+新账号下若想让默认分支就是当前代码,推完后在 GitHub 仓库 Settings → Branches 把默认分支
+改成 `feature/nextjs-agent-v1`,或本地先 `git switch main && git merge feature/nextjs-agent-v1`
+再推 `main`。
+
+---
+
+## 三、Railway(推荐:一处跑全功能)
+
+Railway 跑的是**长驻容器**(直接用仓库根目录的 `Dockerfile`),这正好避开 Vercel 的两处硬限制:
+
+| 本系统的需求 | Vercel(Serverless) | Railway(容器) |
+|---|---|---|
+| 附件 / 原始 BOM 文件落盘 | 文件系统只读,必须改用 Vercel Blob | 挂持久卷即可,`FILE_STORAGE_PROVIDER=local` 直接可用 |
+| 大 BOM 分批导入 + SSE 进度流 | 函数有执行时长上限,长流易被切断 | 无函数超时 |
+| PDF 文本层重建 / occt WASM 3D | 冷启动与内存吃紧 | 常驻进程,首次之后即热 |
+| PostgreSQL | 需外挂(Neon 等) | 面板一键加 |
+
+### 3.1 部署步骤
+
+1. New Project → **Deploy from GitHub repo** → 选刚推上去的仓库、分支
+   `feature/nextjs-agent-v1`;Railway 检测到 `Dockerfile` 会直接用它构建(镜像内已固定
+   `BUILD_STANDALONE=1`,并在启动时执行 `prisma migrate deploy`);
+2. 同项目里 **+ New → Database → PostgreSQL**;
+3. 应用服务的 Variables 里加:
+
+   | 变量 | 值 |
+   |---|---|
+   | `DATABASE_URL` | 引用数据库服务的 `${{Postgres.DATABASE_URL}}` |
+   | `AUTH_SECRET` | `openssl rand -base64 32` 生成的强随机值 |
+   | `FILE_STORAGE_PROVIDER` | `local` |
+   | `FILE_STORAGE_DIR` | `/app/.storage` |
+   | `CRON_SECRET` | 另一个强随机值 |
+   | 三方 Key | 按需填 `EZPLM_*` / `DIGIKEY_*` / `MOUSER_API_KEY` / `GEMINI_API_KEY` |
+
+4. Settings → **Volumes** 新建卷,挂载点 `/app/.storage`
+   —— **不挂就会在每次重建后丢附件与原始 BOM 文件**;
+5. Settings → Networking → **Generate Domain** 得到公网地址;
+6. 灌种子(演示账号 + 示例物料):Railway 面板的服务 Shell 里执行
+
+   ```bash
+   pnpm exec prisma db seed
+   ```
+
+   > 种子在 `NODE_ENV=production` 下会**自行拒绝执行**(防止把演示口令带进生产)。
+   > 要在 Railway 上做演示环境,临时设 `NODE_ENV=development` 跑一次种子后再改回来,
+   > 或改用自建的正式初始化数据。
+
+### 3.2 定时任务
+
+Railway 的 Cron Schedule 是「按时**启动一个服务**」,不是「按时发一个 HTTP 请求」。
+加一个最小服务(镜像 `curlimages/curl`)、Cron 设 `0 1 * * *`、启动命令:
+
+```bash
+curl -fsS -X POST https://<你的域名>/api/cron/opo-reminders -H "Authorization: Bearer $CRON_SECRET"
+```
+
+---
+
+## 四、Vercel(开发 / Preview)
 
 1. Import GitHub 仓库,Framework 自动识别为 Next.js;
 2. **Region 选 `sin1`(新加坡)** —— 大陆访问相对最好(`vercel.json` 已固定);
 3. 环境变量按 Preview / Production 分别配置,**不要共用同一套 Key**;
-4. 数据库:Preview 用 Neon / Vercel Postgres,生产**不要**用 Vercel 侧数据库(见第三节);
+4. 数据库:Preview 用 Neon / Vercel Postgres,生产**不要**用 Vercel 侧数据库(见第五节);
 5. 字体:项目使用系统字体栈(`-apple-system / PingFang SC / Microsoft YaHei`),
    **不引任何外部字体服务**,符合 SPEC §18「自托管字体」且避免大陆访问阻塞。
 
+### 4.1 Vercel 上必须改的三处(否则功能会缺)
+
+| 项 | 为什么 | 怎么配 |
+|---|---|---|
+| 文件存储 | Serverless 文件系统**只读**,`local` provider 会写失败 | Storage → 建 Blob store,设 `FILE_STORAGE_PROVIDER=vercel-blob` 与 `BLOB_READ_WRITE_TOKEN` |
+| 数据库迁移 | 构建**不会**自动 `migrate deploy` | 本地对着生产库跑一次 `DATABASE_URL=<生产串> pnpm db:deploy`,或在 Build Command 前置该命令 |
+| 定时任务 | Vercel Cron **只发 GET** | `vercel.json` 已配 `crons`(每日 01:00 UTC = 北京 09:00);再设 `CRON_SECRET`,Vercel 会自动带 `Authorization: Bearer $CRON_SECRET` |
+
+数据库用 Neon / Supabase 这类外部托管 PostgreSQL,连接串填 `DATABASE_URL`
+(Serverless 建议用带连接池的那个串)。
+
 ⚠ **大陆可达性**:`*.vercel.app` 在大陆访问不稳定,Vercel 无大陆节点。
-Vercel 仅用于团队开发与演示;**客户 UAT 与生产走第三节的 Docker 路径**。
+Vercel 仅用于团队开发与演示;**客户 UAT 与生产走第五节的 Docker 路径**。
 
 ---
 
-## 三、Docker(客户 UAT / 生产,国内主机)
+## 五、Docker(客户 UAT / 生产,国内主机)
 
 > ⚠ **验证状态**:Dockerfile 与 compose **尚未经真实 `docker build` 验证**(开发机无 Docker)。
 > 已验证的部分:`BUILD_STANDALONE=1` 产出的 `.next/standalone/server.js` 可独立启动
@@ -153,7 +268,7 @@ location / {
 
 ---
 
-## 四、子路径部署(挂 ezPLM 域名反代)
+## 六、子路径部署(挂 ezPLM 域名反代)
 
 融合钉子 3:`basePath` 可配,便于将来以 `/scm` 挂在 ezPLM 域名下(L2 体验融合)。
 
@@ -176,7 +291,7 @@ CI 的 `docker-build` job 会同时构建根路径与 `/scm` 两种形态,防止
 
 ---
 
-## 五、数据库迁移
+## 七、数据库迁移
 
 | 场景 | 命令 | 说明 |
 |---|---|---|
@@ -189,7 +304,7 @@ CI 的 `docker-build` job 会同时构建根路径与 `/scm` 两种形态,防止
 
 ---
 
-## 六、定时任务(催办)
+## 八、定时任务(催办)
 
 SPEC §14:每日扫描 `nextReminderAt`,提前 4 天催办。
 
@@ -198,7 +313,10 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-- Vercel:用 Vercel Cron 配置每日触发;
+接口 **GET 与 POST 同效**(同一套 `CRON_SECRET` 校验):Vercel Cron 只发 GET,
+自建 crontab 习惯用 POST,两边都能调。
+
+- Vercel:`vercel.json` 已配 `crons`,再设 `CRON_SECRET` 即生效(Vercel 自动带 Bearer 头);
 - 国内主机:用系统 crontab 或云厂商定时任务调用上述接口;
 - **未配置 `CRON_SECRET` 时接口返回 503 拒绝运行** —— 不接受无鉴权触发;
 - 幂等键 = 行 ID + ETA + 当天日期,同日重复触发不会重复生成催办记录。
@@ -208,7 +326,7 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 
 ---
 
-## 七、上线前检查清单
+## 九、上线前检查清单
 
 - [ ] `AUTH_SECRET` 已换成强随机值(不是 `change-me`)
 - [ ] `DATABASE_URL` 指向外部托管 PostgreSQL,且已备份策略
@@ -222,7 +340,7 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 
 ---
 
-## 八、当前未接通的外部依赖(如实记录)
+## 十、当前未接通的外部依赖(如实记录)
 
 | 依赖 | 状态 | 影响 |
 |---|---|---|
@@ -234,7 +352,7 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 
 ---
 
-## 九、SPEC §17 测试清单覆盖对照
+## 十一、SPEC §17 测试清单覆盖对照
 
 | # | SPEC §17 E2E 要求 | 覆盖用例 |
 |---|---|---|

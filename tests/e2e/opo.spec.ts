@@ -96,17 +96,35 @@ test("ERP 交期回写模板可导出(替代路径,非 API 直写)", async ({ pa
   expect(download.suggestedFilename()).toMatch(/^erp-eta-template-.*\.xlsx$/);
 });
 
-test("催办 Cron:无 CRON_SECRET 鉴权一律拒绝", async ({ request }) => {
-  // 未带 Authorization
-  const res = await request.post("/api/cron/opo-reminders");
-  // 未配置 secret → 503;已配置但未授权 → 401。两者都必须拒绝,绝不放行
-  expect([401, 503]).toContain(res.status());
+test("催办 Cron:鉴权由路由的 CRON_SECRET 把关,且必须能被外部调度器(GET)触发", async ({
+  request,
+}) => {
+  const secret = process.env.CRON_SECRET ?? "e2e-cron-secret";
 
-  // 带错误 secret
-  const res2 = await request.post("/api/cron/opo-reminders", {
-    headers: { authorization: "Bearer wrong-secret" },
-  });
-  expect([401, 503]).toContain(res2.status());
+  // 未带 Authorization / 带错 secret:一律拒绝
+  for (const opts of [{}, { headers: { authorization: "Bearer wrong-secret" } }]) {
+    for (const method of ["post", "get"] as const) {
+      const res = await request[method]("/api/cron/opo-reminders", opts);
+      expect([401, 503]).toContain(res.status());
+      // 关键:拒绝必须来自**路由的 CRON_SECRET 校验**,不是会话中间件。
+      // 中间件若把 /api/cron 也当受保护接口挡掉(回「未登录」),
+      // 路由的 secret 校验永远走不到,外部调度器调它会静默失效 —— 这条断言就是防这个。
+      expect(await res.text()).not.toContain("未登录");
+    }
+  }
+
+  // 带正确 secret:GET 与 POST 都必须能跑
+  // (Vercel Cron 只发 GET;自建 crontab 习惯用 POST)
+  for (const method of ["get", "post"] as const) {
+    const res = await request[method]("/api/cron/opo-reminders", {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    // 诚实 UI:接口自己就得说明邮件没真发
+    expect(body.note).toContain("预览/模拟");
+  }
 });
 
 test("管理工作台 KPI 由明细派生且可下钻", async ({ page }) => {

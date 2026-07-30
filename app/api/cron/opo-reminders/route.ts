@@ -10,7 +10,12 @@ export const runtime = "nodejs";
  * ⚠ 本接口只落 ReminderLog(PENDING),**不真的发送邮件** ——
  * 邮件通道为预览/模拟,不得声称已发送。
  */
-export async function POST(req: Request) {
+/**
+ * GET 与 POST 同一套逻辑与同一套鉴权。
+ * 需要 GET 是因为 **Vercel Cron 只发 GET**(且自动带 `Authorization: Bearer $CRON_SECRET`);
+ * 自建 crontab / Railway 侧调度习惯用 POST。缺了 GET,Vercel 上的定时任务会 405 静默失效。
+ */
+async function handle(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     return NextResponse.json(
@@ -41,4 +46,12 @@ export async function POST(req: Request) {
     results,
     note: "已生成催办记录(状态 PENDING);邮件发送为预览/模拟,尚未接入真实邮件通道",
   });
+}
+
+export async function GET(req: Request) {
+  return handle(req);
+}
+
+export async function POST(req: Request) {
+  return handle(req);
 }

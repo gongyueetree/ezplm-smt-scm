@@ -30,6 +30,9 @@ export default defineConfig({
     command: process.env.E2E_DEV ? "pnpm dev" : "pnpm build && pnpm start",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
+    // 催办接口的鉴权必须在**已配置** CRON_SECRET 的前提下测,
+    // 否则它一律 503,测不到"带正确 secret 能过、带错的过不去"
+    env: { CRON_SECRET: process.env.CRON_SECRET ?? "e2e-cron-secret" },
     timeout: 300_000,
   },
 });
