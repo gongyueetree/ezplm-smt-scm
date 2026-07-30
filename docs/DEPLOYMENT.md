@@ -183,21 +183,25 @@ Railway 跑的是**长驻容器**(直接用仓库根目录的 `Dockerfile`),这�
    > 持久化本来也不靠该声明:自建主机用 `-v ezplm-storage:/app/.storage`,Railway 用上面这个卷。
 
 5. Settings → Networking → **Generate Domain** 得到公网地址;
-6. 灌种子(演示账号 + 示例物料):Railway 面板的服务 Console 里执行
+6. 灌种子(演示账号 + 示例物料):**从运维机器连库执行,不在容器内跑**。
 
    ```bash
-   NODE_ENV=development ./node_modules/.bin/prisma db seed
+   read -rs "PGURL?粘贴 DATABASE_PUBLIC_URL 后回车:" && echo && read -rs "PW?设置演示口令后回车:" && echo && SEED_DEMO_PASSWORD="$PW" DATABASE_URL="$PGURL" pnpm exec prisma db seed; unset PGURL PW
    ```
 
-   要点(都是实测踩出来的):
+   - 连接串取 Postgres 服务的 **`DATABASE_PUBLIC_URL`**;`DATABASE_URL` 是
+     `postgres.railway.internal`,只能容器内访问。SSL 报错时 URL 末尾加 `?sslmode=require`;
+   - **公网部署务必设 `SEED_DEMO_PASSWORD`**,不要用缺省 `demo1234` —— 那是把门敞开;
+   - `prisma/seed.ts` 用 dotenv 且**不覆盖**已存在变量,故命令行传入的 `DATABASE_URL` 会生效,
+     不会误灌本地开发库;
+   - 表结构已由容器启动时的 `migrate deploy` 建好,这一步只灌数据。
 
-   - 运行镜像**没有启用 corepack**,`pnpm` 不在 PATH,用 `./node_modules/.bin/prisma`
-     (entrypoint 用的就是这条路径,可靠);
-   - 种子在 `NODE_ENV=production` 下会**自行拒绝执行**(防止把演示口令带进生产)。
-     守卫是运行时读 `NODE_ENV`,所以像上面那样**内联覆盖**即可,不必改服务变量、不必重新部署;
-   - `prisma db seed` 会 spawn `tsx`(见 `prisma.config.ts` 的 `migrations.seed`),
-     镜像已把 `/app/node_modules/.bin` 加进 `PATH`;若用旧镜像会报 `spawn tsx ENOENT`,
-     临时解法是 `PATH="/app/node_modules/.bin:$PATH"` 前置。
+   **为什么不在容器里跑**(实测结论,2026-07-29):运行层是 standalone 产物,
+   **不含应用源码**(没有 `lib/`、没有 `tsconfig.json`),而 `prisma/seed.ts` 依赖
+   `../lib/auth/password` 与 `../lib/server/audit`,容器内必然 `Cannot find module`。
+   这与「生产禁跑演示种子」的守卫方向一致 —— **不要**为了灌演示数据把源码塞进生产镜像。
+   容器内仍保留 `./node_modules/.bin/prisma migrate deploy` 能力(entrypoint 正是用它),
+   镜像也已把 `/app/node_modules/.bin` 加进 `PATH`(否则 Prisma spawn `tsx` 会 ENOENT)。
 
 7. **不要在平台上写死 `PORT`**:Railway 运行时会注入自己的 `PORT`(实测 8080),
    `server.js` 跟随环境变量。手工设成 3000 会造成代理端口与监听端口错配,直接打不开。
