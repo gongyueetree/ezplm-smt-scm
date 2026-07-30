@@ -127,6 +127,16 @@ git push -u origin feature/nextjs-agent-v1
 > HTTPS 推送时 GitHub 要的密码是 **Personal Access Token**(Settings → Developer settings →
 > Tokens),不是账号密码。让 git 记住它:`git config --global credential.helper osxkeychain`。
 
+**首次推送若报 `send-pack: unexpected disconnect while reading sideband packet`**:
+git 默认用 chunked 上传 pack,部分网络/代理会把分块传输掐断(表现为鉴权明明通过、
+`POST git-receive-pack (chunked)` 之后直接断)。改成按 Content-Length 一次性上传即可:
+
+```bash
+git config http.postBuffer 524288000
+```
+
+本仓库已写入该配置(2026-07-29 实测:加之前必断,加之后一次推送成功)。
+
 ### 2.3 分支现状
 
 `main` 是旧账号仓库的历史;开发成果全在 `feature/nextjs-agent-v1`(领先 `main` 数十个提交)。
