@@ -36,9 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 不在这里写 version:package.json 的 packageManager 已固定 pnpm@10.28.2。
+      # 两处都写会被 action 判为版本冲突而直接失败(Multiple versions of pnpm specified)。
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
