@@ -1,0 +1,10 @@
+# GitHub 语言统计按字节算。legacy-static/ 是只作参考、禁止修改的旧静态原型(约 8MB HTML),
+# 会把这个 Next.js 项目的语言统计整个带偏(HTML 76% vs TypeScript 17%)。
+# 标为 vendored 后不计入语言统计,也不在 PR diff 里默认展开 —— 它本来就不该被审阅。
+legacy-static/** linguist-vendored
+
+# 参考资料同理:不是本项目的源码
+reference/** linguist-vendored
+
+# 文档不计入语言统计
+docs/** linguist-documentation
