@@ -37,7 +37,12 @@ test("新建模板:留空 Markup 显示「未维护」,未确认口径全程标�
   await page.getByRole("button", { name: "创建" }).click();
   await expect(page.getByTestId("tpl-msg")).toContainText("已创建模板");
 
-  const row = page.locator("tbody tr").filter({ hasText: name });
+  // 按卡片收窄:模板名还会出现在「客户等级与命中的模板」表的命中说明里
+  // (如「回落通用模板「E2E通用-…」」),不收窄会匹配到多行
+  const row = page
+    .locator(".card", { hasText: "报价模板" })
+    .locator("tbody tr")
+    .filter({ hasText: name });
   await expect(row).toContainText("未维护");
   await expect(row).toContainText("口径待确认");
   await expect(row).toContainText("通用");

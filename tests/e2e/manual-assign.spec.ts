@@ -119,12 +119,20 @@ test("市场行情:显示阶梯价与供货,并明示非实时且不做汇率换
   const panel = page.getByTestId("alt-results");
   await expect
     .poll(
+      // 三种都是合法终局:拿到行情 / 没有候选 / 有候选但数据源没给行情
+      // (CI 不注入三方 Key,走 Mock,正常会落到第三种)
       async () =>
         (await panel.getByText("市场行情").count()) +
-        (await panel.getByText(/未找到够格的替代候选/).count()),
+        (await panel.getByText(/未找到够格的替代候选/).count()) +
+        (await panel.getByText(/未取到行情/).count()),
       { timeout: 240_000 },
     )
     .toBeGreaterThan(0);
+
+  if ((await panel.getByText(/未取到行情/).count()) > 0) {
+    // 无凭据环境:必须说清"查不到"而不是留白,也不得暗示无货
+    await expect(panel.getByText(/不代表无货或无价/).first()).toBeVisible();
+  }
 
   if ((await panel.getByText("市场行情").count()) > 0) {
     // 诚实 UI:非实时、目录价、不含税费

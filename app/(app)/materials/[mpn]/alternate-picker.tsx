@@ -217,6 +217,7 @@ export function AlternatePicker({
                   key={r.mpn}
                   result={r}
                   rank={i + 1}
+                  marketRequested
                   selected={sel.isSelected(r.mpn)}
                   selectBusy={sel.busyMpn === r.mpn}
                   onToggleSelect={(next) => void sel.toggle(r, mode, next)}

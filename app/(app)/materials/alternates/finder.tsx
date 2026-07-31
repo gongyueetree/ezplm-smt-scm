@@ -347,6 +347,7 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
                 key={r.mpn}
                 result={r}
                 rank={i + 1}
+                marketRequested={includeMarket}
                 selected={sel.isSelected(r.mpn)}
                 selectBusy={sel.busyMpn === r.mpn}
                 onToggleSelect={(next) => void sel.toggle(r, mode, next)}

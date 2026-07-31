@@ -153,6 +153,8 @@ export interface AlternateResultCardProps {
   selected?: boolean;
   onToggleSelect?: (next: boolean) => void;
   selectBusy?: boolean;
+  /** 本次查询是否勾了「查询市场行情」;勾了却没取到要如实说明,不能静默留白 */
+  marketRequested?: boolean;
 }
 
 export function AlternateResultCard({
@@ -161,6 +163,7 @@ export function AlternateResultCard({
   selected,
   onToggleSelect,
   selectBusy,
+  marketRequested,
 }: AlternateResultCardProps) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -205,7 +208,18 @@ export function AlternateResultCard({
         <Metric value={r.confidence} label="结论可信" />
       </div>
 
-      {r.market ? <MarketBlock market={r.market} /> : null}
+      {r.market ? (
+        <MarketBlock market={r.market} />
+      ) : marketRequested ? (
+        // 勾了行情却没拿到:数据源未配置或未返回。**说清楚**,
+        // 留白会让人以为系统压根没查
+        <div className="banner soft" style={{ marginTop: 8 }}>
+          <span className="small">
+            未取到行情 —— 分销商数据源未配置或本次未返回该型号报价。
+            这不代表无货或无价,只代表<b>此处查不到</b>。
+          </span>
+        </div>
+      ) : null}
 
       {r.warnings.map((w, k) => (
         <div className="banner warn" key={k} style={{ marginTop: 8 }}>
