@@ -397,6 +397,44 @@ curl -X POST https://your-domain/api/cron/opo-reminders \
 
 ---
 
+## 九之二、上线后功能自查清单(六批整改)
+
+部署完成后按此表逐项打开,即可确认该批是否真的上线。任一页打不开或看不到对应元素,
+说明镜像不是最新的 —— 回看 Deploy Logs 里 `migrations found` 的数量是否与
+`prisma/migrations` 目录一致。
+
+| 批次 | 验收入口 | 看到什么算上线 |
+|---|---|---|
+| 1 报价页整改 | 报价详情 → 打印视图 | 「需求方(甲方)」「商务条款」「替代料 MFG / MPN」列 |
+| 2 BOM 台账 | `/bom`、`/bom/imports` | 「EOL 物料占用 BOM」「超期未更新 BOM」两张卡片;导入历史台账 |
+| 3 物料与库存 | `/materials`、`/inventory`、`/settings/sync-log` | 「SMT 工艺(MSL / 包装 / 盘装)」列;库存页客户/日期筛选;ERP 同步日志 |
+| 4 批量报价与损耗 | `/quotes`、`/scrap` | 「批量 update 报价」按钮;损耗报告页 |
+| 5 客户分级 | `/settings/quote-templates` | 报价模板表 + 「客户等级与命中的模板」推演表 |
+| 6 供应商协同 | `/suppliers/collab` | 「供应商协同」页,且全页无「已发送」字样 |
+
+### 迁移与提交的对应关系
+
+容器启动时跑 `prisma migrate deploy`,**任一迁移失败即拒绝启动**(不接受用未迁移的库跑)。
+六批各自带的迁移:
+
+```
+20260730073140_import_job_file_names          批次2
+20260730160052_part_process_attr              批次3
+20260730163547_quote_batch_and_scrap          批次4
+20260730164843_customer_tier_quote_template   批次5
+20260730170207_supplier_collab                批次6
+```
+
+Deploy Logs 里 `N migrations found` 的 N 应与 `ls prisma/migrations | wc -l` 一致。
+
+### ⚠ Redeploy 不会拉新代码
+
+Railway 的 **Redeploy 是"用同一个提交再部一次"**,不会去取分支最新提交。
+若某次推送的 webhook 未被处理(例如平台故障期间),Deployments 列表里不会出现该提交,
+此时点任何现有部署的 Redeploy 都无济于事 —— **需要推一个新提交**触发构建。
+
+---
+
 ## 十、当前未接通的外部依赖(如实记录)
 
 | 依赖 | 状态 | 影响 |
