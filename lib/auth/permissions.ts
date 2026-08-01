@@ -34,6 +34,8 @@ export const PERMISSIONS = [
   "trace.containment.propose",
   "trace.containment.approve",
   "trace.export",
+  // 权限本身的管理权 —— 默认只给 MANAGEMENT
+  "settings.permissions.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -114,6 +116,61 @@ export function hasPermission(
   required: Permission,
 ): boolean {
   return perms.has(required);
+}
+
+export type PermissionSource = "ROLE_DEFAULT" | "TENANT_GRANT" | "USER_GRANT";
+
+export interface PermissionExplanation {
+  permission: Permission;
+  granted: boolean;
+  /** 最终由谁决定的 —— 便于回答"他为什么有/没有这个权限" */
+  decidedBy: PermissionSource | "USER_REVOKE" | "NONE";
+  /** 完整来源链(按判定顺序) */
+  trail: { source: PermissionSource | "USER_REVOKE"; detail: string }[];
+}
+
+/**
+ * 逐权限解释来源。
+ *
+ * 权限配置页最有价值的不是"能改",而是能回答**"他为什么有这个权限"** ——
+ * 三层叠加时,光看最终结果没法排查配错在哪一层。
+ */
+export function explainPermissions(
+  roles: readonly RoleName[],
+  tenantGrants: readonly { role: RoleName; permission: string }[] = [],
+  userOverrides: readonly PermissionOverride[] = [],
+): PermissionExplanation[] {
+  return PERMISSIONS.map((permission) => {
+    const trail: PermissionExplanation["trail"] = [];
+    let granted = false;
+    let decidedBy: PermissionExplanation["decidedBy"] = "NONE";
+
+    for (const r of roles) {
+      if ((ROLE_DEFAULT_PERMISSIONS[r] ?? []).includes(permission)) {
+        granted = true;
+        decidedBy = "ROLE_DEFAULT";
+        trail.push({ source: "ROLE_DEFAULT", detail: `角色 ${r} 的默认权限` });
+      }
+    }
+    for (const g of tenantGrants) {
+      if (roles.includes(g.role) && g.permission === permission) {
+        granted = true;
+        decidedBy = "TENANT_GRANT";
+        trail.push({ source: "TENANT_GRANT", detail: `租户为角色 ${g.role} 额外授予` });
+      }
+    }
+    for (const o of userOverrides) {
+      if (o.permission !== permission) continue;
+      granted = o.granted;
+      decidedBy = o.granted ? "USER_GRANT" : "USER_REVOKE";
+      trail.push({
+        source: o.granted ? "USER_GRANT" : "USER_REVOKE",
+        detail: o.granted ? "用户级单独授予" : "用户级明确回收(覆盖前面所有授予)",
+      });
+    }
+
+    return { permission, granted, decidedBy, trail };
+  });
 }
 
 /** 任一满足即可 */

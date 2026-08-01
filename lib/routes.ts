@@ -267,6 +267,15 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["MANAGEMENT"],
         children: [
           {
+            path: "/settings/permissions",
+            label: "权限配置",
+            icon: "gear",
+            plannedPr: "PR-D",
+            desc: "角色默认权限只读展示;租户级授予与用户级授予/回收可配;含「他为什么有这个权限」的来源推演。",
+            implemented: true,
+            roles: ["MANAGEMENT"],
+          },
+          {
             path: "/settings/integrations/erp",
             label: "ERP 同步",
             icon: "db",
