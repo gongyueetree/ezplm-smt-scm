@@ -6,10 +6,14 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { FIELD_LABELS, type EnrichableField } from "@/lib/domain/field-merge";
+import { prisma } from "@/lib/server/db";
 import { listAlternateSelections } from "@/lib/server/repositories/alternate-selection";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
+import { loadPermissions } from "@/lib/server/permissions";
 import { getSession } from "@/lib/server/session";
+import { tenantWhere } from "@/lib/server/tenant-scope";
 import { AlternatePicker } from "./alternate-picker";
+import { PartDocuments } from "./documents";
 import { LibraryPreview, LibraryPreviewFallback } from "./library-preview";
 import { LiveOffers } from "./live-offers";
 import { Model3D } from "./model-3d";
@@ -60,6 +64,16 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
   const session = (await getSession())!;
   const d = await getPartDetail(session.tenantId, mpn);
   const selections = await listAlternateSelections(session, mpn);
+  // 文档挂在**本地物料记录**上;只存在于 ezPLM 缓存的型号没有本地行,组件会如实说明
+  const [localPart, perms] = await Promise.all([
+    prisma.part.findFirst({
+      where: tenantWhere(session.tenantId, { mpn }),
+      select: { id: true },
+    }),
+    loadPermissions(session),
+  ]);
+  const localPartId = localPart?.id ?? null;
+  const canUploadDoc = perms.has("material.create");
 
   const model3d = d.documents.find((x) => x.kind === "MODEL_3D") ?? null;
 
@@ -339,6 +353,8 @@ export default async function PartDetailPage({ params }: { params: Promise<{ mpn
           </div>
         )}
       </Card>
+
+      <PartDocuments partId={localPartId} canUpload={canUploadDoc} />
 
       {/* ⑦ 替代料 */}
       <Card

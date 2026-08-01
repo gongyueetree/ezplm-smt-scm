@@ -6,6 +6,7 @@ import { digiKeyMode } from "@/lib/providers/digikey";
 import { mouserMode } from "@/lib/providers/mouser";
 import { PageHeader } from "@/components/ui/page-header";
 import { loadPermissions } from "@/lib/server/permissions";
+import { BulkImportParts } from "./bulk-import";
 import { CreatePartDrawer } from "./create-part-drawer";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
@@ -140,7 +141,12 @@ export default async function MaterialsPage({
     <div>
       <PageHeader
         path="/materials"
-        actions={<CreatePartDrawer suppliers={suppliersForForm} canCreate={canCreate} />}
+        actions={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <BulkImportParts canCreate={canCreate} />
+            <CreatePartDrawer suppliers={suppliersForForm} canCreate={canCreate} />
+          </div>
+        }
       />
 
       <Card title="物料查询" sub="ezPLM 只读缓存;显示缓存时点,不代表实时">

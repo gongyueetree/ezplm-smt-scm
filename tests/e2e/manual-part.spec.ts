@@ -198,3 +198,123 @@ test("建料写入 AuditLog,可在系统设置中查到", async ({ page }) => {
   await page.goto("/settings");
   await expect(page.getByText("PART_CREATE").first()).toBeVisible({ timeout: 30_000 });
 });
+
+/* ---------------- 批量导入 + 文档与合规 ---------------- */
+
+function uniqPn(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`.toUpperCase();
+}
+
+test("批量导入:预览不写库;阻断行不建;疑似重复默认不建", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "engineering@demo.ezplm.cn");
+  const u = uniqPn();
+
+  // 一行全新、一行内部料号撞种子(QC-IC-0001)、一行同 MPN 撞种子
+  const text = [
+    "内部料号,MPN,制造商,中文描述,物料分类",
+    `EE-BULK-${u},M-BULK-${u},ST,批量导入用例,IC`,
+    "QC-IC-0001,SOMETHING-ELSE,ST,料号撞车,IC",
+    `EE-SUS-${u},STM32F103C8T6,ST,同MPN疑似,IC`,
+  ].join("\n");
+
+  const preview = await page.request.post("/api/materials/parts/bulk-import", {
+    data: { text, mode: "PREVIEW" },
+  });
+  expect(preview.status()).toBe(200);
+  const pb = await preview.json();
+  expect(pb.note).toContain("未创建任何物料");
+  expect(pb.plan.willCreate).toBe(1);
+  expect(pb.plan.blocked).toBe(1);
+  expect(pb.plan.suspected).toBe(1);
+
+  // 预览确实没写库
+  const check = await page.request.get(`/materials?q=EE-BULK-${u}`);
+  void check;
+
+  const exec = await page.request.post("/api/materials/parts/bulk-import", {
+    data: { text, mode: "EXECUTE" },
+  });
+  expect(exec.status()).toBe(201);
+  const eb = await exec.json();
+  // 只建全新那一行:阻断不建,疑似默认也不建
+  expect(eb.created).toBe(1);
+  expect(eb.note).toContain("阻断重复");
+  expect(eb.note).toContain("需人工确认后才建");
+});
+
+test("批量导入:同一文件内料号重复在解析阶段就被拦下", async ({ page }) => {
+  await login(page, "engineering@demo.ezplm.cn");
+  const u = uniqPn();
+  const res = await page.request.post("/api/materials/parts/bulk-import", {
+    data: {
+      text: `内部料号,MPN\nEE-D-${u},M1\nEE-D-${u},M2`,
+      mode: "PREVIEW",
+    },
+  });
+  const body = await res.json();
+  expect(body.plan.rows).toHaveLength(1);
+  expect(JSON.stringify(body.errors)).toContain("已出现");
+});
+
+test("**文档有效期:未填不视为长期有效**,且过期项进合规预警", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "engineering@demo.ezplm.cn");
+  const u = uniqPn();
+
+  const created = await page.request.post("/api/materials/parts", {
+    data: {
+      target: "ACTIVE",
+      internalPn: `EE-DOC-${u}`,
+      mpn: `M-DOC-${u}`,
+      categoryL1: "IC",
+      manufacturer: "ST",
+      description: "文档用例",
+    },
+  });
+  expect(created.status()).toBe(201);
+  const { partId } = await created.json();
+
+  // ① 不填有效期
+  const noExpiry = new FormData();
+  noExpiry.append("file", new Blob(["dummy"], { type: "application/pdf" }), "rohs-no-expiry.pdf");
+  noExpiry.append("kind", "ROHS_REPORT");
+  const r1 = await page.request.post(`/api/materials/parts/${partId}/documents`, {
+    multipart: {
+      file: { name: "rohs-no-expiry.pdf", mimeType: "application/pdf", buffer: Buffer.from("dummy") },
+      kind: "ROHS_REPORT",
+    },
+  });
+  expect(r1.status()).toBe(201);
+  expect(await r1.text()).toContain("不视为长期有效");
+
+  // ② 已过期
+  const r2 = await page.request.post(`/api/materials/parts/${partId}/documents`, {
+    multipart: {
+      file: { name: "reach-expired.pdf", mimeType: "application/pdf", buffer: Buffer.from("dummy") },
+      kind: "REACH_REPORT",
+      validUntil: "2020-01-01",
+    },
+  });
+  expect(r2.status()).toBe(201);
+
+  const list = await page.request.get(`/api/materials/parts/${partId}/documents`);
+  const lb = await list.json();
+  expect(lb.documents).toHaveLength(2);
+  expect(lb.documents.some((d: { validUntil: string | null }) => d.validUntil === null)).toBe(true);
+
+  // 合规汇总:过期计入紧急,未标注单独计数
+  const comp = await page.request.get("/api/materials/compliance");
+  const cb = await comp.json();
+  expect(cb.summary.urgentCount).toBeGreaterThan(0);
+  expect(cb.summary.unknownCount).toBeGreaterThan(0);
+  expect(cb.urgent.some((x: { fileName: string }) => x.fileName === "reach-expired.pdf")).toBe(true);
+});
+
+test("文档区在详情页可见,且无文档时不暗示合规", async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page, "engineering@demo.ezplm.cn");
+  await page.goto("/materials/STM32F103C8T6");
+  await expect(page.getByText("文档与合规").first()).toBeVisible();
+  await expect(page.getByText(/不等于该料合规/)).toBeVisible();
+});

@@ -19,6 +19,7 @@ import {
   type DuplicateCandidate,
   type FieldIssue,
 } from "@/lib/domain/part-create";
+import type { ImportPlan, ParsedImportRow } from "@/lib/domain/part-bulk-import";
 import { normalizeMpn } from "@/lib/providers/common/mpn";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
@@ -367,6 +368,119 @@ export async function reviewPart(
     });
   });
   return { ok: true };
+}
+
+/** 取库内已有的内部料号与 MPN 集合(批量导入的重复判定输入) */
+export async function loadExistingKeys(
+  session: SessionRef,
+): Promise<{ internalPns: Set<string>; mpns: Set<string> }> {
+  const rows = await prisma.part.findMany({
+    where: tenantWhere(session.tenantId),
+    select: { internalPn: true, mpn: true },
+    take: 20000,
+  });
+  return {
+    internalPns: new Set(rows.map((r) => r.internalPn)),
+    mpns: new Set(rows.filter((r) => r.mpn).map((r) => r.mpn!.toUpperCase())),
+  };
+}
+
+/**
+ * 批量创建物料(origin=IMPORTED)。
+ *
+ * 纪律:
+ * - **阻断行一律不建**(内部料号重复);
+ * - **疑似重复默认不建**,除非调用方显式 includeSuspected —— 与手工建料同一套口径:
+ *   不静默放行,也不静默丢弃;
+ * - 单行失败不拖垮整批。
+ */
+export async function bulkCreateParts(
+  session: SessionRef,
+  rows: readonly ParsedImportRow[],
+  plan: ImportPlan,
+  includeSuspected: boolean,
+): Promise<{ count: number; skipped: number; note: string | null }> {
+  const outcomeByRow = new Map(plan.rows.map((p) => [p.rowNo, p.outcome]));
+  const targets = rows.filter((r) => {
+    const o = outcomeByRow.get(r.rowNo);
+    if (o === "BLOCKED_DUPLICATE") return false;
+    if (o === "SUSPECTED_DUPLICATE") return includeSuspected;
+    return true;
+  });
+
+  let count = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const r of targets) {
+      try {
+        const part = await tx.part.create({
+          data: tenantData(session.tenantId, {
+            internalPn: r.internalPn,
+            mpn: r.mpn,
+            manufacturer: r.manufacturer,
+            description: r.description,
+            descriptionEn: r.descriptionEn,
+            brand: r.brand,
+            note: r.note,
+            categoryL1: r.categoryL1,
+            categoryL2: r.categoryL2,
+            footprint: r.footprint,
+            origin: "IMPORTED",
+            status: "ACTIVE",
+            sourcedFrom: "LOCAL",
+          }),
+        });
+        if (r.msl || r.packaging || r.reelQty != null || r.moq != null || r.spq != null || r.leadTimeDays != null) {
+          await tx.partProcessAttr.create({
+            data: tenantData(session.tenantId, {
+              partId: part.id,
+              msl: r.msl,
+              packaging: r.packaging,
+              reelQty: r.reelQty,
+              moq: r.moq,
+              spq: r.spq,
+              leadTimeDays: r.leadTimeDays,
+              updatedById: session.userId,
+            }),
+          });
+        }
+        await tx.partCreationRecord.create({
+          data: tenantData(session.tenantId, {
+            partId: part.id,
+            createdVia: "IMPORT",
+            duplicateResolution: outcomeByRow.get(r.rowNo) === "SUSPECTED_DUPLICATE" ? "CREATE_ANYWAY" : null,
+            duplicateReason:
+              outcomeByRow.get(r.rowNo) === "SUSPECTED_DUPLICATE"
+                ? "批量导入时人工确认「同 MPN 仍然创建」"
+                : null,
+            createdById: session.userId,
+          }),
+        });
+        count += 1;
+      } catch {
+        // 单行失败不影响整批
+      }
+    }
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: "PART_BULK_IMPORT",
+      entityType: "Part",
+      entityId: `bulk:${count}`,
+      after: { created: count, blocked: plan.blocked, suspected: plan.suspected, includeSuspected },
+    });
+  });
+
+  const skipped = rows.length - count;
+  return {
+    count,
+    skipped,
+    note:
+      plan.blocked > 0 || (plan.suspected > 0 && !includeSuspected)
+        ? `已跳过 ${plan.blocked} 行阻断重复${
+            !includeSuspected && plan.suspected > 0 ? `、${plan.suspected} 行疑似重复(需人工确认后才建)` : ""
+          }`
+        : null,
+  };
 }
 
 /** 按分类取动态属性定义(通用项 + 该分类专属项) */
