@@ -16,6 +16,7 @@ import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { getMouserProvider } from "@/lib/providers/mouser";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
+import { checkBomUsage, type PartStatusValue } from "@/lib/domain/part-lifecycle";
 import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 import type { SessionRef } from "./rfq";
 
@@ -408,6 +409,26 @@ export async function saveLineDecision(
     select: { id: true, mpn: true },
   });
   if (!line) return null;
+
+  /*
+   * PR-F 生产加固:**草稿物料不得进入正式 BOM**。
+   *
+   * 草稿是"还没填完、还没人审"的半成品。让它进 BOM 意味着报价、采购、追溯
+   * 全都建立在一份没人负责的数据上,而且往往要到出货后才被发现。
+   * 每种被拒状态给不同说明,让人知道该去催审核还是该换料。
+   */
+  if (input.partId) {
+    const part = await prisma.part.findFirst({
+      where: tenantWhere(session.tenantId, { id: input.partId }),
+      select: { status: true, internalPn: true },
+    });
+    if (part) {
+      const usage = checkBomUsage(part.status as PartStatusValue);
+      if (!usage.allowed) {
+        return { blocked: true as const, reason: `物料 ${part.internalPn}:${usage.reason}` };
+      }
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.bomLineDecision.findFirst({
