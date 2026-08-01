@@ -131,6 +131,14 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["ENGINEERING", "PROCUREMENT"],
       },
       {
+        path: "/materials/compliance",
+        label: "合规到期看板",
+        icon: "db",
+        plannedPr: "PR-D",
+        desc: "RoHS / REACH / COC 三类合规文档的有效期管控;「未标注有效期」按告警处理,「缺少文档」与「文档过期」分开统计。",
+        roles: ["ENGINEERING", "PM", "PROCUREMENT", "MANAGEMENT"],
+      },
+      {
         path: "/materials/alternates",
         label: "替代料查询",
         icon: "db",
