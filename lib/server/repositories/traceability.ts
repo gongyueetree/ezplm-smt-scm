@@ -22,6 +22,12 @@ import {
   type TraceEdgeInput,
 } from "@/lib/domain/trace-graph";
 import { parseTraceTemplate, type TraceTemplate } from "@/lib/domain/trace-import";
+import {
+  canQueryFrom,
+  scopeDescription,
+  scopeEdges,
+  type TraceScope,
+} from "@/lib/domain/trace-scope";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import type { SessionRef } from "@/lib/server/repositories/rfq";
@@ -285,6 +291,45 @@ export async function importTraceTemplate(
   };
 }
 
+/**
+ * 解析当前用户的追溯可见范围。
+ *
+ * SUPPLIER 角色**必须**有 supplierId 归属;没有归属就给一个空范围
+ * (ownLotNos=[]),任何查询都会被拒 —— 宁可不给数据,也不给全量。
+ */
+export async function resolveScope(session: SessionRef): Promise<TraceScope> {
+  if (!session.roles.includes("SUPPLIER")) return { role: "INTERNAL" };
+
+  const user = await prisma.user.findFirst({
+    where: tenantWhere(session.tenantId, { id: session.userId }),
+    select: { supplierId: true },
+  });
+  if (!user?.supplierId) return { role: "SUPPLIER", supplierKey: null, ownLotNos: [] };
+
+  const supplier = await prisma.supplier.findFirst({
+    where: tenantWhere(session.tenantId, { id: user.supplierId }),
+    select: { name: true, code: true },
+  });
+  // 收料表里存的是供应商名称(导入模板给的是名字),按名称与编码两路匹配
+  const lots = await prisma.receiptLot.findMany({
+    where: tenantWhere(session.tenantId, {
+      OR: [
+        { supplierId: user.supplierId },
+        ...(supplier?.name ? [{ supplierName: supplier.name }] : []),
+        ...(supplier?.code ? [{ supplierName: supplier.code }] : []),
+      ],
+    }),
+    select: { internalLot: true },
+    take: 5000,
+  });
+
+  return {
+    role: "SUPPLIER",
+    supplierKey: supplier?.name ?? null,
+    ownLotNos: lots.map((l) => l.internalLot),
+  };
+}
+
 /** 取全部图边(一期数据量小,一次load;大了再按需分片) */
 export async function loadEdges(session: SessionRef): Promise<TraceEdgeInput[]> {
   const rows = await prisma.traceEdge.findMany({
@@ -330,13 +375,38 @@ export async function resolveQuery(session: SessionRef, q: string): Promise<stri
 
 export interface TraceQueryResult {
   sourceRef: string;
+  /** 视图边界说明(内部视图 / 供应商受限视图) */
+  scopeNote: string;
+  /** 因越权被裁掉的关系数;>0 时 UI 必须提示"隐藏 ≠ 没有影响" */
+  truncatedEdges: number;
+  truncatedNotice: string | null;
   forward: { layers: string[][]; edges: TraceEdgeInput[] };
   backward: { layers: string[][]; edges: TraceEdgeInput[] };
   blastRadius: BlastRadius;
 }
 
-export async function queryTrace(session: SessionRef, sourceRef: string): Promise<TraceQueryResult> {
-  const edges = await loadEdges(session);
+export type QueryOutcome =
+  | { ok: true; result: TraceQueryResult }
+  | { ok: false; reason: string };
+
+export async function queryTraceScoped(
+  session: SessionRef,
+  sourceRef: string,
+): Promise<QueryOutcome> {
+  const scope = await resolveScope(session);
+  const gate = canQueryFrom(sourceRef, scope);
+  if (!gate.allowed) return { ok: false, reason: gate.reason ?? "无权查询该对象" };
+  return { ok: true, result: await queryTrace(session, sourceRef, scope) };
+}
+
+export async function queryTrace(
+  session: SessionRef,
+  sourceRef: string,
+  scope: TraceScope = { role: "INTERNAL" },
+): Promise<TraceQueryResult> {
+  const allEdges = await loadEdges(session);
+  const scoped = scopeEdges(allEdges, scope);
+  const edges = scoped.edges;
 
   // 数量口径:出货量按成品批次汇总;在库量 = 收料量 − 已发料量(**没有数据的批次不参与**)
   const [shipLines, issues, lots, wos, shipments] = await Promise.all([
@@ -366,6 +436,9 @@ export async function queryTrace(session: SessionRef, sourceRef: string): Promis
 
   return {
     sourceRef,
+    scopeNote: scopeDescription(scope),
+    truncatedEdges: scoped.truncatedEdges,
+    truncatedNotice: scoped.notice,
     forward: { layers: fwd.layers, edges: fwd.edges },
     backward: { layers: bwd.layers, edges: bwd.edges },
     blastRadius: computeBlastRadius({

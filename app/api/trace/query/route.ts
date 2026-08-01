@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { badRequest, notFound, requireSession } from "@/lib/server/api";
 import { requirePermission } from "@/lib/server/permissions";
-import { queryTrace, resolveQuery } from "@/lib/server/repositories/traceability";
+import { queryTraceScoped, resolveQuery } from "@/lib/server/repositories/traceability";
 
 export const runtime = "nodejs";
 
@@ -34,5 +34,10 @@ export async function GET(req: Request) {
     sourceRef = hits[0];
   }
 
-  return NextResponse.json(await queryTrace(auth.session, sourceRef));
+  const r = await queryTraceScoped(auth.session, sourceRef);
+  if (!r.ok) {
+    // 措辞与"不存在"一致:不给越权者一个可以枚举别家批次号的探测器
+    return NextResponse.json({ error: r.reason }, { status: 404 });
+  }
+  return NextResponse.json(r.result);
 }

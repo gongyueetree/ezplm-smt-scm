@@ -438,6 +438,10 @@ model User {
   passwordHash   String?
   /// 融合字段(可空):ezPLM 侧用户 ID,JWT 验签后映射
   externalUserId String?
+  /// 供应商账号归属(跨聚合引用,受控标量)。
+  /// SUPPLIER 角色**必须**有此归属,否则追溯查询一律拒绝 ——
+  /// 没有归属就无法判断"与自身相关",宁可不给数据也不给全量。
+  supplierId     String?
   /// 用户只停用不删除(审计记录长寿要求)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -447,6 +451,7 @@ model User {
 
   @@unique([tenantId, email])
   @@index([tenantId, externalUserId])
+  @@index([tenantId, supplierId])
 }
 
 /// 角色目录(tenant-scoped;name 限定五值枚举)

@@ -45,10 +45,10 @@ describe("RBAC 菜单过滤(SPEC §3)", () => {
     expect(paths).not.toContain("/settings");
   });
 
-  it("SUPPLIER 仅可见工作台与 OPO 协同", () => {
+  it("SUPPLIER 仅可见工作台、OPO 协同与**受限的**批次追溯", () => {
     const sections = filterSectionsForRoles(["SUPPLIER"]);
     const paths = sections.flatMap((s) => s.routes).map((r) => r.path);
-    expect(paths).toEqual(["/", "/suppliers/opo"]);
+    expect(paths).toEqual(["/", "/suppliers/opo", "/traceability"]);
   });
 
   it("空 section 整体隐藏", () => {

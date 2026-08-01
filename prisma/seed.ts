@@ -197,6 +197,19 @@ async function main() {
     });
   }
 
+  // 把演示供应商账号挂到 SUP-A —— SUPPLIER 角色**必须**有归属,
+  // 否则追溯查询一律被拒(没有归属就无法判断"与自身相关")。
+  const supA0 = await prisma.supplier.findUnique({
+    where: { tenantId_code: { tenantId: tenant.id, code: "SUP-A" } },
+    select: { id: true },
+  });
+  if (supA0) {
+    await prisma.user.updateMany({
+      where: { tenantId: tenant.id, email: "supplier@demo.ezplm.cn" },
+      data: { supplierId: supA0.id },
+    });
+  }
+
   // 示例 ERP 连接:Mock(演示可跑)与 Excel(真实兜底通道)。
   // 注意状态一律 NOT_CONFIGURED —— **没测过就不能说连上了**,由用户点「测试连接」后写入真实状态。
   for (const c of [

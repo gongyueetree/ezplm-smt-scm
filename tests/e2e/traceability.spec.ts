@@ -243,3 +243,73 @@ test("追溯动作写入 AuditLog", async ({ page }) => {
   await page.goto("/settings");
   await expect(page.getByText("TRACE_IMPORT").first()).toBeVisible({ timeout: 30_000 });
 });
+
+test("**供应商受限视图**:只见自己的批次与上游,看不到工单/客户,且隐藏数被报出来", async ({ page }) => {
+  test.setTimeout(180_000);
+  const s = ids(uniq());
+
+  // 内部账号先建链路,供应商用「华强北电子(示例)」= 种子里 SUP-A 的名称
+  await login(page, "engineering@demo.ezplm.cn");
+  await page.request.post("/api/trace/import", {
+    data: {
+      template: "RECEIPT",
+      text: `PO,供应商,内部批次,收料数量\n${s.po},华强北电子(示例),${s.lot},5000`,
+    },
+  });
+  await page.request.post("/api/trace/import", {
+    data: { template: "WO_ISSUE", text: `工单号,物料批次,发料数量\n${s.wo1},${s.lot},200` },
+  });
+  await page.request.post("/api/trace/import", {
+    data: {
+      template: "SHIPMENT",
+      text: `成品批次,工单号,客户,出货单号,出货数量\n${s.fg},${s.wo1},${s.customer},${s.ship},150`,
+    },
+  });
+
+  // 内部视图:完整链路可见
+  const inner = await page.request.get(`/api/trace/query?q=${encodeURIComponent(s.lot)}`);
+  const ib = await inner.json();
+  expect(ib.blastRadius.affectedCustomers).toBe(1);
+  expect(ib.truncatedEdges).toBe(0);
+  expect(ib.scopeNote).toContain("完整链路");
+
+  // 供应商视图:同一个批次
+  await login(page, "supplier@demo.ezplm.cn");
+  const res = await page.request.get(`/api/trace/query?q=${encodeURIComponent(s.lot)}`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+
+  // 纵向:看不到工单、成品、出货、客户
+  expect(body.blastRadius.affectedWorkOrders).toBe(0);
+  expect(body.blastRadius.affectedCustomers).toBe(0);
+  const text = JSON.stringify(body);
+  expect(text).not.toContain(s.wo1);
+  expect(text).not.toContain(s.customer);
+  expect(text).not.toContain(s.fg);
+
+  // 但必须说明这是受限视图 + 隐藏了多少条,不能被读成"下游没影响"
+  expect(body.truncatedEdges).toBeGreaterThan(0);
+  expect(body.truncatedNotice).toContain("受限视图");
+  expect(body.truncatedNotice).toContain("隐藏不等于没有影响");
+  expect(body.scopeNote).toContain("不对供应商开放");
+});
+
+test("**供应商查别家批次被拒,且措辞与「不存在」一致(不能拿来枚举)**", async ({ page }) => {
+  test.setTimeout(120_000);
+  const s = ids(uniq());
+  await login(page, "engineering@demo.ezplm.cn");
+  await page.request.post("/api/trace/import", {
+    data: { template: "RECEIPT", text: `PO,供应商,内部批次,收料数量\n${s.po},别家供应商,${s.lot},100` },
+  });
+
+  await login(page, "supplier@demo.ezplm.cn");
+  const other = await page.request.get(`/api/trace/query?ref=${encodeURIComponent(`LOT:${s.lot}`)}`);
+  expect(other.status()).toBe(404);
+  const otherText = await other.text();
+
+  const nonexistent = await page.request.get("/api/trace/query?ref=LOT:E2E-NEVER-EXISTED");
+  expect(nonexistent.status()).toBe(404);
+
+  // 两种情况的响应必须一样,否则可以据此判断某个批次号是否真实存在
+  expect(otherText).toBe(await nonexistent.text());
+});
