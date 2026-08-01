@@ -145,6 +145,58 @@ enum ErpLineOutcome {
   FAILED
 }
 
+/// 追溯数据来源。**没有 MES**,所以一期只有导入与 ERP 同步两条真实通道。
+enum TraceSource {
+  IMPORT
+  ERP_SYNC
+  MANUAL
+  MES
+}
+
+/// 追溯图的边类型(供应链正向顺序)
+enum TraceEdgeKind {
+  PO_TO_RECEIPT
+  RECEIPT_TO_LOT
+  LOT_TO_ISSUE
+  ISSUE_TO_WORK_ORDER
+  WORK_ORDER_TO_FG_LOT
+  FG_LOT_TO_SHIPMENT
+  SHIPMENT_TO_CUSTOMER
+}
+
+/// 质量事件状态
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  CONTAINED
+  CLOSED
+}
+
+/// 处置动作类型
+enum ContainmentKind {
+  FREEZE_LOT
+  PAUSE_WORK_ORDER
+  MARK_RECHECK
+  DRAFT_RMA
+  NOTIFY_SUPPLIER
+  NOTIFY_CUSTOMER
+  CREATE_CAPA
+  RECALL_ASSESSMENT
+  EXPORT_QUARANTINE_LIST
+}
+
+/// 处置执行状态。
+/// **本系统只能登记,外部系统是否执行是另一回事** —— 绝不用一个「已完成」糊过去。
+enum ContainmentState {
+  SUGGESTED
+  PENDING_APPROVAL
+  REGISTERED_LOCALLY
+  PENDING_EXTERNAL
+  EXTERNAL_CONFIRMED
+  FAILED
+  REJECTED
+}
+
 /// RFQ 状态机(SPEC §5)
 enum RfqStatus {
   DRAFT
@@ -345,6 +397,8 @@ enum AgentType {
   SOURCING
   QUOTE
   OPO
+  /// 追溯影响面分析:只出建议与证据,禁止自动冻结/通知/召回
+  TRACE
 }
 
 /// 集成作业类型(ERP Excel 模板兜底路径等)
@@ -1874,6 +1928,259 @@ model ErpWebhookEvent {
 
   @@unique([tenantId, connectionId, externalId])
   @@index([tenantId, processedAt])
+}
+
+// ============================================================
+// 追溯域(PR-C:批次级全链路)
+//
+// 数据主权与边界:本系统**没有 MES**,批次数据靠三张模板导入或 ERP 同步。
+// 一期只做到**批次级**,SN 级待 MES/SN 数据接入 —— 页面必须如实标注。
+// ============================================================
+
+/// 一次导入的批次(保存原始文件 + 行级校验结果,支持撤销未关联数据的错误导入)
+model TraceImportBatch {
+  id          String      @id @default(cuid())
+  tenantId    String
+  /// RECEIPT / WO_ISSUE / SHIPMENT 三张标准模板之一
+  template    String
+  fileKey     String?
+  fileName    String?
+  source      TraceSource @default(IMPORT)
+  totalRows   Int         @default(0)
+  okRows      Int         @default(0)
+  errorRows   Int         @default(0)
+  /// 行级错误明细(行号 + 原因),不静默丢弃
+  errors      Json?
+  /// 幂等键:同一文件重复导入不重复建数据
+  idempotencyKey String?
+  /// 撤销:只允许撤销尚未被下游引用的数据
+  revokedAt   DateTime?
+  revokedById String?
+  createdById String
+  createdAt   DateTime    @default(now())
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, template, createdAt])
+}
+
+/// 收料批次(PO → 供应商批次 → 内部批次的落点)
+model ReceiptLot {
+  id            String      @id @default(cuid())
+  tenantId      String
+  importBatchId String?
+  poNo          String?
+  poLineNo      Int?
+  supplierId    String?
+  supplierName  String?
+  mpn           String?
+  internalPn    String?
+  /// 供应商批次号
+  supplierLot   String?
+  /// 内部批次号(与 MaterialLot.lotNo 对应)
+  internalLot   String
+  receivedQty   Decimal     @db.Decimal(18, 4)
+  receivedAt    DateTime?
+  dateCode      String?
+  warehouse     String?
+  location      String?
+  source        TraceSource @default(IMPORT)
+  createdById   String
+  createdAt     DateTime    @default(now())
+
+  @@unique([tenantId, internalLot])
+  @@index([tenantId, poNo, poLineNo])
+  @@index([tenantId, mpn])
+  @@index([tenantId, supplierLot])
+}
+
+/// 内部物料批次(库存与发料的主体)
+model MaterialLot {
+  id         String   @id @default(cuid())
+  tenantId   String
+  lotNo      String
+  mpn        String?
+  internalPn String?
+  /// 收料带入的数量;已发料/剩余由发料行派生,**不落冗余计数**
+  receivedQty Decimal @db.Decimal(18, 4)
+  /// 冻结登记:仅代表**本系统已登记**,不代表 ERP/WMS 已锁库
+  frozenAt   DateTime?
+  frozenById String?
+  frozenReason String?
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, lotNo])
+  @@index([tenantId, mpn])
+}
+
+/// 生产工单
+model TraceWorkOrder {
+  id          String      @id @default(cuid())
+  tenantId    String
+  workOrderNo String
+  product     String?
+  bomVersion  String?
+  plannedQty  Decimal?    @db.Decimal(18, 4)
+  productionLine String?
+  startAt     DateTime?
+  needDate    DateTime?
+  status      String?
+  /// 暂停登记:同样只代表本系统已登记
+  pausedAt    DateTime?
+  pausedById  String?
+  pausedReason String?
+  source      TraceSource @default(IMPORT)
+  createdAt   DateTime    @default(now())
+
+  @@unique([tenantId, workOrderNo])
+}
+
+/// 工单发料(批次 → 工单的关键一跳)
+model WorkOrderMaterialIssue {
+  id            String   @id @default(cuid())
+  tenantId      String
+  importBatchId String?
+  workOrderNo   String
+  lotNo         String
+  mpn           String?
+  issuedQty     Decimal  @db.Decimal(18, 4)
+  returnedQty   Decimal? @db.Decimal(18, 4)
+  issuedAt      DateTime?
+  operator      String?
+  createdAt     DateTime @default(now())
+
+  @@unique([tenantId, workOrderNo, lotNo])
+  @@index([tenantId, lotNo])
+  @@index([tenantId, workOrderNo])
+}
+
+/// 成品批次
+model FinishedGoodsLot {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fgLotNo     String
+  workOrderNo String?
+  product     String?
+  producedQty Decimal? @db.Decimal(18, 4)
+  producedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, fgLotNo])
+  @@index([tenantId, workOrderNo])
+}
+
+/// 出货单与出货行(成品批次 → 客户)
+model TraceShipment {
+  id           String   @id @default(cuid())
+  tenantId     String
+  shipmentNo   String
+  customerId   String?
+  customerName String?
+  customerPo   String?
+  shippedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  lines TraceShipmentLine[]
+
+  @@unique([tenantId, shipmentNo])
+  @@index([tenantId, customerId])
+}
+
+model TraceShipmentLine {
+  id            String        @id @default(cuid())
+  tenantId      String
+  shipmentId    String
+  shipment      TraceShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  importBatchId String?
+  fgLotNo       String
+  shippedQty    Decimal       @db.Decimal(18, 4)
+  createdAt     DateTime      @default(now())
+
+  @@unique([tenantId, shipmentId, fgLotNo])
+  @@index([tenantId, fgLotNo])
+}
+
+/// 追溯图的边(冗余但必要:图遍历不该每次都去 join 五张表)
+model TraceEdge {
+  id       String        @id @default(cuid())
+  tenantId String
+  kind     TraceEdgeKind
+  /// 源与目标用「类型:业务键」表达,如 LOT:LOT-2026-001 / WO:WO-26-0412
+  fromRef  String
+  toRef    String
+  /// 该跳的数量(发料量/产出量/出货量)
+  qty      Decimal?      @db.Decimal(18, 4)
+  occurredAt DateTime?
+  source   TraceSource   @default(IMPORT)
+  createdAt DateTime     @default(now())
+
+  @@unique([tenantId, kind, fromRef, toRef])
+  @@index([tenantId, fromRef])
+  @@index([tenantId, toRef])
+}
+
+/// 追溯事件时间线
+model TraceEvent {
+  id        String      @id @default(cuid())
+  tenantId  String
+  ref       String
+  eventType String
+  detail    Json?
+  occurredAt DateTime
+  source    TraceSource @default(IMPORT)
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId, ref, occurredAt])
+}
+
+/// 质量事件(客诉 / 来料异常 / 制程异常的登记入口)
+model QualityIncident {
+  id          String         @id @default(cuid())
+  tenantId    String
+  code        String
+  title       String
+  /// 异常源:LOT / WO / FG / SHIPMENT / PO 的业务键
+  sourceRef   String
+  description String?
+  severity    String?
+  status      IncidentStatus @default(OPEN)
+  /// 影响范围分析快照(算出来即固化,便于事后复盘)
+  impactSnapshot Json?
+  reportedById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  actions ContainmentAction[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+/// 处置动作。
+///
+/// **状态必须区分「本系统已登记」与「外部系统已执行」** ——
+/// 未接 ERP/MES 时只能到 REGISTERED_LOCALLY / PENDING_EXTERNAL,
+/// 绝不显示「ERP 已冻结」「设备已停机」。
+model ContainmentAction {
+  id         String           @id @default(cuid())
+  tenantId   String
+  incidentId String
+  incident   QualityIncident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  kind       ContainmentKind
+  targetRef  String
+  state      ContainmentState @default(SUGGESTED)
+  /// 提议与批准分离:提议人 ≠ 批准人
+  proposedById String
+  proposedAt   DateTime       @default(now())
+  approvedById String?
+  approvedAt   DateTime?
+  rejectReason String?
+  /// 外部系统执行结果(ERP/MES 接通后回填)
+  externalRef   String?
+  externalNote  String?
+  note       String?
+  updatedAt  DateTime         @updatedAt
+
+  @@index([tenantId, incidentId, state])
 }
 
 // ============================================================

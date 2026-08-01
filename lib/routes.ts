@@ -248,6 +248,18 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "平台",
     routes: [
       {
+        path: "/traceability",
+        label: "批次级追溯",
+        icon: "box",
+        plannedPr: "PR-C",
+        desc: "批次级全链路追溯与影响范围分析;粒度为批次级,SN 级待 MES/SN 数据接入;隔离处置仅本系统登记并需人工审批。",
+        implemented: true,
+        // 暂不含 SUPPLIER:供应商只应看到**与自身相关**的 PO/批次,
+        // 而行级过滤(User→Supplier 归属)尚未实现。在有行级过滤之前开放入口
+        // 等于让供应商能查到别家客户的批次 —— 宁可不给入口,也不给一个漏数据的页面。
+        roles: ["ENGINEERING", "PROCUREMENT", "PM", "MANAGEMENT"],
+      },
+      {
         path: "/settings",
         label: "系统设置",
         icon: "gear",
