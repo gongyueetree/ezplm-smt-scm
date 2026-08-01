@@ -87,6 +87,64 @@ enum DuplicateResolution {
   CREATE_ANYWAY
 }
 
+/// ERP 厂商。业务代码**不得**判断具体厂商,一律走 ErpProvider 接口。
+enum ErpVendor {
+  KINGDEE
+  YONYOU
+  SAP
+  ORACLE
+  EXCEL
+  MOCK
+}
+
+/// 连接状态。**CONNECTED 只能在真实请求成功后写入** —— 不接受固定绿灯。
+enum ErpConnectionStatus {
+  NOT_CONFIGURED
+  PENDING_TEST
+  CONNECTED
+  DEGRADED
+  FAILED
+  DISABLED
+}
+
+/// 同步方向。受数据主权约束:ezPLM 为主数据源的实体不接受本系统覆盖。
+enum ErpSyncDirection {
+  ERP_TO_EZPLM
+  EZPLM_TO_ERP
+  BIDIRECTIONAL
+  IMPORT_ONLY
+  EXPORT_TEMPLATE_ONLY
+}
+
+/// 同步实体
+enum ErpEntityType {
+  MATERIAL
+  INVENTORY
+  OPEN_PO
+  WORK_ORDER
+  PURCHASE_ORDER
+  ETA_WRITEBACK
+  RECEIPT_LOT
+  SHIPMENT
+}
+
+/// 冲突处理策略
+enum ErpConflictPolicy {
+  STOP_ON_CONFLICT
+  SKIP_ON_CONFLICT
+  QUEUE_FOR_HUMAN
+}
+
+/// 行级同步结果
+enum ErpLineOutcome {
+  CREATED
+  UPDATED
+  UNCHANGED
+  CONFLICT
+  SKIPPED
+  FAILED
+}
+
 /// RFQ 状态机(SPEC §5)
 enum RfqStatus {
   DRAFT
@@ -1612,6 +1670,210 @@ model QuoteTemplate {
 
   @@unique([tenantId, name])
   @@index([tenantId, tier])
+}
+
+/// ERP 连接(每租户可配多个)。
+///
+/// 纪律:
+/// - **凭据不存在本表**,单独放 ErpCredential 并加密;本表只存非敏感配置;
+/// - status=CONNECTED **只能**由真实 testConnection 成功后写入;
+/// - 未配置凭据一律 NOT_CONFIGURED,UI 显示「待联调」,不显示"连接正常"。
+model ErpConnection {
+  id           String              @id @default(cuid())
+  tenantId     String
+  name         String
+  vendor       ErpVendor
+  /// 厂商下的具体版本:K3 / 云星空 / 星瀚 / U8 / NC / YonBIP / B1 / S4HANA / NetSuite / EBS
+  edition      String?
+  /// 非敏感配置(base url / 账套 / 组织编码 / locale / 超时等)
+  config       Json
+  status       ErpConnectionStatus @default(NOT_CONFIGURED)
+  /// 最近一次真实连接测试的结果(响应时间/版本/组织/可用能力/失败原因/建议)
+  lastTestAt     DateTime?
+  lastTestResult Json?
+  /// 同步频率(cron 表达式;空=仅手工)
+  syncCron     String?
+  enabled      Boolean             @default(true)
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  credentials ErpCredential[]
+  mappings    ErpFieldMapping[]
+  policies    ErpSyncPolicy[]
+  jobs        ErpSyncJob[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, vendor, status])
+}
+
+/// ERP 凭据(AppSecret / Token / 密码)。
+///
+/// **密文入库**(AES-256-GCM),API 只回掩码,AuditLog 与日志只记字段名不记值。
+/// 缺少加密密钥时**拒绝保存**,不降级成明文 —— 明文存凭据比不存更糟。
+model ErpCredential {
+  id           String        @id @default(cuid())
+  tenantId     String
+  connectionId String
+  connection   ErpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  /// 字段名,如 appSecret / password / token
+  field        String
+  /// 密文(base64);**任何接口都不得回传本字段**
+  cipherText   String
+  iv           String
+  authTag      String
+  /// 掩码预览,如 ****1a2b(只留末 4 位,便于人核对是不是同一把钥匙)
+  maskedHint   String
+  updatedById  String
+  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime      @default(now())
+
+  @@unique([tenantId, connectionId, field])
+}
+
+/// 字段映射(ERP 字段 ↔ 本系统字段)
+model ErpFieldMapping {
+  id           String        @id @default(cuid())
+  tenantId     String
+  connectionId String
+  connection   ErpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType   ErpEntityType
+  /// ERP 侧字段名
+  erpField     String
+  /// 本系统字段名
+  localField   String
+  /// 转换函数名(如 trim / upper / decimal / date:YYYYMMDD);空=原样
+  transform    String?
+  defaultValue String?
+  required     Boolean       @default(false)
+  /// 保存映射时做的样例验证结果(样例值 → 转换后值 / 失败原因)
+  sampleResult Json?
+  sortOrder    Int           @default(0)
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([tenantId, connectionId, entityType, localField])
+  @@index([tenantId, connectionId, entityType])
+}
+
+/// 同步策略(按实体配置方向、冲突处理、增量口径)
+model ErpSyncPolicy {
+  id             String            @id @default(cuid())
+  tenantId       String
+  connectionId   String
+  connection     ErpConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType     ErpEntityType
+  direction      ErpSyncDirection  @default(IMPORT_ONLY)
+  conflictPolicy ErpConflictPolicy @default(QUEUE_FOR_HUMAN)
+  /// 增量游标字段与上次水位(空=全量)
+  incrementalField String?
+  lastCursor       String?
+  /// 执行前是否必须先预览
+  requirePreview Boolean           @default(true)
+  enabled        Boolean           @default(true)
+  createdById    String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([tenantId, connectionId, entityType])
+}
+
+/// 同步作业
+model ErpSyncJob {
+  id             String           @id @default(cuid())
+  tenantId       String
+  connectionId   String
+  connection     ErpConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType     ErpEntityType
+  direction      ErpSyncDirection
+  /// PREVIEW = 只算差异不写库;EXECUTE = 真正写入
+  mode           String           @default("PREVIEW")
+  status         JobStatus        @default(PENDING)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdCount   Int              @default(0)
+  updatedCount   Int              @default(0)
+  unchangedCount Int              @default(0)
+  skippedCount   Int              @default(0)
+  conflictCount  Int              @default(0)
+  failedCount    Int              @default(0)
+  /// 幂等键:同一批次重复执行不重复写入
+  idempotencyKey String?
+  /// 外部作业号(ERP 侧返回)
+  externalJobId  String?
+  requestId      String?
+  errorSummary   String?
+  triggeredById  String
+  createdAt      DateTime         @default(now())
+
+  lines     ErpSyncJobLine[]
+  conflicts ErpConflict[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, connectionId, entityType, createdAt])
+}
+
+/// 行级同步结果(预览与执行共用;预览的行 outcome 只是**预判**)
+model ErpSyncJobLine {
+  id        String         @id @default(cuid())
+  tenantId  String
+  jobId     String
+  job       ErpSyncJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  lineNo    Int
+  /// 业务主键(如 MPN / PO+行号 / 工单号)
+  bizKey    String
+  outcome   ErpLineOutcome
+  /// ERP 侧原值与本系统现值,便于行级差异对照
+  erpValues   Json?
+  localValues Json?
+  /// 差异字段清单
+  changedFields Json?
+  message   String?
+  createdAt DateTime       @default(now())
+
+  @@unique([tenantId, jobId, lineNo])
+  @@index([tenantId, jobId, outcome])
+}
+
+/// 冲突队列(**双向同步不按最后更新时间自动覆盖**,一律进人工队列)
+model ErpConflict {
+  id        String     @id @default(cuid())
+  tenantId  String
+  jobId     String
+  job       ErpSyncJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  entityType ErpEntityType
+  bizKey    String
+  field     String
+  erpValue    String?
+  localValue  String?
+  /// 处置:ACCEPT_ERP / KEEP_LOCAL / MANUAL(人工填值);未处置为空
+  resolution  String?
+  manualValue String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  note      String?
+  createdAt DateTime   @default(now())
+
+  @@index([tenantId, jobId, resolution])
+  @@index([tenantId, entityType, bizKey])
+}
+
+/// ERP 推送事件(Webhook;一期只登记不消费,便于后续接实时推送)
+model ErpWebhookEvent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  connectionId String
+  eventType    String
+  payload      Json
+  /// 幂等键:同一事件重复推送不重复处理
+  externalId   String?
+  processedAt  DateTime?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, connectionId, externalId])
+  @@index([tenantId, processedAt])
 }
 
 // ============================================================

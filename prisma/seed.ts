@@ -197,6 +197,31 @@ async function main() {
     });
   }
 
+  // 示例 ERP 连接:Mock(演示可跑)与 Excel(真实兜底通道)。
+  // 注意状态一律 NOT_CONFIGURED —— **没测过就不能说连上了**,由用户点「测试连接」后写入真实状态。
+  for (const c of [
+    { name: "示例 ERP(Mock)", vendor: "MOCK" as const, edition: "演示" },
+    { name: "Excel / CSV 兜底通道", vendor: "EXCEL" as const, edition: "无 ERP 客户兜底" },
+  ]) {
+    const existing = await prisma.erpConnection.findFirst({
+      where: { tenantId: tenant.id, name: c.name },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.erpConnection.create({
+        data: {
+          tenantId: tenant.id,
+          name: c.name,
+          vendor: c.vendor,
+          edition: c.edition,
+          config: {},
+          status: "NOT_CONFIGURED",
+          createdById: seedActor.id,
+        },
+      });
+    }
+  }
+
   await prisma.customerPartMapping.upsert({
     where: {
       tenantId_customerId_customerPn: {

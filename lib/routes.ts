@@ -256,6 +256,15 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["MANAGEMENT"],
         children: [
           {
+            path: "/settings/integrations/erp",
+            label: "ERP 同步",
+            icon: "db",
+            plannedPr: "PR-B",
+            desc: "ERP 连接配置、字段映射、同步预览与冲突处置;状态只反映真实测试结果,未配凭据显示「待联调」。",
+            implemented: true,
+            roles: ["MANAGEMENT"],
+          },
+          {
             path: "/settings/quote-templates",
             label: "报价模板与客户分级",
             icon: "quote",
