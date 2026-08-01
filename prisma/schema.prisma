@@ -87,6 +87,16 @@ enum DuplicateResolution {
   CREATE_ANYWAY
 }
 
+/// 重试退避策略
+enum RetryBackoff {
+  /// 固定间隔
+  FIXED
+  /// 指数退避(推荐:外部系统故障时不加剧其压力)
+  EXPONENTIAL
+  /// 不重试
+  NONE
+}
+
 /// ERP 厂商。业务代码**不得**判断具体厂商,一律走 ErpProvider 接口。
 enum ErpVendor {
   KINGDEE
@@ -249,6 +259,13 @@ enum JobStatus {
   SUCCEEDED
   FAILED
   CANCELLED
+  /// 部分成功:有行成功也有行失败。**不能用 FAILED 冒充** ——
+  /// 否则重跑会把已成功的行再写一遍,或让人误以为整批没进去。
+  PARTIAL_SUCCESS
+  /// 已安排重试(nextRetryAt 到点后由调度或人工触发)
+  RETRYING
+  /// 重试次数耗尽,转人工。**不再自动重试**,避免无限打外部系统
+  DEAD_LETTER
 }
 
 /// 元器件生命周期
@@ -1753,6 +1770,14 @@ model ErpConnection {
   /// 同步频率(cron 表达式;空=仅手工)
   syncCron     String?
   enabled      Boolean             @default(true)
+  /// ---- 连接健康(PR-D)----
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  /// 连续失败次数;成功即清零。用于 Healthy / Warning / Offline 判定
+  consecutiveFailures Int          @default(0)
+  lastError           String?
+  /// Token 到期时间(可得时);用于提前预警而不是等它失效
+  tokenExpiresAt      DateTime?
   createdById  String
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
@@ -1783,6 +1808,13 @@ model ErpCredential {
   authTag      String
   /// 掩码预览,如 ****1a2b(只留末 4 位,便于人核对是不是同一把钥匙)
   maskedHint   String
+  /// ---- 密钥轮换(PR-D)----
+  /// 加密所用密钥的版本号。轮换时新写入用新版本,旧密文仍可用旧版本解开
+  keyVersion   Int           @default(1)
+  /// 最近一次"用这份凭据真的调通了外部系统"的时间 —— 与"保存过"不是一回事
+  verifiedAt   DateTime?
+  /// 凭据本身的到期时间(如 Token);到期前预警
+  expiresAt    DateTime?
   updatedById  String
   updatedAt    DateTime      @updatedAt
   createdAt    DateTime      @default(now())
@@ -1827,7 +1859,16 @@ model ErpSyncPolicy {
   conflictPolicy ErpConflictPolicy @default(QUEUE_FOR_HUMAN)
   /// 增量游标字段与上次水位(空=全量)
   incrementalField String?
+  /// 最近一次**尝试**留下的游标(可能来自失败的那次)
   lastCursor       String?
+  /// ---- 成功水位(PR-D)----
+  /// 只有整批成功才推进。恢复同步以它为准,避免用失败游标跳过数据
+  lastSuccessfulCursor String?
+  lastSuccessfulAt     DateTime?
+  /// ERP 侧的最后更新时间戳(增量条件),与本地时间分开存 —— 两边时钟可能不一致
+  lastExternalTimestamp String?
+  /// 分页续传令牌
+  pageToken            String?
   /// 执行前是否必须先预览
   requirePreview Boolean           @default(true)
   enabled        Boolean           @default(true)
@@ -1866,11 +1907,34 @@ model ErpSyncJob {
   triggeredById  String
   createdAt      DateTime         @default(now())
 
+  /// ---- 重试(PR-D) ----
+  /// 已重试次数;0 表示首次执行
+  retryCount     Int              @default(0)
+  /// 上限,超过即转 DEAD_LETTER 交人工
+  maxRetries     Int              @default(3)
+  lastRetryAt    DateTime?
+  /// 下次可重试时间;未到点不得重试(防止刷爆外部系统)
+  nextRetryAt    DateTime?
+  backoffStrategy RetryBackoff    @default(EXPONENTIAL)
+  /// 重跑时指向原作业,形成重试链,便于回溯"这批到底试了几次"
+  parentJobId    String?
+  /// ---- 断点续跑(PR-D) ----
+  /// 从第几行继续;**已成功的行不重复同步**
+  resumeFromLineNo Int?
+  /// 执行前后的游标,用于失败后从水位恢复而不是全量重来
+  cursorBefore   String?
+  cursorAfter    String?
+  /// 乐观锁:并发触发同一作业时防止双写
+  version        Int              @default(0)
+
   lines     ErpSyncJobLine[]
   conflicts ErpConflict[]
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, connectionId, entityType, createdAt])
+  /// 调度取"到点该重试的作业"
+  @@index([tenantId, status, nextRetryAt])
+  @@index([tenantId, parentJobId])
 }
 
 /// 行级同步结果(预览与执行共用;预览的行 outcome 只是**预判**)
@@ -1891,8 +1955,26 @@ model ErpSyncJobLine {
   message   String?
   createdAt DateTime       @default(now())
 
+  /// ---- ERP 回执(PR-D)----
+  /// **五种状态必须分开**,不得压成一个"成功":
+  /// TEMPLATE_GENERATED(已生成模板) / SENT(已发送) / ERP_RECEIVED(ERP 已接收)
+  /// / ERP_POSTED(ERP 已建单) / ERP_FAILED(ERP 拒绝)
+  erpStatus     String?
+  /// ERP 侧单据号与行号(回查凭据)
+  erpDocumentId String?
+  erpLineId     String?
+  /// ERP 原始响应(脱敏后);出问题时唯一能复盘的东西
+  erpResponse   Json?
+  /// ERP 接收时间 ≠ 建单时间:接收只代表报文收到了
+  acceptedAt    DateTime?
+  postedAt      DateTime?
+  /// 本行已尝试次数与最后错误(行级重试用)
+  attemptCount  Int            @default(0)
+  lastError     String?
+
   @@unique([tenantId, jobId, lineNo])
   @@index([tenantId, jobId, outcome])
+  @@index([tenantId, erpDocumentId])
 }
 
 /// 冲突队列(**双向同步不按最后更新时间自动覆盖**,一律进人工队列)

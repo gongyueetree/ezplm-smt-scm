@@ -25,6 +25,8 @@ import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import { buildProviderConfig } from "@/lib/server/repositories/erp-connection";
 import type { SessionRef } from "@/lib/server/repositories/rfq";
+import { evaluateHealth, nextHealthFields } from "@/lib/domain/erp-health";
+import { decideRetry, deriveJobStatus, resumePoint } from "@/lib/domain/erp-retry";
 import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 
 /** 目前一期只对物料实体做真正的落库;其余实体先做预览(数据入口在 PR-C 的追溯导入) */
@@ -247,6 +249,16 @@ export async function runSync(
     }
   }
 
+  // 作业状态与重试决策(纯函数,可单测)
+  const jobStatus = deriveJobStatus(summary);
+  const retry = decideRetry({
+    status: jobStatus,
+    retryCount: 0,
+    maxRetries: 3,
+    backoffStrategy: "EXPONENTIAL",
+    counts: summary,
+  });
+
   const job = await prisma.$transaction(async (tx) => {
     const created = await tx.erpSyncJob.create({
       data: tenantData(session.tenantId, {
@@ -254,9 +266,18 @@ export async function runSync(
         entityType: input.entityType,
         direction,
         mode: input.mode,
-        status: "SUCCEEDED",
+        // **不再写死 SUCCEEDED**:由行级结果派生。
+        // 有失败也有成功时是 PARTIAL_SUCCESS —— 写死成功会让人以为整批都进去了,
+        // 重跑还会把已成功的行再写一遍。
+        status: jobStatus,
         startedAt: new Date(),
         finishedAt: new Date(),
+        retryCount: 0,
+        backoffStrategy: "EXPONENTIAL",
+        nextRetryAt: retry.shouldRetry && retry.delayMs !== null
+          ? new Date(Date.now() + retry.delayMs)
+          : null,
+        cursorBefore: policy?.lastSuccessfulCursor ?? null,
         createdCount: summary.created,
         updatedCount: summary.updated,
         unchangedCount: summary.unchanged,
@@ -465,4 +486,241 @@ export async function resolveConflict(
     });
   });
   return { ok: true };
+}
+
+/* ============================================================
+ * PR-D 生产加固:健康度 / 游标 / 重试
+ * ============================================================ */
+
+/**
+ * 同步结束后更新连接健康。
+ *
+ * **成功必须清零 consecutiveFailures** —— 否则一次偶发失败会永久拉低健康度。
+ * 判定逻辑在 lib/domain/erp-health.ts,这里只负责落库。
+ */
+export async function recordConnectionOutcome(
+  session: SessionRef,
+  connectionId: string,
+  outcome: "SUCCESS" | "FAILURE",
+  error?: string | null,
+): Promise<void> {
+  const conn = await prisma.erpConnection.findFirst({
+    where: tenantWhere(session.tenantId, { id: connectionId }),
+    select: { id: true, consecutiveFailures: true },
+  });
+  if (!conn) return;
+
+  const next = nextHealthFields(
+    { consecutiveFailures: conn.consecutiveFailures },
+    outcome,
+    new Date().toISOString(),
+    error,
+  );
+
+  await prisma.erpConnection.update({
+    where: { id: connectionId },
+    data: {
+      ...(next.lastSuccessAt ? { lastSuccessAt: new Date(next.lastSuccessAt) } : {}),
+      ...(next.lastFailureAt ? { lastFailureAt: new Date(next.lastFailureAt) } : {}),
+      consecutiveFailures: next.consecutiveFailures,
+      lastError: next.lastError,
+    },
+  });
+}
+
+/**
+ * 推进成功水位。
+ *
+ * **只有整批成功才推进** —— 用失败那次留下的游标会跳过数据,
+ * 这是增量同步最容易埋的坑。`lastCursor`(尝试水位)与
+ * `lastSuccessfulCursor`(成功水位)必须分开存,恢复时以后者为准。
+ */
+export async function advanceCursor(
+  session: SessionRef,
+  connectionId: string,
+  entityType: ErpEntityType,
+  input: { cursor?: string | null; externalTimestamp?: string | null; pageToken?: string | null },
+  jobStatus: string,
+): Promise<void> {
+  const policy = await prisma.erpSyncPolicy.findFirst({
+    where: tenantWhere(session.tenantId, { connectionId, entityType }),
+    select: { id: true },
+  });
+  if (!policy) return;
+
+  const fullSuccess = jobStatus === "SUCCEEDED";
+  await prisma.erpSyncPolicy.update({
+    where: { id: policy.id },
+    data: {
+      // 尝试水位:每次都记
+      lastCursor: input.cursor ?? undefined,
+      pageToken: input.pageToken ?? undefined,
+      // 成功水位:只有整批成功才动
+      ...(fullSuccess
+        ? {
+            lastSuccessfulCursor: input.cursor ?? undefined,
+            lastSuccessfulAt: new Date(),
+            lastExternalTimestamp: input.externalTimestamp ?? undefined,
+          }
+        : {}),
+    },
+  });
+}
+
+export type RetryOutcome =
+  | { ok: true; jobId: string; retryLineNos: number[]; skipped: number; note: string }
+  | { ok: false; reason: string; code: string };
+
+/**
+ * 重跑一个作业。
+ *
+ * 纪律:
+ * - **只重试失败行**,已成功的行不重复同步(resumePoint 算出要跑哪几行);
+ * - 未到 nextRetryAt 的自动重试一律拒绝,**人工触发不受限制**;
+ * - 次数耗尽转 DEAD_LETTER 并停止自动重试 —— 无限重试会打光外部配额;
+ * - 新作业挂 parentJobId,形成重试链,可回溯试了几次。
+ */
+export async function retryJob(
+  session: SessionRef,
+  jobId: string,
+  opts: { manual?: boolean } = {},
+): Promise<RetryOutcome> {
+  const job = await prisma.erpSyncJob.findFirst({
+    where: tenantWhere(session.tenantId, { id: jobId }),
+    include: { lines: { select: { lineNo: true, outcome: true } } },
+  });
+  if (!job) return { ok: false, reason: "作业不存在或不属于当前租户", code: "not_found" };
+
+  const counts = {
+    created: job.createdCount,
+    updated: job.updatedCount,
+    unchanged: job.unchangedCount,
+    skipped: job.skippedCount,
+    conflict: job.conflictCount,
+    failed: job.failedCount,
+  };
+
+  const decision = decideRetry({
+    status: job.status as never,
+    retryCount: job.retryCount,
+    maxRetries: job.maxRetries,
+    backoffStrategy: job.backoffStrategy as never,
+    counts,
+    manual: opts.manual,
+  });
+
+  if (!decision.shouldRetry) {
+    // 转终态并落库,让台账看得出"为什么不再重试"
+    if (decision.nextStatus === "DEAD_LETTER" && job.status !== "DEAD_LETTER") {
+      await prisma.$transaction(async (tx) => {
+        await tx.erpSyncJob.update({
+          where: { id: jobId },
+          data: { status: "DEAD_LETTER", errorSummary: decision.reason },
+        });
+        await writeAudit(tx, {
+          tenantId: session.tenantId,
+          userId: session.userId,
+          action: "ERP_SYNC_DEAD_LETTER",
+          entityType: "ErpSyncJob",
+          entityId: jobId,
+          after: { reason: decision.reason, retryCount: job.retryCount },
+        });
+      });
+    }
+    return { ok: false, reason: decision.reason, code: decision.nextStatus.toLowerCase() };
+  }
+
+  // 未到点的自动重试要挡住(人工除外)
+  if (!opts.manual && job.nextRetryAt && job.nextRetryAt.getTime() > Date.now()) {
+    return {
+      ok: false,
+      reason: `未到重试时间(${job.nextRetryAt.toISOString()}),自动重试被拒绝`,
+      code: "too_early",
+    };
+  }
+
+  const resume = resumePoint(job.lines);
+
+  const child = await prisma.$transaction(async (tx) => {
+    const created = await tx.erpSyncJob.create({
+      data: tenantData(session.tenantId, {
+        connectionId: job.connectionId,
+        entityType: job.entityType,
+        direction: job.direction,
+        mode: job.mode,
+        status: "PENDING",
+        parentJobId: job.id,
+        retryCount: job.retryCount + 1,
+        maxRetries: job.maxRetries,
+        backoffStrategy: job.backoffStrategy,
+        lastRetryAt: new Date(),
+        resumeFromLineNo: resume.fromLineNo,
+        cursorBefore: job.cursorAfter ?? job.cursorBefore,
+        triggeredById: session.userId,
+      }),
+    });
+    await tx.erpSyncJob.update({
+      where: { id: job.id },
+      data: { status: "RETRYING" },
+    });
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: "ERP_SYNC_RETRY",
+      entityType: "ErpSyncJob",
+      entityId: created.id,
+      after: {
+        parentJobId: job.id,
+        retryCount: job.retryCount + 1,
+        retryLines: resume.retryLineNos.length,
+        skippedAlreadySucceeded: resume.skipCount,
+        manual: Boolean(opts.manual),
+      },
+    });
+    return created;
+  });
+
+  return {
+    ok: true,
+    jobId: child.id,
+    retryLineNos: resume.retryLineNos,
+    skipped: resume.skipCount,
+    note: `第 ${job.retryCount + 1} 次重试;只跑 ${resume.retryLineNos.length} 行失败行,跳过 ${resume.skipCount} 行已成功的`,
+  };
+}
+
+/** 连接健康视图(供 UI 与运维看板用) */
+export async function connectionHealth(session: SessionRef) {
+  const rows = await prisma.erpConnection.findMany({
+    where: tenantWhere(session.tenantId),
+    select: {
+      id: true,
+      name: true,
+      vendor: true,
+      enabled: true,
+      status: true,
+      lastSuccessAt: true,
+      lastFailureAt: true,
+      consecutiveFailures: true,
+      lastError: true,
+      tokenExpiresAt: true,
+    },
+    orderBy: { name: "asc" },
+  });
+  const now = new Date().toISOString();
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    vendor: c.vendor,
+    status: c.status,
+    lastError: c.lastError,
+    health: evaluateHealth({
+      enabled: c.enabled,
+      lastSuccessAt: c.lastSuccessAt?.toISOString() ?? null,
+      lastFailureAt: c.lastFailureAt?.toISOString() ?? null,
+      consecutiveFailures: c.consecutiveFailures,
+      tokenExpiresAt: c.tokenExpiresAt?.toISOString() ?? null,
+      now,
+    }),
+  }));
 }
