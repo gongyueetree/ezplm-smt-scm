@@ -12,11 +12,16 @@ export const dynamic = "force-dynamic";
 export default async function OpoPage() {
   const session = (await getSession())!;
   const now = new Date().toISOString();
-  const { lines, kpi, noReply, diffs, anomalies } = await getOpoDashboard(session.tenantId, now);
+  const { lines, kpi, noReply, diffs, anomalies, scopeNotice } = await getOpoDashboard(session, now);
 
   return (
     <div>
       <PageHeader path="/suppliers/opo" />
+      {scopeNotice ? (
+        <Banner tone="warn">
+          <span data-testid="opo-scope-notice">{scopeNotice}</span>
+        </Banner>
+      ) : null}
       <Banner tone="soft">
         <span>
           KPI、未回复表、差异表、异常清单<b>全部由同一份 OPOLine 行数据派生</b>,
