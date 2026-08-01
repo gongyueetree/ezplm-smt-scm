@@ -14,6 +14,10 @@ import { createHash } from "crypto";
 import { Prisma, type ContainmentKind, type TraceEdgeKind } from "@prisma/client";
 import {
   computeBlastRadius,
+  detectGaps,
+  quantityCompleteness,
+  segmentStats,
+  timeCompleteness,
   makeRef,
   parseRef,
   traceBackward,
@@ -28,6 +32,12 @@ import {
   scopeEdges,
   type TraceScope,
 } from "@/lib/domain/trace-scope";
+import {
+  computeCoverage,
+  conclusionCaveat,
+  type CoverageResult,
+} from "@/lib/domain/trace-coverage";
+import { sumByBaseUom, toBaseQuantity, type SumResult } from "@/lib/domain/trace-uom";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import type { SessionRef } from "@/lib/server/repositories/rfq";
@@ -342,6 +352,12 @@ export async function loadEdges(session: SessionRef): Promise<TraceEdgeInput[]> 
     kind: e.kind,
     qty: e.qty?.toString() ?? null,
     occurredAt: e.occurredAt?.toISOString().slice(0, 10) ?? null,
+    // 单位换算字段(PR-E);历史行为空,由 toBaseQuantity 如实判为不可比
+    quantity: e.quantity?.toString() ?? null,
+    uom: e.uom,
+    baseQuantity: e.baseQuantity?.toString() ?? null,
+    baseUom: e.baseUom,
+    conversionFactor: e.conversionFactor?.toString() ?? null,
   }));
 }
 
@@ -383,6 +399,13 @@ export interface TraceQueryResult {
   forward: { layers: string[][]; edges: TraceEdgeInput[] };
   backward: { layers: string[][]; edges: TraceEdgeInput[] };
   blastRadius: BlastRadius;
+  /** ---- PR-E:结论可信度 ---- */
+  /** 分段覆盖率与置信度(HIGH/MEDIUM/LOW),含人可读依据 */
+  coverage: CoverageResult;
+  /** 数量按基准单位分组合计;mixedUom=true 时不可直接比较 */
+  quantityByUom: SumResult;
+  /** 置信度对应的结论措辞约束 —— LOW 时不得断言「无影响」 */
+  conclusionCaveat: string;
 }
 
 export type QueryOutcome =
@@ -434,6 +457,22 @@ export async function queryTrace(
   const fwd = traceForward(sourceRef, edges);
   const bwd = traceBackward(sourceRef, edges);
 
+  // ---- PR-E:覆盖率与置信度 ----
+  // 只统计**正向可达**的边:影响面看的是下游,上游数据缺不缺不影响这份结论。
+  const fwdEdges = fwd.edges;
+  const coverage = computeCoverage({
+    segments: segmentStats(fwd.visited, fwdEdges),
+    timeCompleteness: timeCompleteness(fwdEdges),
+    quantityCompleteness: quantityCompleteness(
+      fwdEdges,
+      (e) => toBaseQuantity(e).status === "OK",
+    ),
+    gapCount: detectGaps(fwd, fwdEdges).length,
+  });
+
+  // 数量按基准单位分组合计 —— **绝不把 PCS 和 Reel 加在一起**
+  const quantityByUom = sumByBaseUom(fwdEdges);
+
   return {
     sourceRef,
     scopeNote: scopeDescription(scope),
@@ -449,6 +488,10 @@ export async function queryTrace(
       wipWorkOrders: wos.filter((w) => w.status && /进行|WIP|RUNNING/i.test(w.status)).map((w) => w.workOrderNo),
       customerByShipment,
     }),
+    // ---- PR-E:覆盖率 / 置信度 / 按单位分组的数量 ----
+    coverage,
+    quantityByUom,
+    conclusionCaveat: conclusionCaveat(coverage.confidence),
   };
 }
 
@@ -639,4 +682,259 @@ export async function listImportBatches(session: SessionRef) {
     revokedAt: b.revokedAt?.toISOString() ?? null,
     createdAt: b.createdAt.toISOString(),
   }));
+}
+
+/* ============================================================
+ * PR-E:分析快照 / 批次拆合 / 生产替代料
+ * ============================================================ */
+
+/**
+ * 固化一次影响面分析。
+ *
+ * 为什么必须存:异常调查往往持续数周,期间图数据一直在变
+ * (工单模板补导了、出货记录同步进来了)。
+ * **不存快照,事后没人说得清"当时是按什么数据下的隔离决定"** ——
+ * 而这恰恰是客诉与召回复盘时被追问的第一件事。
+ */
+export async function saveAnalysisRun(
+  session: SessionRef,
+  input: {
+    sourceRef: string;
+    result: TraceQueryResult;
+    incidentId?: string | null;
+    analysisAsOf?: string;
+  },
+): Promise<{ id: string }> {
+  const asOf = input.analysisAsOf ? new Date(input.analysisAsOf) : new Date();
+
+  const run = await prisma.$transaction(async (tx) => {
+    const created = await tx.traceAnalysisRun.create({
+      data: tenantData(session.tenantId, {
+        sourceRef: input.sourceRef,
+        analysisAsOf: asOf,
+        snapshot: {
+          blastRadius: input.result.blastRadius,
+          quantityByUom: input.result.quantityByUom,
+          coverage: input.result.coverage,
+          conclusionCaveat: input.result.conclusionCaveat,
+          scopeNote: input.result.scopeNote,
+          truncatedEdges: input.result.truncatedEdges,
+        } as unknown as Prisma.InputJsonValue,
+        dataGapSnapshot: input.result.blastRadius.gaps as unknown as Prisma.InputJsonValue,
+        confidence: input.result.coverage.confidence,
+        coverageScore: input.result.coverage.score,
+        // 输入版本:用边数与最新时间戳做指纹,便于判断快照是否已过时
+        inputVersion: `edges=${input.result.forward.edges.length}`,
+        incidentId: input.incidentId ?? null,
+        createdById: session.userId,
+      }),
+    });
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: "TRACE_ANALYSIS_SNAPSHOT",
+      entityType: "TraceAnalysisRun",
+      entityId: created.id,
+      after: {
+        sourceRef: input.sourceRef,
+        confidence: input.result.coverage.confidence,
+        coverageScore: input.result.coverage.score,
+      },
+    });
+    return created;
+  });
+
+  return { id: run.id };
+}
+
+export async function listAnalysisRuns(session: SessionRef, sourceRef?: string) {
+  const rows = await prisma.traceAnalysisRun.findMany({
+    where: tenantWhere(session.tenantId, sourceRef ? { sourceRef } : {}),
+    orderBy: { analysisAsOf: "desc" },
+    take: 100,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    sourceRef: r.sourceRef,
+    analysisAsOf: r.analysisAsOf.toISOString(),
+    confidence: r.confidence,
+    coverageScore: r.coverageScore,
+    inputVersion: r.inputVersion,
+    incidentId: r.incidentId,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+export type SplitMergeOutcome =
+  | { ok: true; id: string; edges: number }
+  | { ok: false; reason: string };
+
+/**
+ * 登记批次拆分 / 合并,并**同时补图边**保持链路连续。
+ *
+ * 只写记录不写边,追溯会在拆分处断掉 —— 那正是最需要连上的地方
+ * (客户投诉的往往就是拆出去的那一小批)。
+ */
+export async function recordLotSplitMerge(
+  session: SessionRef,
+  input: {
+    kind: "SPLIT" | "MERGE";
+    sourceLotNos: string[];
+    targetLotNos: string[];
+    quantities?: string[];
+    uom?: string | null;
+    reason?: string | null;
+    operator?: string | null;
+    occurredAt?: string | null;
+  },
+): Promise<SplitMergeOutcome> {
+  if (input.sourceLotNos.length === 0 || input.targetLotNos.length === 0) {
+    return { ok: false, reason: "源批次与目标批次都不能为空" };
+  }
+  if (input.kind === "SPLIT" && input.sourceLotNos.length !== 1) {
+    return { ok: false, reason: "拆分只能有一个源批次" };
+  }
+  if (input.kind === "MERGE" && input.targetLotNos.length !== 1) {
+    return { ok: false, reason: "合并只能有一个目标批次" };
+  }
+  if (input.quantities && input.quantities.length !== input.targetLotNos.length) {
+    return { ok: false, reason: "数量个数必须与目标批次个数一致" };
+  }
+
+  const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+  const edgeKind = input.kind === "SPLIT" ? "LOT_SPLIT" : "LOT_MERGE";
+
+  const result = await prisma.$transaction(async (tx) => {
+    const rec = await tx.lotSplitMerge.create({
+      data: tenantData(session.tenantId, {
+        kind: input.kind,
+        sourceLotNos: input.sourceLotNos,
+        targetLotNos: input.targetLotNos,
+        quantities: (input.quantities ?? []).map((q) => new Prisma.Decimal(q)),
+        uom: input.uom ?? null,
+        reason: input.reason ?? null,
+        operator: input.operator ?? null,
+        occurredAt,
+        source: "MANUAL",
+        createdById: session.userId,
+      }),
+    });
+
+    // 补图边:源 → 目标(SPLIT 一对多;MERGE 多对一)
+    let edges = 0;
+    for (const from of input.sourceLotNos) {
+      for (const [i, to] of input.targetLotNos.entries()) {
+        await tx.traceEdge.upsert({
+          where: {
+            tenantId_kind_fromRef_toRef: {
+              tenantId: session.tenantId,
+              kind: edgeKind,
+              fromRef: `LOT:${from}`,
+              toRef: `LOT:${to}`,
+            },
+          },
+          update: {},
+          create: tenantData(session.tenantId, {
+            kind: edgeKind,
+            fromRef: `LOT:${from}`,
+            toRef: `LOT:${to}`,
+            quantity: input.quantities?.[i] ? new Prisma.Decimal(input.quantities[i]) : null,
+            uom: input.uom ?? null,
+            occurredAt,
+            source: "MANUAL",
+          }),
+        });
+        edges += 1;
+      }
+    }
+
+    // 事件时间线也要有,否则时间线上会凭空多出一个批次
+    for (const to of input.targetLotNos) {
+      await tx.traceEvent.create({
+        data: tenantData(session.tenantId, {
+          ref: `LOT:${to}`,
+          eventType: input.kind,
+          kind: input.kind === "SPLIT" ? "SPLIT" : "MERGE",
+          detail: { sourceLotNos: input.sourceLotNos, reason: input.reason ?? null } as unknown as Prisma.InputJsonValue,
+          occurredAt,
+          source: "MANUAL",
+        }),
+      });
+    }
+
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: `TRACE_LOT_${input.kind}`,
+      entityType: "LotSplitMerge",
+      entityId: rec.id,
+      after: { source: input.sourceLotNos, target: input.targetLotNos, edges },
+    });
+
+    return { id: rec.id, edges };
+  });
+
+  return { ok: true, ...result };
+}
+
+/**
+ * 登记生产替代料实际使用。
+ *
+ * **不改动 BOM**:BOM 记"设计要什么",本表记"这批实际投了什么"。
+ * 把实际用料写回 BOM 会让历史 BOM 失真,而客诉调查恰恰要知道当时投的是哪颗。
+ */
+export async function recordSubstitution(
+  session: SessionRef,
+  input: {
+    workOrderNo: string;
+    bomMpn?: string | null;
+    actualMpn?: string | null;
+    actualLotNo?: string | null;
+    quantity?: string | null;
+    uom?: string | null;
+    approvedById?: string | null;
+    approvalReason?: string | null;
+    approvedAt?: string | null;
+  },
+): Promise<{ ok: true; id: string; warning: string | null }> {
+  const rec = await prisma.$transaction(async (tx) => {
+    const created = await tx.traceSubstitution.create({
+      data: tenantData(session.tenantId, {
+        workOrderNo: input.workOrderNo,
+        bomMpn: input.bomMpn ?? null,
+        actualMpn: input.actualMpn ?? null,
+        actualLotNo: input.actualLotNo ?? null,
+        quantity: input.quantity ? new Prisma.Decimal(input.quantity) : null,
+        uom: input.uom ?? null,
+        approvedById: input.approvedById ?? null,
+        approvedAt: input.approvedAt ? new Date(input.approvedAt) : null,
+        approvalReason: input.approvalReason ?? null,
+        source: "MANUAL",
+        createdById: session.userId,
+      }),
+    });
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: "TRACE_SUBSTITUTION_RECORD",
+      entityType: "TraceSubstitution",
+      entityId: created.id,
+      after: {
+        workOrderNo: input.workOrderNo,
+        bomMpn: input.bomMpn,
+        actualMpn: input.actualMpn,
+        approved: Boolean(input.approvedById),
+      },
+    });
+    return created;
+  });
+
+  return {
+    ok: true,
+    id: rec.id,
+    // 未经批准的替代本身就是异常,必须显式提示而不是静默接受
+    warning: input.approvedById
+      ? null
+      : "该替代记录**没有批准人** —— 未经批准的替代属异常,请补录批准人与原因",
+  };
 }
