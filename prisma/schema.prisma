@@ -39,6 +39,54 @@ enum RoleName {
   SUPPLIER
 }
 
+/// 物料来源。**数据主权的落地点**:
+/// EZPLM 行是只读缓存(禁止本系统改写),其余三种是本系统自己的数据。
+enum PartOrigin {
+  /// ezPLM 同步来的只读缓存(唯一真源在 ezPLM)
+  EZPLM
+  /// 本系统手工创建(ezPLM 里没有的料)
+  LOCAL
+  /// 从用户自有系统批量导入
+  IMPORTED
+  /// 从 ERP 同步而来
+  ERP
+}
+
+/// 自建物料的生命状态(与器件 lifecycle 是两回事:一个说流程,一个说停产与否)
+enum PartStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  DISABLED
+}
+
+/// 物料属性的数据类型(分类驱动的动态参数)
+enum PartAttrType {
+  TEXT
+  NUMBER
+  RANGE
+  ENUM
+  BOOLEAN
+}
+
+/// 文档种类(合规与文档区)
+enum PartDocKind {
+  DATASHEET
+  APPROVAL_SHEET
+  ROHS_REPORT
+  REACH_REPORT
+  COC
+  OTHER
+}
+
+/// 重复检查的处置(疑似重复时**不允许静默创建**)
+enum DuplicateResolution {
+  USE_EXISTING
+  MAP_CUSTOMER_PN
+  CREATE_ANYWAY
+}
+
 /// RFQ 状态机(SPEC §5)
 enum RfqStatus {
   DRAFT
@@ -108,6 +156,8 @@ enum ProviderType {
   DIGIKEY
   MOUSER
   OFFLINE
+  /// 本系统自建(不是任何外部源的缓存)
+  LOCAL
 }
 
 /// BOM 匹配候选来源,顺序对应 SPEC §6 匹配顺序
@@ -559,6 +609,13 @@ model Part {
   packaging    String?
   rohs         Boolean?
   reach        Boolean?
+  /// 英文描述 / 品牌 / 备注(手工建料需要,ezPLM 不一定提供)
+  descriptionEn String?
+  brand         String?
+  note          String?
+  /// **来源与流程状态**:origin=EZPLM 的行是只读缓存,改写接口必须拒绝
+  origin       PartOrigin @default(EZPLM)
+  status       PartStatus @default(ACTIVE)
   /// 缓存来源与时点(只读缓存语义的一部分)
   sourcedFrom  ProviderType @default(EZPLM)
   syncedAt     DateTime?
@@ -571,11 +628,16 @@ model Part {
 
   tagLinks PartTagLink[]
   processAttr PartProcessAttr?
+  attrValues  PartAttributeValue[]
+  documents   PartDocument[]
+  supplierRefs PartSupplierRef[]
+  creationRecord PartCreationRecord?
 
   @@unique([tenantId, internalPn])
   @@index([tenantId, mpn])
   @@index([tenantId, manufacturer, mpn])
   @@index([tenantId, categoryL1, categoryL2])
+  @@index([tenantId, origin, status])
 }
 
 /// SMT 工艺属性(客户 docx:「SMT 工艺字段:包装规格、MSL 湿敏等级、盘装数量」)。
@@ -596,6 +658,11 @@ model PartProcessAttr {
   packaging String?
   /// 盘装数量(每盘颗数)
   reelQty   Int?
+  /// 供应参数(手工建料时录入的**初始参考**,不是正式采购条件)
+  moq          Int?
+  spq          Int?
+  leadTimeDays Int?
+  safetyStock  Decimal? @db.Decimal(18, 4)
   note      String?
   updatedById String
   updatedAt DateTime @updatedAt
@@ -656,6 +723,165 @@ model BomCompareRun {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, fromVersionId, toVersionId])
+}
+
+/// 权限授予(角色 → 权限串)。
+///
+/// 现有模型只有 5 个角色枚举,没有权限体系,也没有"系统管理员"。
+/// 这里用**权限串 + 按租户授予**来表达细粒度权限,而不是新增一个与既有架构冲突的硬编码角色
+/// —— 「系统管理员」= MANAGEMENT + erp.connection.manage 这类组合。
+model PermissionGrant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  role       RoleName
+  permission String
+  createdById String
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, role, permission])
+  @@index([tenantId, role])
+}
+
+/// 个别用户的额外授予/回收(优先级高于角色默认)
+model UserPermission {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  permission String
+  /// false = 明确回收(即便角色默认有,也不给)
+  granted    Boolean  @default(true)
+  reason     String?
+  createdById String
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, userId, permission])
+  @@index([tenantId, userId])
+}
+
+/// 物料属性定义(分类驱动的动态参数)。
+/// 常用且需查询统计的字段留在结构化列;各品类差异化的参数走定义 + 值两张表。
+model PartAttributeDefinition {
+  id         String       @id @default(cuid())
+  tenantId   String
+  key        String
+  label      String
+  type       PartAttrType @default(TEXT)
+  unit       String?
+  required   Boolean      @default(false)
+  /// 适用分类:留空=通用;否则按一级/二级分类匹配
+  categoryL1 String?
+  categoryL2 String?
+  /// ENUM 类型的可选项
+  options    Json?
+  /// 校验规则(min/max/pattern 等)
+  validation Json?
+  sortOrder  Int          @default(0)
+  createdById String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  values PartAttributeValue[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, categoryL1, categoryL2, sortOrder])
+}
+
+model PartAttributeValue {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  partId       String
+  part         Part                    @relation(fields: [partId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   PartAttributeDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  /// 原样保留用户/提取到的文本,数值化交给领域层(与 param-compare 同一套口径)
+  value        String?
+  /// 取值来源:MANUAL / EZPLM / AI_EXTRACT / ERP / IMPORT
+  source       String                  @default("MANUAL")
+  /// AI 提取置信度 0–1;人工录入为空
+  confidence   Float?
+  /// 人工是否已确认(AI 提取的默认 false,**不得直接当成已确认**)
+  confirmed    Boolean                 @default(false)
+  updatedById  String
+  updatedAt    DateTime                @updatedAt
+  createdAt    DateTime                @default(now())
+
+  @@unique([tenantId, partId, definitionId])
+  @@index([tenantId, definitionId])
+}
+
+/// 物料文档(规格书/承认书/RoHS/REACH/COC)。
+/// 文件本体走 FileStorageProvider,**库里只存 key 与元数据**。
+model PartDocument {
+  id        String      @id @default(cuid())
+  tenantId  String
+  partId    String
+  part      Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  kind      PartDocKind @default(OTHER)
+  fileKey   String
+  fileName  String
+  mimeType  String?
+  sizeBytes Int?
+  version   String?
+  /// 有效期;为空即"未标注有效期",不等于长期有效
+  validUntil DateTime?
+  /// 来源:UPLOAD / EZPLM / ERP / SUPPLIER
+  source    String      @default("UPLOAD")
+  note      String?
+  uploadedById String
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId, partId, kind])
+  @@index([tenantId, validUntil])
+}
+
+/// 物料的默认供应商引用(**关联 Supplier 主数据,不写自由文本**)
+model PartSupplierRef {
+  id             String   @id @default(cuid())
+  tenantId       String
+  partId         String
+  part           Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// 跨聚合引用:按 schema 顶部备案 B,supplierId 用**受控标量**而非 FK
+  /// (租户隔离由应用层 tenant scope + 复合唯一约束保证)。
+  /// 关键是"引用主数据 ID 而不是写自由文本",这一点已满足。
+  supplierId     String
+  supplierPn     String?
+  /// 参考单价:**仅初始参考**,不是正式报价。正式价来自 DigiKey/Mouser/ezPLM/线下报价/历史采购价
+  referencePrice Decimal? @db.Decimal(18, 6)
+  currency       String   @default("CNY")
+  isDefault      Boolean  @default(false)
+  note           String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, partId, supplierId])
+  @@index([tenantId, supplierId])
+}
+
+/// 建料过程留痕:重复检查结果、AI 提取证据、审核记录。
+/// 一颗料一条,便于事后回答"当初凭什么建的、谁审的、AI 提了什么"。
+model PartCreationRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  partId    String   @unique
+  part      Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// 建料来源:MANUAL / EZPLM_REFERENCE / IMPORT / ERP_SYNC
+  createdVia String  @default("MANUAL")
+  /// 重复检查命中的候选与用户处置
+  duplicateCandidates Json?
+  duplicateResolution DuplicateResolution?
+  duplicateReason     String?
+  /// AI 提取证据(字段 → {value, confidence, sourceFile})
+  aiEvidence Json?
+  /// 审核记录
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, createdVia])
 }
 
 /// 物料标识(内部料号/MPN/客户料号等多标识索引)

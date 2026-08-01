@@ -161,6 +161,42 @@ async function main() {
     });
   }
 
+  // 建这些目录数据记在管理层演示账号名下(种子里唯一有"系统性"含义的账号)
+  const seedActor = await prisma.user.findUniqueOrThrow({
+    where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.ezplm.cn" } },
+    select: { id: true },
+  });
+
+  // 物料属性定义(分类驱动的动态参数)。
+  // 通用项对所有分类生效;IC 专属项只在选了 IC 分类时出现。
+  const attrDefs = [
+    { key: "pinPitch", label: "引脚间距", type: "TEXT" as const, unit: "mm", categoryL1: null, sortOrder: 10 },
+    { key: "tempRange", label: "工作温度", type: "RANGE" as const, unit: "℃", categoryL1: null, sortOrder: 20 },
+    { key: "voltageRange", label: "工作电压", type: "RANGE" as const, unit: "V", categoryL1: null, sortOrder: 30 },
+    { key: "esd", label: "防静电等级 ESD", type: "TEXT" as const, unit: null, categoryL1: null, sortOrder: 40 },
+    { key: "coreFreq", label: "主频", type: "NUMBER" as const, unit: "MHz", categoryL1: "IC", sortOrder: 50 },
+    { key: "flashSize", label: "Flash 容量", type: "NUMBER" as const, unit: "KB", categoryL1: "IC", sortOrder: 60 },
+    { key: "gpioCount", label: "GPIO 数量", type: "NUMBER" as const, unit: null, categoryL1: "IC", sortOrder: 70 },
+    { key: "tolerance", label: "精度", type: "TEXT" as const, unit: "%", categoryL1: "阻容感", sortOrder: 50 },
+    { key: "ratedVoltage", label: "额定电压", type: "NUMBER" as const, unit: "V", categoryL1: "阻容感", sortOrder: 60 },
+  ];
+  for (const d of attrDefs) {
+    await prisma.partAttributeDefinition.upsert({
+      where: { tenantId_key: { tenantId: tenant.id, key: d.key } },
+      update: { label: d.label, unit: d.unit, sortOrder: d.sortOrder, categoryL1: d.categoryL1 },
+      create: {
+        tenantId: tenant.id,
+        key: d.key,
+        label: d.label,
+        type: d.type,
+        unit: d.unit,
+        categoryL1: d.categoryL1,
+        sortOrder: d.sortOrder,
+        createdById: seedActor.id,
+      },
+    });
+  }
+
   await prisma.customerPartMapping.upsert({
     where: {
       tenantId_customerId_customerPn: {
