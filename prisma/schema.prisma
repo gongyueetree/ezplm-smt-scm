@@ -39,6 +39,164 @@ enum RoleName {
   SUPPLIER
 }
 
+/// 物料来源。**数据主权的落地点**:
+/// EZPLM 行是只读缓存(禁止本系统改写),其余三种是本系统自己的数据。
+enum PartOrigin {
+  /// ezPLM 同步来的只读缓存(唯一真源在 ezPLM)
+  EZPLM
+  /// 本系统手工创建(ezPLM 里没有的料)
+  LOCAL
+  /// 从用户自有系统批量导入
+  IMPORTED
+  /// 从 ERP 同步而来
+  ERP
+}
+
+/// 自建物料的生命状态(与器件 lifecycle 是两回事:一个说流程,一个说停产与否)
+enum PartStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  DISABLED
+}
+
+/// 物料属性的数据类型(分类驱动的动态参数)
+enum PartAttrType {
+  TEXT
+  NUMBER
+  RANGE
+  ENUM
+  BOOLEAN
+}
+
+/// 文档种类(合规与文档区)
+enum PartDocKind {
+  DATASHEET
+  APPROVAL_SHEET
+  ROHS_REPORT
+  REACH_REPORT
+  COC
+  OTHER
+}
+
+/// 重复检查的处置(疑似重复时**不允许静默创建**)
+enum DuplicateResolution {
+  USE_EXISTING
+  MAP_CUSTOMER_PN
+  CREATE_ANYWAY
+}
+
+/// ERP 厂商。业务代码**不得**判断具体厂商,一律走 ErpProvider 接口。
+enum ErpVendor {
+  KINGDEE
+  YONYOU
+  SAP
+  ORACLE
+  EXCEL
+  MOCK
+}
+
+/// 连接状态。**CONNECTED 只能在真实请求成功后写入** —— 不接受固定绿灯。
+enum ErpConnectionStatus {
+  NOT_CONFIGURED
+  PENDING_TEST
+  CONNECTED
+  DEGRADED
+  FAILED
+  DISABLED
+}
+
+/// 同步方向。受数据主权约束:ezPLM 为主数据源的实体不接受本系统覆盖。
+enum ErpSyncDirection {
+  ERP_TO_EZPLM
+  EZPLM_TO_ERP
+  BIDIRECTIONAL
+  IMPORT_ONLY
+  EXPORT_TEMPLATE_ONLY
+}
+
+/// 同步实体
+enum ErpEntityType {
+  MATERIAL
+  INVENTORY
+  OPEN_PO
+  WORK_ORDER
+  PURCHASE_ORDER
+  ETA_WRITEBACK
+  RECEIPT_LOT
+  SHIPMENT
+}
+
+/// 冲突处理策略
+enum ErpConflictPolicy {
+  STOP_ON_CONFLICT
+  SKIP_ON_CONFLICT
+  QUEUE_FOR_HUMAN
+}
+
+/// 行级同步结果
+enum ErpLineOutcome {
+  CREATED
+  UPDATED
+  UNCHANGED
+  CONFLICT
+  SKIPPED
+  FAILED
+}
+
+/// 追溯数据来源。**没有 MES**,所以一期只有导入与 ERP 同步两条真实通道。
+enum TraceSource {
+  IMPORT
+  ERP_SYNC
+  MANUAL
+  MES
+}
+
+/// 追溯图的边类型(供应链正向顺序)
+enum TraceEdgeKind {
+  PO_TO_RECEIPT
+  RECEIPT_TO_LOT
+  LOT_TO_ISSUE
+  ISSUE_TO_WORK_ORDER
+  WORK_ORDER_TO_FG_LOT
+  FG_LOT_TO_SHIPMENT
+  SHIPMENT_TO_CUSTOMER
+}
+
+/// 质量事件状态
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  CONTAINED
+  CLOSED
+}
+
+/// 处置动作类型
+enum ContainmentKind {
+  FREEZE_LOT
+  PAUSE_WORK_ORDER
+  MARK_RECHECK
+  DRAFT_RMA
+  NOTIFY_SUPPLIER
+  NOTIFY_CUSTOMER
+  CREATE_CAPA
+  RECALL_ASSESSMENT
+  EXPORT_QUARANTINE_LIST
+}
+
+/// 处置执行状态。
+/// **本系统只能登记,外部系统是否执行是另一回事** —— 绝不用一个「已完成」糊过去。
+enum ContainmentState {
+  SUGGESTED
+  PENDING_APPROVAL
+  REGISTERED_LOCALLY
+  PENDING_EXTERNAL
+  EXTERNAL_CONFIRMED
+  FAILED
+  REJECTED
+}
+
 /// RFQ 状态机(SPEC §5)
 enum RfqStatus {
   DRAFT
@@ -108,6 +266,8 @@ enum ProviderType {
   DIGIKEY
   MOUSER
   OFFLINE
+  /// 本系统自建(不是任何外部源的缓存)
+  LOCAL
 }
 
 /// BOM 匹配候选来源,顺序对应 SPEC §6 匹配顺序
@@ -237,6 +397,8 @@ enum AgentType {
   SOURCING
   QUOTE
   OPO
+  /// 追溯影响面分析:只出建议与证据,禁止自动冻结/通知/召回
+  TRACE
 }
 
 /// 集成作业类型(ERP Excel 模板兜底路径等)
@@ -276,6 +438,10 @@ model User {
   passwordHash   String?
   /// 融合字段(可空):ezPLM 侧用户 ID,JWT 验签后映射
   externalUserId String?
+  /// 供应商账号归属(跨聚合引用,受控标量)。
+  /// SUPPLIER 角色**必须**有此归属,否则追溯查询一律拒绝 ——
+  /// 没有归属就无法判断"与自身相关",宁可不给数据也不给全量。
+  supplierId     String?
   /// 用户只停用不删除(审计记录长寿要求)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -285,6 +451,7 @@ model User {
 
   @@unique([tenantId, email])
   @@index([tenantId, externalUserId])
+  @@index([tenantId, supplierId])
 }
 
 /// 角色目录(tenant-scoped;name 限定五值枚举)
@@ -559,6 +726,13 @@ model Part {
   packaging    String?
   rohs         Boolean?
   reach        Boolean?
+  /// 英文描述 / 品牌 / 备注(手工建料需要,ezPLM 不一定提供)
+  descriptionEn String?
+  brand         String?
+  note          String?
+  /// **来源与流程状态**:origin=EZPLM 的行是只读缓存,改写接口必须拒绝
+  origin       PartOrigin @default(EZPLM)
+  status       PartStatus @default(ACTIVE)
   /// 缓存来源与时点(只读缓存语义的一部分)
   sourcedFrom  ProviderType @default(EZPLM)
   syncedAt     DateTime?
@@ -571,11 +745,16 @@ model Part {
 
   tagLinks PartTagLink[]
   processAttr PartProcessAttr?
+  attrValues  PartAttributeValue[]
+  documents   PartDocument[]
+  supplierRefs PartSupplierRef[]
+  creationRecord PartCreationRecord?
 
   @@unique([tenantId, internalPn])
   @@index([tenantId, mpn])
   @@index([tenantId, manufacturer, mpn])
   @@index([tenantId, categoryL1, categoryL2])
+  @@index([tenantId, origin, status])
 }
 
 /// SMT 工艺属性(客户 docx:「SMT 工艺字段:包装规格、MSL 湿敏等级、盘装数量」)。
@@ -596,6 +775,11 @@ model PartProcessAttr {
   packaging String?
   /// 盘装数量(每盘颗数)
   reelQty   Int?
+  /// 供应参数(手工建料时录入的**初始参考**,不是正式采购条件)
+  moq          Int?
+  spq          Int?
+  leadTimeDays Int?
+  safetyStock  Decimal? @db.Decimal(18, 4)
   note      String?
   updatedById String
   updatedAt DateTime @updatedAt
@@ -656,6 +840,165 @@ model BomCompareRun {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, fromVersionId, toVersionId])
+}
+
+/// 权限授予(角色 → 权限串)。
+///
+/// 现有模型只有 5 个角色枚举,没有权限体系,也没有"系统管理员"。
+/// 这里用**权限串 + 按租户授予**来表达细粒度权限,而不是新增一个与既有架构冲突的硬编码角色
+/// —— 「系统管理员」= MANAGEMENT + erp.connection.manage 这类组合。
+model PermissionGrant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  role       RoleName
+  permission String
+  createdById String
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, role, permission])
+  @@index([tenantId, role])
+}
+
+/// 个别用户的额外授予/回收(优先级高于角色默认)
+model UserPermission {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  permission String
+  /// false = 明确回收(即便角色默认有,也不给)
+  granted    Boolean  @default(true)
+  reason     String?
+  createdById String
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, userId, permission])
+  @@index([tenantId, userId])
+}
+
+/// 物料属性定义(分类驱动的动态参数)。
+/// 常用且需查询统计的字段留在结构化列;各品类差异化的参数走定义 + 值两张表。
+model PartAttributeDefinition {
+  id         String       @id @default(cuid())
+  tenantId   String
+  key        String
+  label      String
+  type       PartAttrType @default(TEXT)
+  unit       String?
+  required   Boolean      @default(false)
+  /// 适用分类:留空=通用;否则按一级/二级分类匹配
+  categoryL1 String?
+  categoryL2 String?
+  /// ENUM 类型的可选项
+  options    Json?
+  /// 校验规则(min/max/pattern 等)
+  validation Json?
+  sortOrder  Int          @default(0)
+  createdById String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  values PartAttributeValue[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, categoryL1, categoryL2, sortOrder])
+}
+
+model PartAttributeValue {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  partId       String
+  part         Part                    @relation(fields: [partId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   PartAttributeDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  /// 原样保留用户/提取到的文本,数值化交给领域层(与 param-compare 同一套口径)
+  value        String?
+  /// 取值来源:MANUAL / EZPLM / AI_EXTRACT / ERP / IMPORT
+  source       String                  @default("MANUAL")
+  /// AI 提取置信度 0–1;人工录入为空
+  confidence   Float?
+  /// 人工是否已确认(AI 提取的默认 false,**不得直接当成已确认**)
+  confirmed    Boolean                 @default(false)
+  updatedById  String
+  updatedAt    DateTime                @updatedAt
+  createdAt    DateTime                @default(now())
+
+  @@unique([tenantId, partId, definitionId])
+  @@index([tenantId, definitionId])
+}
+
+/// 物料文档(规格书/承认书/RoHS/REACH/COC)。
+/// 文件本体走 FileStorageProvider,**库里只存 key 与元数据**。
+model PartDocument {
+  id        String      @id @default(cuid())
+  tenantId  String
+  partId    String
+  part      Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  kind      PartDocKind @default(OTHER)
+  fileKey   String
+  fileName  String
+  mimeType  String?
+  sizeBytes Int?
+  version   String?
+  /// 有效期;为空即"未标注有效期",不等于长期有效
+  validUntil DateTime?
+  /// 来源:UPLOAD / EZPLM / ERP / SUPPLIER
+  source    String      @default("UPLOAD")
+  note      String?
+  uploadedById String
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId, partId, kind])
+  @@index([tenantId, validUntil])
+}
+
+/// 物料的默认供应商引用(**关联 Supplier 主数据,不写自由文本**)
+model PartSupplierRef {
+  id             String   @id @default(cuid())
+  tenantId       String
+  partId         String
+  part           Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// 跨聚合引用:按 schema 顶部备案 B,supplierId 用**受控标量**而非 FK
+  /// (租户隔离由应用层 tenant scope + 复合唯一约束保证)。
+  /// 关键是"引用主数据 ID 而不是写自由文本",这一点已满足。
+  supplierId     String
+  supplierPn     String?
+  /// 参考单价:**仅初始参考**,不是正式报价。正式价来自 DigiKey/Mouser/ezPLM/线下报价/历史采购价
+  referencePrice Decimal? @db.Decimal(18, 6)
+  currency       String   @default("CNY")
+  isDefault      Boolean  @default(false)
+  note           String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, partId, supplierId])
+  @@index([tenantId, supplierId])
+}
+
+/// 建料过程留痕:重复检查结果、AI 提取证据、审核记录。
+/// 一颗料一条,便于事后回答"当初凭什么建的、谁审的、AI 提了什么"。
+model PartCreationRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  partId    String   @unique
+  part      Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// 建料来源:MANUAL / EZPLM_REFERENCE / IMPORT / ERP_SYNC
+  createdVia String  @default("MANUAL")
+  /// 重复检查命中的候选与用户处置
+  duplicateCandidates Json?
+  duplicateResolution DuplicateResolution?
+  duplicateReason     String?
+  /// AI 提取证据(字段 → {value, confidence, sourceFile})
+  aiEvidence Json?
+  /// 审核记录
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, createdVia])
 }
 
 /// 物料标识(内部料号/MPN/客户料号等多标识索引)
@@ -1386,6 +1729,463 @@ model QuoteTemplate {
 
   @@unique([tenantId, name])
   @@index([tenantId, tier])
+}
+
+/// ERP 连接(每租户可配多个)。
+///
+/// 纪律:
+/// - **凭据不存在本表**,单独放 ErpCredential 并加密;本表只存非敏感配置;
+/// - status=CONNECTED **只能**由真实 testConnection 成功后写入;
+/// - 未配置凭据一律 NOT_CONFIGURED,UI 显示「待联调」,不显示"连接正常"。
+model ErpConnection {
+  id           String              @id @default(cuid())
+  tenantId     String
+  name         String
+  vendor       ErpVendor
+  /// 厂商下的具体版本:K3 / 云星空 / 星瀚 / U8 / NC / YonBIP / B1 / S4HANA / NetSuite / EBS
+  edition      String?
+  /// 非敏感配置(base url / 账套 / 组织编码 / locale / 超时等)
+  config       Json
+  status       ErpConnectionStatus @default(NOT_CONFIGURED)
+  /// 最近一次真实连接测试的结果(响应时间/版本/组织/可用能力/失败原因/建议)
+  lastTestAt     DateTime?
+  lastTestResult Json?
+  /// 同步频率(cron 表达式;空=仅手工)
+  syncCron     String?
+  enabled      Boolean             @default(true)
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  credentials ErpCredential[]
+  mappings    ErpFieldMapping[]
+  policies    ErpSyncPolicy[]
+  jobs        ErpSyncJob[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, vendor, status])
+}
+
+/// ERP 凭据(AppSecret / Token / 密码)。
+///
+/// **密文入库**(AES-256-GCM),API 只回掩码,AuditLog 与日志只记字段名不记值。
+/// 缺少加密密钥时**拒绝保存**,不降级成明文 —— 明文存凭据比不存更糟。
+model ErpCredential {
+  id           String        @id @default(cuid())
+  tenantId     String
+  connectionId String
+  connection   ErpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  /// 字段名,如 appSecret / password / token
+  field        String
+  /// 密文(base64);**任何接口都不得回传本字段**
+  cipherText   String
+  iv           String
+  authTag      String
+  /// 掩码预览,如 ****1a2b(只留末 4 位,便于人核对是不是同一把钥匙)
+  maskedHint   String
+  updatedById  String
+  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime      @default(now())
+
+  @@unique([tenantId, connectionId, field])
+}
+
+/// 字段映射(ERP 字段 ↔ 本系统字段)
+model ErpFieldMapping {
+  id           String        @id @default(cuid())
+  tenantId     String
+  connectionId String
+  connection   ErpConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType   ErpEntityType
+  /// ERP 侧字段名
+  erpField     String
+  /// 本系统字段名
+  localField   String
+  /// 转换函数名(如 trim / upper / decimal / date:YYYYMMDD);空=原样
+  transform    String?
+  defaultValue String?
+  required     Boolean       @default(false)
+  /// 保存映射时做的样例验证结果(样例值 → 转换后值 / 失败原因)
+  sampleResult Json?
+  sortOrder    Int           @default(0)
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([tenantId, connectionId, entityType, localField])
+  @@index([tenantId, connectionId, entityType])
+}
+
+/// 同步策略(按实体配置方向、冲突处理、增量口径)
+model ErpSyncPolicy {
+  id             String            @id @default(cuid())
+  tenantId       String
+  connectionId   String
+  connection     ErpConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType     ErpEntityType
+  direction      ErpSyncDirection  @default(IMPORT_ONLY)
+  conflictPolicy ErpConflictPolicy @default(QUEUE_FOR_HUMAN)
+  /// 增量游标字段与上次水位(空=全量)
+  incrementalField String?
+  lastCursor       String?
+  /// 执行前是否必须先预览
+  requirePreview Boolean           @default(true)
+  enabled        Boolean           @default(true)
+  createdById    String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([tenantId, connectionId, entityType])
+}
+
+/// 同步作业
+model ErpSyncJob {
+  id             String           @id @default(cuid())
+  tenantId       String
+  connectionId   String
+  connection     ErpConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  entityType     ErpEntityType
+  direction      ErpSyncDirection
+  /// PREVIEW = 只算差异不写库;EXECUTE = 真正写入
+  mode           String           @default("PREVIEW")
+  status         JobStatus        @default(PENDING)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdCount   Int              @default(0)
+  updatedCount   Int              @default(0)
+  unchangedCount Int              @default(0)
+  skippedCount   Int              @default(0)
+  conflictCount  Int              @default(0)
+  failedCount    Int              @default(0)
+  /// 幂等键:同一批次重复执行不重复写入
+  idempotencyKey String?
+  /// 外部作业号(ERP 侧返回)
+  externalJobId  String?
+  requestId      String?
+  errorSummary   String?
+  triggeredById  String
+  createdAt      DateTime         @default(now())
+
+  lines     ErpSyncJobLine[]
+  conflicts ErpConflict[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, connectionId, entityType, createdAt])
+}
+
+/// 行级同步结果(预览与执行共用;预览的行 outcome 只是**预判**)
+model ErpSyncJobLine {
+  id        String         @id @default(cuid())
+  tenantId  String
+  jobId     String
+  job       ErpSyncJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  lineNo    Int
+  /// 业务主键(如 MPN / PO+行号 / 工单号)
+  bizKey    String
+  outcome   ErpLineOutcome
+  /// ERP 侧原值与本系统现值,便于行级差异对照
+  erpValues   Json?
+  localValues Json?
+  /// 差异字段清单
+  changedFields Json?
+  message   String?
+  createdAt DateTime       @default(now())
+
+  @@unique([tenantId, jobId, lineNo])
+  @@index([tenantId, jobId, outcome])
+}
+
+/// 冲突队列(**双向同步不按最后更新时间自动覆盖**,一律进人工队列)
+model ErpConflict {
+  id        String     @id @default(cuid())
+  tenantId  String
+  jobId     String
+  job       ErpSyncJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  entityType ErpEntityType
+  bizKey    String
+  field     String
+  erpValue    String?
+  localValue  String?
+  /// 处置:ACCEPT_ERP / KEEP_LOCAL / MANUAL(人工填值);未处置为空
+  resolution  String?
+  manualValue String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  note      String?
+  createdAt DateTime   @default(now())
+
+  @@index([tenantId, jobId, resolution])
+  @@index([tenantId, entityType, bizKey])
+}
+
+/// ERP 推送事件(Webhook;一期只登记不消费,便于后续接实时推送)
+model ErpWebhookEvent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  connectionId String
+  eventType    String
+  payload      Json
+  /// 幂等键:同一事件重复推送不重复处理
+  externalId   String?
+  processedAt  DateTime?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, connectionId, externalId])
+  @@index([tenantId, processedAt])
+}
+
+// ============================================================
+// 追溯域(PR-C:批次级全链路)
+//
+// 数据主权与边界:本系统**没有 MES**,批次数据靠三张模板导入或 ERP 同步。
+// 一期只做到**批次级**,SN 级待 MES/SN 数据接入 —— 页面必须如实标注。
+// ============================================================
+
+/// 一次导入的批次(保存原始文件 + 行级校验结果,支持撤销未关联数据的错误导入)
+model TraceImportBatch {
+  id          String      @id @default(cuid())
+  tenantId    String
+  /// RECEIPT / WO_ISSUE / SHIPMENT 三张标准模板之一
+  template    String
+  fileKey     String?
+  fileName    String?
+  source      TraceSource @default(IMPORT)
+  totalRows   Int         @default(0)
+  okRows      Int         @default(0)
+  errorRows   Int         @default(0)
+  /// 行级错误明细(行号 + 原因),不静默丢弃
+  errors      Json?
+  /// 幂等键:同一文件重复导入不重复建数据
+  idempotencyKey String?
+  /// 撤销:只允许撤销尚未被下游引用的数据
+  revokedAt   DateTime?
+  revokedById String?
+  createdById String
+  createdAt   DateTime    @default(now())
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, template, createdAt])
+}
+
+/// 收料批次(PO → 供应商批次 → 内部批次的落点)
+model ReceiptLot {
+  id            String      @id @default(cuid())
+  tenantId      String
+  importBatchId String?
+  poNo          String?
+  poLineNo      Int?
+  supplierId    String?
+  supplierName  String?
+  mpn           String?
+  internalPn    String?
+  /// 供应商批次号
+  supplierLot   String?
+  /// 内部批次号(与 MaterialLot.lotNo 对应)
+  internalLot   String
+  receivedQty   Decimal     @db.Decimal(18, 4)
+  receivedAt    DateTime?
+  dateCode      String?
+  warehouse     String?
+  location      String?
+  source        TraceSource @default(IMPORT)
+  createdById   String
+  createdAt     DateTime    @default(now())
+
+  @@unique([tenantId, internalLot])
+  @@index([tenantId, poNo, poLineNo])
+  @@index([tenantId, mpn])
+  @@index([tenantId, supplierLot])
+}
+
+/// 内部物料批次(库存与发料的主体)
+model MaterialLot {
+  id         String   @id @default(cuid())
+  tenantId   String
+  lotNo      String
+  mpn        String?
+  internalPn String?
+  /// 收料带入的数量;已发料/剩余由发料行派生,**不落冗余计数**
+  receivedQty Decimal @db.Decimal(18, 4)
+  /// 冻结登记:仅代表**本系统已登记**,不代表 ERP/WMS 已锁库
+  frozenAt   DateTime?
+  frozenById String?
+  frozenReason String?
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, lotNo])
+  @@index([tenantId, mpn])
+}
+
+/// 生产工单
+model TraceWorkOrder {
+  id          String      @id @default(cuid())
+  tenantId    String
+  workOrderNo String
+  product     String?
+  bomVersion  String?
+  plannedQty  Decimal?    @db.Decimal(18, 4)
+  productionLine String?
+  startAt     DateTime?
+  needDate    DateTime?
+  status      String?
+  /// 暂停登记:同样只代表本系统已登记
+  pausedAt    DateTime?
+  pausedById  String?
+  pausedReason String?
+  source      TraceSource @default(IMPORT)
+  createdAt   DateTime    @default(now())
+
+  @@unique([tenantId, workOrderNo])
+}
+
+/// 工单发料(批次 → 工单的关键一跳)
+model WorkOrderMaterialIssue {
+  id            String   @id @default(cuid())
+  tenantId      String
+  importBatchId String?
+  workOrderNo   String
+  lotNo         String
+  mpn           String?
+  issuedQty     Decimal  @db.Decimal(18, 4)
+  returnedQty   Decimal? @db.Decimal(18, 4)
+  issuedAt      DateTime?
+  operator      String?
+  createdAt     DateTime @default(now())
+
+  @@unique([tenantId, workOrderNo, lotNo])
+  @@index([tenantId, lotNo])
+  @@index([tenantId, workOrderNo])
+}
+
+/// 成品批次
+model FinishedGoodsLot {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fgLotNo     String
+  workOrderNo String?
+  product     String?
+  producedQty Decimal? @db.Decimal(18, 4)
+  producedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, fgLotNo])
+  @@index([tenantId, workOrderNo])
+}
+
+/// 出货单与出货行(成品批次 → 客户)
+model TraceShipment {
+  id           String   @id @default(cuid())
+  tenantId     String
+  shipmentNo   String
+  customerId   String?
+  customerName String?
+  customerPo   String?
+  shippedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  lines TraceShipmentLine[]
+
+  @@unique([tenantId, shipmentNo])
+  @@index([tenantId, customerId])
+}
+
+model TraceShipmentLine {
+  id            String        @id @default(cuid())
+  tenantId      String
+  shipmentId    String
+  shipment      TraceShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  importBatchId String?
+  fgLotNo       String
+  shippedQty    Decimal       @db.Decimal(18, 4)
+  createdAt     DateTime      @default(now())
+
+  @@unique([tenantId, shipmentId, fgLotNo])
+  @@index([tenantId, fgLotNo])
+}
+
+/// 追溯图的边(冗余但必要:图遍历不该每次都去 join 五张表)
+model TraceEdge {
+  id       String        @id @default(cuid())
+  tenantId String
+  kind     TraceEdgeKind
+  /// 源与目标用「类型:业务键」表达,如 LOT:LOT-2026-001 / WO:WO-26-0412
+  fromRef  String
+  toRef    String
+  /// 该跳的数量(发料量/产出量/出货量)
+  qty      Decimal?      @db.Decimal(18, 4)
+  occurredAt DateTime?
+  source   TraceSource   @default(IMPORT)
+  createdAt DateTime     @default(now())
+
+  @@unique([tenantId, kind, fromRef, toRef])
+  @@index([tenantId, fromRef])
+  @@index([tenantId, toRef])
+}
+
+/// 追溯事件时间线
+model TraceEvent {
+  id        String      @id @default(cuid())
+  tenantId  String
+  ref       String
+  eventType String
+  detail    Json?
+  occurredAt DateTime
+  source    TraceSource @default(IMPORT)
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId, ref, occurredAt])
+}
+
+/// 质量事件(客诉 / 来料异常 / 制程异常的登记入口)
+model QualityIncident {
+  id          String         @id @default(cuid())
+  tenantId    String
+  code        String
+  title       String
+  /// 异常源:LOT / WO / FG / SHIPMENT / PO 的业务键
+  sourceRef   String
+  description String?
+  severity    String?
+  status      IncidentStatus @default(OPEN)
+  /// 影响范围分析快照(算出来即固化,便于事后复盘)
+  impactSnapshot Json?
+  reportedById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  actions ContainmentAction[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+/// 处置动作。
+///
+/// **状态必须区分「本系统已登记」与「外部系统已执行」** ——
+/// 未接 ERP/MES 时只能到 REGISTERED_LOCALLY / PENDING_EXTERNAL,
+/// 绝不显示「ERP 已冻结」「设备已停机」。
+model ContainmentAction {
+  id         String           @id @default(cuid())
+  tenantId   String
+  incidentId String
+  incident   QualityIncident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  kind       ContainmentKind
+  targetRef  String
+  state      ContainmentState @default(SUGGESTED)
+  /// 提议与批准分离:提议人 ≠ 批准人
+  proposedById String
+  proposedAt   DateTime       @default(now())
+  approvedById String?
+  approvedAt   DateTime?
+  rejectReason String?
+  /// 外部系统执行结果(ERP/MES 接通后回填)
+  externalRef   String?
+  externalNote  String?
+  note       String?
+  updatedAt  DateTime         @updatedAt
+
+  @@index([tenantId, incidentId, state])
 }
 
 // ============================================================

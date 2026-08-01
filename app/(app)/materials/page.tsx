@@ -5,6 +5,9 @@ import { ezplmProviderMode } from "@/lib/providers/ezplm";
 import { digiKeyMode } from "@/lib/providers/digikey";
 import { mouserMode } from "@/lib/providers/mouser";
 import { PageHeader } from "@/components/ui/page-header";
+import { loadPermissions } from "@/lib/server/permissions";
+import { BulkImportParts } from "./bulk-import";
+import { CreatePartDrawer } from "./create-part-drawer";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -53,6 +56,16 @@ export default async function MaterialsPage({
 }) {
   const { q, l1, l2, tag } = await searchParams;
   const session = (await getSession())!;
+  const [perms, suppliersForForm] = await Promise.all([
+    loadPermissions(session),
+    prisma.supplier.findMany({
+      where: tenantWhere(session.tenantId),
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  // 建料属工程职责;PM/采购默认只读,可经 UserPermission 单独授予
+  const canCreate = perms.has("material.create");
   const keyword = (q ?? "").trim();
 
   // 分类与标签可与关键字**组合**筛选(客户 docx 抱怨过筛选区块彼此独立、无法联动)
@@ -126,7 +139,15 @@ export default async function MaterialsPage({
 
   return (
     <div>
-      <PageHeader path="/materials" />
+      <PageHeader
+        path="/materials"
+        actions={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <BulkImportParts canCreate={canCreate} />
+            <CreatePartDrawer suppliers={suppliersForForm} canCreate={canCreate} />
+          </div>
+        }
+      />
 
       <Card title="物料查询" sub="ezPLM 只读缓存;显示缓存时点,不代表实时">
         <form method="get" style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>

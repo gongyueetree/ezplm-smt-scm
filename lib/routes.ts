@@ -248,6 +248,17 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "平台",
     routes: [
       {
+        path: "/traceability",
+        label: "批次级追溯",
+        icon: "box",
+        plannedPr: "PR-C",
+        desc: "批次级全链路追溯与影响范围分析;粒度为批次级,SN 级待 MES/SN 数据接入;隔离处置仅本系统登记并需人工审批。",
+        implemented: true,
+        // SUPPLIER 已开放,但看到的是**受限视图**:行级过滤见 lib/domain/trace-scope.ts
+        // —— 横向只见自己的批次,纵向不见工单及其下游的成品/出货/客户信息。
+        roles: ["ENGINEERING", "PROCUREMENT", "PM", "MANAGEMENT", "SUPPLIER"],
+      },
+      {
         path: "/settings",
         label: "系统设置",
         icon: "gear",
@@ -255,6 +266,15 @@ export const NAV_SECTIONS: NavSection[] = [
         desc: "租户、用户与角色管理;集成状态只用 待确认/待授权/待联调/示例配置。",
         roles: ["MANAGEMENT"],
         children: [
+          {
+            path: "/settings/integrations/erp",
+            label: "ERP 同步",
+            icon: "db",
+            plannedPr: "PR-B",
+            desc: "ERP 连接配置、字段映射、同步预览与冲突处置;状态只反映真实测试结果,未配凭据显示「待联调」。",
+            implemented: true,
+            roles: ["MANAGEMENT"],
+          },
           {
             path: "/settings/quote-templates",
             label: "报价模板与客户分级",
