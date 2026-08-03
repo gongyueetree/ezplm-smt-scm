@@ -435,6 +435,130 @@ Railway 的 **Redeploy 是"用同一个提交再部一次"**,不会去取分支�
 
 ---
 
+## 九之三、把客户在用的域名切到新系统(域名迁移手册)
+
+> 背景(2026-08-01 实测):`erp.tindie.com` 当时指向 **Vercel**,服务的是
+> 2026-07-05 手动上传的**静态原型**(页面 `_next` 引用 0 处、`/login` 返回 404)。
+> 而真正的系统跑在 Railway。客户按老链接测了很久,测的一直是原型。
+>
+> 本节记录如何把这个域名切到 Railway,**且不让客户改链接**。
+
+### 1. 为什么不把系统部署到 Vercel
+
+不是配置问题,是架构冲突(见第四节 4.1):Serverless 文件系统只读、函数有执行时长上限、
+WASM 冷启动吃紧。附件上传与大 BOM 导入这两条主线在 Vercel 上都会出问题。
+**切域名比迁平台省事得多,也没有这些限制。**
+
+### 2. 顺序很重要
+
+**先在 Railway 加域名 → 再改 DNS → 验证通过 → 最后从 Vercel 移除。**
+
+顺序反了会中断服务:先从 Vercel 摘掉域名,在 DNS 生效前该域名会直接打不开;
+而按上面的顺序,切换期间最坏情况只是"有人看到旧站",不会白屏。
+
+#### 第 1 步:Railway 侧登记域名
+
+Railway → 目标服务 → **Settings → Networking → Custom Domain** → 填 `erp.tindie.com`。
+
+Railway 会给出一条 CNAME 目标(形如 `xxxx.up.railway.app`),并显示
+**Waiting for DNS** —— 这是正常的,此时 DNS 还没改。
+
+#### 第 2 步:改 DNS(本项目在 Cloudflare)
+
+`tindie.com` 的 NS 是 `leia.ns.cloudflare.com` / `woz.ns.cloudflare.com`,
+所以在 **Cloudflare** 控制台改,不是在域名注册商那里。
+
+把 `erp` 这条记录改成:
+
+| 字段 | 值 |
+|---|---|
+| 类型 | `CNAME` |
+| 名称 | `erp` |
+| 目标 | Railway 给的那条 `xxxx.up.railway.app` |
+| 代理状态 | **DNS only(灰云)** |
+| TTL | Auto |
+
+> ⚠️ **Cloudflare 特有的坑:代理状态必须先设成「DNS only」(灰云)。**
+>
+> 开着橙云时,Cloudflare 会代理流量并自己终止 TLS,
+> Railway 看到的不是真实解析结果,**证书签发会一直卡在 pending**。
+> 等 Railway 证书签发成功、站点能正常访问之后,再决定是否开回橙云;
+> 若要开橙云,Cloudflare 的 SSL 模式必须是 **Full (Strict)** ——
+> 用 Flexible 会造成"Cloudflare 到 Railway 走明文",且容易出现重定向循环。
+
+#### 第 3 步:等证书
+
+Railway 侧状态会从 **Waiting for DNS** → **Issuing certificate** → **Active**。
+通常几分钟,偶尔十几分钟。
+
+**证书签发完成前,HTTPS 访问可能报证书错误** —— 这是预期现象,不要在这个阶段回滚。
+
+#### 第 4 步:验证(不要只看浏览器)
+
+浏览器有缓存和 HSTS,看着"没变"未必是真没变。用命令确认:
+
+```bash
+dig +short erp.tindie.com && curl -sI https://erp.tindie.com/login | head -3
+```
+
+判定标准:
+
+| 检查 | 切换成功的表现 |
+|---|---|
+| `dig` 结果 | 指向 Railway,**不再**出现 `vercel-dns` |
+| `/login` 状态码 | **200**(旧的静态原型这里是 404) |
+| 响应头 | 出现 `x-railway-*`,**不再**有 `x-vercel-*` |
+| 页面标题 | `ezPLM · AI 供应链协同` |
+
+再补一条内容级验证(避免"域名切了但部署是旧的"):
+
+```bash
+curl -s https://erp.tindie.com/login | grep -c "_next"
+```
+
+**大于 0** 才说明服务的是 Next.js 系统而不是静态 HTML。
+
+#### 第 5 步:从 Vercel 移除该域名
+
+确认第 4 步全部通过后,Vercel → 项目 → **Settings → Domains** → 移除 `erp.tindie.com`。
+
+**不移除会怎样**:Vercel 仍认为自己拥有该域名,后续若有人误改 DNS 或
+Vercel 侧做了重定向配置,可能把流量抢回去。切换完成后应尽快摘掉。
+
+### 3. 切换期会发生什么
+
+DNS 有缓存,不同网络的用户不会同时切过去。这段时间内:
+
+- 一部分用户看到**新系统**(Railway);
+- 一部分用户看到**旧的静态原型**(Vercel);
+- **不会白屏**,因为两边都还在服务。
+
+这个窗口通常几分钟到一小时。若想缩短:改 DNS **之前**先把该记录的 TTL 调到 60 秒,
+等一个旧 TTL 周期后再改目标。
+
+> 客户正在测试期间切换时,**提前打招呼**比事后解释省事 ——
+> 他们看到界面突然变了会以为出故障。
+
+### 4. 回滚
+
+把 Cloudflare 里 `erp` 的 CNAME 改回 Vercel 的目标即可
+(切换前**先把原值抄下来**,本次实测原值是 `d1b22c3c88353251.vercel-dns-016.com`)。
+
+只要第 5 步还没做(域名仍留在 Vercel 项目里),回滚就是改一条 DNS 记录的事。
+**这也是为什么第 5 步要放在最后。**
+
+### 5. 常见故障
+
+| 现象 | 原因与处理 |
+|---|---|
+| Railway 一直 Waiting for DNS | Cloudflare 开着橙云 → 改成 DNS only(灰云) |
+| 证书报错、访问不了 | 证书还在签发中,等几分钟;超过 20 分钟检查 CNAME 是否写对 |
+| 浏览器仍显示旧站 | 本地 DNS 缓存或 HSTS;用 `dig` 与 `curl` 判定,别信浏览器 |
+| 重定向循环 | Cloudflare SSL 模式是 Flexible → 改 **Full (Strict)** |
+| `/login` 是 200 但页面是旧原型 | 域名切对了,但 Railway 上部署的是旧提交 → 看 Deploy Logs 与迁移数量 |
+
+---
+
 ## 十、当前未接通的外部依赖(如实记录)
 
 | 依赖 | 状态 | 影响 |
