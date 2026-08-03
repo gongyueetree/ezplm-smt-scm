@@ -34,7 +34,7 @@ async function userId(page: Page, email: string): Promise<string> {
 }
 
 test("只有管理层能进权限配置页", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/settings/permissions");
   await expect(page.getByText("settings.permissions.manage")).toBeVisible();
   await expect(page.getByText(/缺少/)).toBeVisible();
@@ -42,7 +42,7 @@ test("只有管理层能进权限配置页", async ({ page }) => {
   const denied = await page.request.get("/api/settings/permissions");
   expect(denied.status()).toBe(403);
 
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/permissions");
   await expect(page.getByText("租户级角色授予")).toBeVisible();
 });
@@ -52,32 +52,32 @@ test("**租户级授予真的改变能力** —— 授予后 PM 能建料,撤销
   const u = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
 
   // 基线:PM 不能建料
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const before = await page.request.post("/api/materials/parts", {
     data: { target: "ACTIVE", internalPn: `EE-P-${u}`, mpn: `M-P-${u}`, categoryL1: "IC", manufacturer: "ST", description: "权限用例" },
   });
   expect(before.status()).toBe(403);
 
   // 管理层授予
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const grant = await page.request.post("/api/settings/permissions", {
     data: { kind: "ROLE_GRANT", role: "PM", permission: "material.create", enabled: true },
   });
   expect(grant.status()).toBe(200);
 
   // PM 现在能建了
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const after = await page.request.post("/api/materials/parts", {
     data: { target: "ACTIVE", internalPn: `EE-P-${u}`, mpn: `M-P-${u}`, categoryL1: "IC", manufacturer: "ST", description: "权限用例" },
   });
   expect(after.status()).toBe(201);
 
   // 撤销后又不能
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.request.post("/api/settings/permissions", {
     data: { kind: "ROLE_GRANT", role: "PM", permission: "material.create", enabled: false },
   });
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const revoked = await page.request.post("/api/materials/parts", {
     data: { target: "ACTIVE", internalPn: `EE-P2-${u}`, mpn: `M-P2-${u}`, categoryL1: "IC", manufacturer: "ST", description: "权限用例" },
   });
@@ -86,8 +86,8 @@ test("**租户级授予真的改变能力** —— 授予后 PM 能建料,撤销
 
 test("用户级授予/回收覆盖角色默认,且来源推演能说清是谁决定的", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "management@demo.ezplm.cn");
-  const pmId = await userId(page, "pm@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
+  const pmId = await userId(page, "pm@demo.qianchuang.cn");
   const u = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
 
   // ① 用户级授予:PM 默认没有 material.create
@@ -103,14 +103,14 @@ test("用户级授予/回收覆盖角色默认,且来源推演能说清是谁决
   expect(item.granted).toBe(true);
   expect(item.decidedBy).toBe("USER_GRANT");
 
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const created = await page.request.post("/api/materials/parts", {
     data: { target: "ACTIVE", internalPn: `EE-U-${u}`, mpn: `M-U-${u}`, categoryL1: "IC", manufacturer: "ST", description: "x" },
   });
   expect(created.status()).toBe(201);
 
   // ② 改成回收:即便刚授予过,回收也要立刻生效
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.request.post("/api/settings/permissions", {
     data: { kind: "USER_OVERRIDE", userId: pmId, permission: "material.create", mode: "REVOKE" },
   });
@@ -121,14 +121,14 @@ test("用户级授予/回收覆盖角色默认,且来源推演能说清是谁决
   expect(item.granted).toBe(false);
   expect(item.decidedBy).toBe("USER_REVOKE");
 
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const denied = await page.request.post("/api/materials/parts", {
     data: { target: "ACTIVE", internalPn: `EE-U2-${u}`, mpn: `M-U2-${u}`, categoryL1: "IC", manufacturer: "ST", description: "x" },
   });
   expect(denied.status()).toBe(403);
 
   // ③ 清除覆盖 → 回到角色默认(PM 本来就没有)
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.request.post("/api/settings/permissions", {
     data: { kind: "USER_OVERRIDE", userId: pmId, permission: "material.create", mode: "CLEAR" },
   });
@@ -141,8 +141,8 @@ test("用户级授予/回收覆盖角色默认,且来源推演能说清是谁决
 });
 
 test("**不允许回收自己的权限管理权** —— 否则谁都进不来", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
-  const selfId = await userId(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
+  const selfId = await userId(page, "management@demo.qianchuang.cn");
 
   const res = await page.request.post("/api/settings/permissions", {
     data: {
@@ -157,7 +157,7 @@ test("**不允许回收自己的权限管理权** —— 否则谁都进不来",
 });
 
 test("角色默认权限在页面上只读展示,不提供勾选框", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/permissions");
   // 工程的 material.create 是角色默认 → 显示「默认」徽标而不是 checkbox
   const row = page.locator("tbody tr").filter({ hasText: "material.create" }).first();

@@ -22,7 +22,7 @@ async function kpi(page: Page, label: string): Promise<number> {
 }
 
 test("OPO KPI 三分类互斥且合计等于总行数(同源派生)", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
 
   const total = await kpi(page, "OPO 行数");
@@ -43,7 +43,7 @@ test("OPO KPI 三分类互斥且合计等于总行数(同源派生)", async ({ p
 });
 
 test("记录供应商回复后 KPI 与差异表同步更新", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
 
   const before = await kpi(page, "未回复");
@@ -78,7 +78,7 @@ test("记录供应商回复后 KPI 与差异表同步更新", async ({ page }) =
 });
 
 test("异常清单展示具体异常原因", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
 
   const anomalyCard = page.locator(".card", { hasText: "异常清单" });
@@ -86,7 +86,7 @@ test("异常清单展示具体异常原因", async ({ page }) => {
 });
 
 test("ERP 交期回写模板可导出(替代路径,非 API 直写)", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
 
   await expect(page.getByText(/RPA \/ API 直写属二期/)).toBeVisible();
@@ -128,7 +128,7 @@ test("催办 Cron:鉴权由路由的 CRON_SECRET 把关,且必须能被外部调
 });
 
 test("管理工作台 KPI 由明细派生且可下钻", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await expect(page.locator(".page-title")).toHaveText("管理工作台");
 
   // 诚实标注:金额取快照、库存为缓存
@@ -145,7 +145,7 @@ test("管理工作台 KPI 由明细派生且可下钻", async ({ page }) => {
 });
 
 test("库存页:DC 未知单列,不并入最新库龄区间", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/inventory");
 
   const agingTable = page.locator(".card", { hasText: "DC Aging 分布" }).locator("table.tbl");

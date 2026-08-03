@@ -22,7 +22,7 @@ async function login(page: Page, email: string) {
 }
 
 test("BOM 台账:新增两张卡片、风险色标、点卡片自动下钻", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom");
 
   await expect(page.locator(".kpi", { hasText: "EOL 物料占用 BOM" })).toBeVisible();
@@ -45,7 +45,7 @@ test("BOM 台账:新增两张卡片、风险色标、点卡片自动下钻", asy
 });
 
 test("BOM 台账:超期口径可调,调整后立即影响判定", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   // 口径设成 0 天 → 任何有版本的 BOM 都算超期(用于验证口径真的参与计算)
   await page.goto("/bom?staleDays=1");
   const staleKpi = page.locator(".kpi", { hasText: "超期未更新 BOM" });
@@ -61,7 +61,7 @@ test("BOM 台账:超期口径可调,调整后立即影响判定", async ({ page 
 });
 
 test("BOM 台账:批量导出清单与异常物料", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom");
 
   for (const [name, pattern] of [
@@ -77,7 +77,7 @@ test("BOM 台账:批量导出清单与异常物料", async ({ page }) => {
 
 test("导入历史台账:可追溯原始文件,并能直达匹配确认", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
 
   // 幂等键算的是**文件内容 + 解析结果**,只改文件名照样命中复用、不产生新作业行。
   // 所以这里连内容也要唯一(加一行独有位号),否则台账里最新一条会是旧记录。
@@ -109,7 +109,7 @@ test("导入历史台账:可追溯原始文件,并能直达匹配确认", async 
 
 test("导入后「与其它版本比对」:新版本被预选为变更后,再挑变更前", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/bom/import");
   await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
   await page.getByRole("button", { name: "开始导入" }).click();

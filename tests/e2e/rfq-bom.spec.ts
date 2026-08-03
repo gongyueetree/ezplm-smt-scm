@@ -27,7 +27,7 @@ async function createRfq(page: Page, title: string) {
 }
 
 test("PM 创建 RFQ 并上传多个附件(SPEC §17-1)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createRfq(page, "E2E 控制板询价");
 
   await expect(page.locator(".page-title")).toContainText("E2E 控制板询价");
@@ -45,7 +45,7 @@ test("PM 创建 RFQ 并上传多个附件(SPEC §17-1)", async ({ page }) => {
 });
 
 test("RFQ 不报价关闭:必须填原因,关闭后进入终态(SPEC §17-2)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createRfq(page, "E2E 不报价关闭");
 
   // 取消填写原因 → 不发生流转
@@ -64,7 +64,7 @@ test("RFQ 不报价关闭:必须填原因,关闭后进入终态(SPEC §17-2)", a
 });
 
 test("BOM 导入 → 校验 → 匹配 → 人工确认(SPEC §17-3)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom/import");
 
   await page.getByLabel("选择文件(可多选)").setInputFiles(FIXTURE);
@@ -98,7 +98,7 @@ test("BOM 导入 → 校验 → 匹配 → 人工确认(SPEC §17-3)", async ({ 
 });
 
 test("BOM 台账与版本比对入口可达", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/bom");
   await expect(page.locator(".page-title")).toHaveText("BOM 管理");
 

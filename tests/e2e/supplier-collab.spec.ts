@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
 }
 
 test("协同页:明确声明邮件未接入,且不存在「已发送」状态", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/collab");
 
   await expect(page.locator(".page-title")).toHaveText("供应商协同");
@@ -29,7 +29,7 @@ test("协同页:明确声明邮件未接入,且不存在「已发送」状态", 
 
 test("供应商建档邀请:生成链接与草稿,措辞不含已发送;资料复核前不进主数据", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/collab");
 
   const name = `E2E供应商-${Date.now()}`;
@@ -50,7 +50,7 @@ test("供应商建档邀请:生成链接与草稿,措辞不含已发送;资料�
 
 test("批量生成订单邮件草稿:未审批订单不出现在候选里", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/collab");
 
   const card = page.locator(".card", { hasText: "批量生成订单邮件草稿" });
@@ -71,7 +71,7 @@ test("批量生成订单邮件草稿:未审批订单不出现在候选里", asyn
 
 test("接单回执:人工登记并如实记录来源渠道", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/collab");
 
   const card = page.locator(".card", { hasText: "登记接单回执" });

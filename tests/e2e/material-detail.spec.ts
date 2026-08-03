@@ -26,7 +26,7 @@ async function login(page: Page, email: string) {
 }
 
 test("物料列表:MPN 可点击进入详情页", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials");
   await expect(page.locator(".page-title")).toHaveText("物料查询");
 
@@ -40,7 +40,7 @@ test("物料列表:MPN 可点击进入详情页", async ({ page }) => {
 });
 
 test("物料详情:八个区块齐全,数据来源被诚实标注", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials");
   await page.locator("a.mpn-link").first().click();
   await page.waitForURL("**/materials/**");
@@ -70,7 +70,7 @@ test("物料详情:八个区块齐全,数据来源被诚实标注", async ({ pag
 
 test("在线预览:原理图符号与 PCB 封装渲染成 SVG,失败时如实报错", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
 
   const card = page.locator(".card", { hasText: "原理图符号与 PCB 封装" });
@@ -92,7 +92,7 @@ test("在线预览:原理图符号与 PCB 封装渲染成 SVG,失败时如实报
 
 test("在线预览:符号与封装可缩放、拖动、双击复位,且滚轮不带动页面滚动", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
 
   const card = page.locator(".card", { hasText: "原理图符号与 PCB 封装" });
@@ -149,7 +149,7 @@ test("在线预览:符号与封装可缩放、拖动、双击复位,且滚轮不
 });
 
 test("3D 模型:提供在线预览入口与源文件下载,且说明体积代价", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
   const card = page.locator(".card", { hasText: "3D 模型(STEP 在线预览)" });
   await expect(card).toBeVisible();
@@ -164,7 +164,7 @@ test("3D 模型:提供在线预览入口与源文件下载,且说明体积代价
 
 test("分销商价格与库存:展示数据更新时间且明示非实时", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
 
   const card = page.locator(".card", { hasText: "分销商价格与库存" });
@@ -187,7 +187,7 @@ test("分销商价格与库存:展示数据更新时间且明示非实时", asyn
 
 test("替代料:详情页内可查询,勾选后进候选清单,刷新仍在,且可重新查询", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
 
   const picker = page.getByTestId("alt-picker");
@@ -235,7 +235,7 @@ test("替代料:详情页内可查询,勾选后进候选清单,刷新仍在,且�
 });
 
 test("未收录型号:给出明确说明而非报错页", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials/NO-SUCH-MPN-E2E-XYZ");
   await expect(page.locator(".page-title")).toHaveText("NO-SUCH-MPN-E2E-XYZ");
   await expect(page.getByText(/未在 ezPLM 与本地缓存中找到/)).toBeVisible();
@@ -245,7 +245,7 @@ test("未收录型号:给出明确说明而非报错页", async ({ page }) => {
 
 test("缺料分析页的 MPN 同样可点开详情", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
 
   // 自建前置数据并锁定版本:靠"库里正好有缺料行"会让用例静默 skip,
   // 那等于这条链路根本没被测到。

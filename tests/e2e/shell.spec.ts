@@ -30,7 +30,7 @@ test("未登录访问受保护页跳转登录页", async ({ page }) => {
 });
 
 test("PM 登录:PM 工作台 + 菜单裁剪 + 搜索范围", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await expect(page.locator(".page-title")).toHaveText("PM 工作台");
   const hrefs = await menuHrefs(page);
   expect(hrefs).toContain("/rfq");
@@ -45,11 +45,11 @@ test("PM 登录:PM 工作台 + 菜单裁剪 + 搜索范围", async ({ page }) =>
 });
 
 test("角色切换(退出→采购登录):菜单/工作台/搜索范围联动更新", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.getByRole("button", { name: "退出" }).click();
   await page.waitForURL("**/login");
 
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await expect(page.locator(".page-title")).toHaveText("采购工作台");
   const hrefs = await menuHrefs(page);
   expect(hrefs).toContain("/procurement/rfq");
@@ -60,7 +60,7 @@ test("角色切换(退出→采购登录):菜单/工作台/搜索范围联动更
 });
 
 test("管理层登录:全局菜单(15 条路由全可见)", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await expect(page.locator(".page-title")).toHaveText("管理工作台");
   const hrefs = await menuHrefs(page);
   for (const p of [
@@ -85,7 +85,7 @@ test("管理层登录:全局菜单(15 条路由全可见)", async ({ page }) => 
 });
 
 test("子页面返回上一层按钮可用(工程角色)", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/bom/import");
   const back = page.locator(".back-link");
   await expect(back).toBeVisible();
@@ -99,7 +99,7 @@ test("占位页如实标注待实现状态(诚实 UI)", async ({ page }) => {
   const pending = unimplementedRoutes();
   test.skip(pending.length === 0, "所有模块均已实现,无占位页可验证");
 
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   for (const route of pending) {
     await page.goto(route.path);
     await expect(page.locator(".banner"), `${route.path} 应标注待实现`).toContainText("待实现");
@@ -112,7 +112,7 @@ test("登录/退出生成 AuditLog(经 /api 无会话 401 佐证鉴权链路)", 
   const res = await request.post("/api/auth/logout");
   expect(res.status()).toBe(401);
   // 登录后退出走通(AuditLog 落库由单测+登录接口实现保证,此处验证链路可达)
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.getByRole("button", { name: "退出" }).click();
   await page.waitForURL("**/login");
 });

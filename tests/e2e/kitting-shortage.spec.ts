@@ -39,7 +39,7 @@ async function importBomFixture(page: Page): Promise<string> {
 }
 
 test("齐料检查:按台数核算需求,数据未知不当作有货", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const versionId = await importBomFixture(page);
 
   await page.goto(`/kitting?v=${versionId}&boards=100`);
@@ -60,7 +60,7 @@ test("齐料检查:按台数核算需求,数据未知不当作有货", async ({ 
 });
 
 test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const versionId = await importBomFixture(page);
 
   await page.goto(`/shortage?v=${versionId}&boards=100`);
@@ -76,7 +76,7 @@ test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) 
 });
 
 test("Call 料表可导出 XLSX", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const versionId = await importBomFixture(page);
   await page.goto(`/shortage?v=${versionId}&boards=100`);
 
@@ -86,7 +86,7 @@ test("Call 料表可导出 XLSX", async ({ page }) => {
 });
 
 test("物料查询:可按关键字检索并显示数据更新时间", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials");
   await expect(page.locator(".page-title")).toHaveText("物料查询");
 

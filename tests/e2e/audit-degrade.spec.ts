@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 }
 
 test("⑨ 外部 API 失败时展示降级信息,且不阻断其余流程(SPEC §17-9)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
 
   // 拦截匹配进度接口,注入一条 provider 降级信息(服务端降级逻辑已由单测覆盖,
   // 此处验证 UI 是否如实展示而不是静默吞掉)
@@ -50,7 +50,7 @@ test("⑨ 外部 API 失败时展示降级信息,且不阻断其余流程(SPEC �
 
 test("⑩ 关键操作生成 AuditLog 并可在系统设置中查验(SPEC §17-10)", async ({ page }) => {
   // 先以 PM 执行一个关键写操作:创建 RFQ
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/rfq");
   const title = `E2E 审计验证 ${Date.now()}`;
   await page.getByLabel("标题").fill(title);
@@ -59,7 +59,7 @@ test("⑩ 关键操作生成 AuditLog 并可在系统设置中查验(SPEC §17-1
   const rfqId = page.url().split("/").pop()!;
 
   // 管理层在系统设置中查验审计记录
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings");
 
   const auditTable = page.locator(".card", { hasText: "审计日志" }).locator("table.tbl");
@@ -70,7 +70,7 @@ test("⑩ 关键操作生成 AuditLog 并可在系统设置中查验(SPEC §17-1
 });
 
 test("集成状态只用诚实措辞,不出现虚假完成态", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings");
 
   const integrationCard = page.locator(".card", { hasText: "集成状态" });

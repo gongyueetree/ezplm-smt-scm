@@ -37,7 +37,7 @@ async function createQuoteWithLine(page: Page, title: string) {
 }
 
 test("报价计算:Markup 与小计由确定性函数算出(SPEC §12)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 报价计算");
 
   // 1000 × 0.08 × (1+0.15) = 92.00
@@ -48,7 +48,7 @@ test("报价计算:Markup 与小计由确定性函数算出(SPEC §12)", async (
 });
 
 test("分类未人工确认不得提交,确认后可提交并冻结参数", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 提交冻结");
 
   // 未确认分类 → 提交被拒并指出行号
@@ -72,7 +72,7 @@ test("分类未人工确认不得提交,确认后可提交并冻结参数", asyn
 });
 
 test("审批退回 → 新建 Revision → 再提交 → 批准(全链路)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 审批全链路");
   page.once("dialog", (d) => d.accept("阻容感"));
   await page.getByRole("button", { name: "确认分类" }).first().click();
@@ -82,7 +82,7 @@ test("审批退回 → 新建 Revision → 再提交 → 批准(全链路)", asy
   const versionUrl = page.url();
 
   // 管理层退回:必须填原因
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto(versionUrl);
   page.once("dialog", (d) => d.dismiss());
   await page.getByRole("button", { name: /退回/ }).click();
@@ -115,7 +115,7 @@ test("审批退回 → 新建 Revision → 再提交 → 批准(全链路)", asy
 
 test("QuoteAgent:只产出待确认卡片,不写入数据,并如实标注当前模型形态", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 智能体");
 
   await page.getByRole("button", { name: "运行 QuoteAgent" }).click();
@@ -138,7 +138,7 @@ test("QuoteAgent:只产出待确认卡片,不写入数据,并如实标注当前�
 test("正式报价单按固定格式生成:甲乙方 / 有效期 / 替代料列 / 条款 / 签署栏", async ({ page }) => {
   test.setTimeout(180_000);
   // 客户 docx 原话:「PDF 报价单目前是 copy 的系统界面,没有按照固定模式生成」
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 固定格式报价单");
   const versionId = page.url().split("/").pop()!;
 
@@ -175,7 +175,7 @@ test("正式报价单按固定格式生成:甲乙方 / 有效期 / 替代料列 
 
 test("有效期在冻结后不可修改(随快照冻结)", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await createQuoteWithLine(page, "E2E 有效期冻结");
   page.once("dialog", (d) => d.accept("阻容感"));
   await page.getByRole("button", { name: "确认分类" }).first().click();

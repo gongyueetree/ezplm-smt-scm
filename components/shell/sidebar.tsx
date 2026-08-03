@@ -46,9 +46,9 @@ export function Sidebar({ session }: { session: SessionPayload }) {
     <aside className="sidebar">
       <div className="brand">
         <div className="brand-logo">
-          <div className="brand-mark">硬</div>
+          <div className="brand-mark">乾</div>
           <div>
-            <div className="brand-name">硬禾科技 ezPLM</div>
+            <div className="brand-name">乾创电子</div>
             <div className="brand-sub">AI 供应链协同</div>
           </div>
         </div>

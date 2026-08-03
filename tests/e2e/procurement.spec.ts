@@ -27,7 +27,7 @@ async function login(page: Page, email: string) {
  * 本用例的比价表当场变空。
  */
 async function importBomFixture(page: Page): Promise<string> {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom/import");
   await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
   await page.getByRole("button", { name: "开始导入" }).click();
@@ -57,7 +57,7 @@ test("采购创建比价单并查询多源报价,推荐与最低价分别标识(
   // 分批询价耗时远超默认 30s —— 放宽本例超时,而不是把断言改松。
   test.setTimeout(300_000);
   const bomVersionId = await importBomFixture(page);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createProcurementRfq(page, bomVersionId);
 
   await page.getByRole("button", { name: "查询 DigiKey / Mouser" }).click();
@@ -94,7 +94,7 @@ test("采购创建比价单并查询多源报价,推荐与最低价分别标识(
 
 test("线下报价导入后固化原始异常,未处理不得反馈 PM(SPEC §17-5 + 异常闭环)", async ({ page }) => {
   const bomVersionId = await importBomFixture(page);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createProcurementRfq(page, bomVersionId);
 
   // 导入线下供应商报价(STM32 单价 25.5 超过演示价格线 10 → 原始异常)
@@ -128,7 +128,7 @@ test("线下报价导入后固化原始异常,未处理不得反馈 PM(SPEC §17
 });
 
 test("PM 无权创建采购 RFQ(角色边界)", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/procurement/rfq");
   // 菜单不含采购 RFQ,直接访问也只读
   await expect(page.getByText("当前角色只读:仅采购与管理层可创建采购 RFQ")).toBeVisible();

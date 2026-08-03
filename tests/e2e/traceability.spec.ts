@@ -73,7 +73,7 @@ async function seedChain(page: Page, s: ReturnType<typeof ids>) {
 }
 
 test("页面:粒度标注为批次级,且明确 SN 待接入、无 MES", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/traceability");
   await expect(page.locator(".page-title")).toHaveText("批次级追溯");
   await expect(page.getByText(/当前追溯粒度:批次级/)).toBeVisible();
@@ -83,7 +83,7 @@ test("页面:粒度标注为批次级,且明确 SN 待接入、无 MES", async (
 
 test("正向追溯:收料 → 工单 → 客户;同批次影响多个工单", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const s = ids(uniq());
   await seedChain(page, s);
 
@@ -100,7 +100,7 @@ test("正向追溯:收料 → 工单 → 客户;同批次影响多个工单", as
 
 test("反向追溯:出货 → 工单 → 物料批次;同工单使用多个批次", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const s = ids(uniq());
   await seedChain(page, s);
 
@@ -115,7 +115,7 @@ test("反向追溯:出货 → 工单 → 物料批次;同工单使用多个批�
 
 test("**数据缺失显示缺口与可能原因,不显示零影响**", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = uniq();
   const lot = `E2E-ORPHAN-${stamp}`;
 
@@ -140,7 +140,7 @@ test("**数据缺失显示缺口与可能原因,不显示零影响**", async ({ 
 });
 
 test("查不到数据时明确说明可能未导入,而不是返回空图", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const res = await page.request.get("/api/trace/query?q=E2E-NOT-EXIST-XYZ");
   expect(res.status()).toBe(404);
   expect(await res.text()).toContain("尚未导入");
@@ -148,7 +148,7 @@ test("查不到数据时明确说明可能未导入,而不是返回空图", asyn
 
 test("导入:坏行逐行报错;重复导入幂等", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = uniq();
 
   const bad = await page.request.post("/api/trace/import", {
@@ -169,7 +169,7 @@ test("导入:坏行逐行报错;重复导入幂等", async ({ page }) => {
 test("隔离处置:无权限不能批准;提议先进待审批;**不得显示外部系统已冻结**", async ({ page }) => {
   test.setTimeout(180_000);
   const s = ids(uniq());
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await seedChain(page, s);
 
   const inc = await page.request.post("/api/trace/incidents", {
@@ -194,7 +194,7 @@ test("隔离处置:无权限不能批准;提议先进待审批;**不得显示外
   expect(await denied.text()).toContain("trace.containment.approve");
 
   // 管理层批准 → 只到「本系统已登记」,且明说外部未执行
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const ok = await page.request.post(`/api/trace/containment/${actionId}/approve`, {
     data: { decision: "APPROVE" },
   });
@@ -214,7 +214,7 @@ test("隔离处置:无权限不能批准;提议先进待审批;**不得显示外
 test("提议人不能批准自己提的动作(提议与批准分离)", async ({ page }) => {
   test.setTimeout(120_000);
   const s = ids(uniq());
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await seedChain(page, s);
 
   const inc = await page.request.post("/api/trace/incidents", {
@@ -235,11 +235,11 @@ test("提议人不能批准自己提的动作(提议与批准分离)", async ({ 
 
 test("追溯动作写入 AuditLog", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const s = ids(uniq());
   await seedChain(page, s);
 
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings");
   await expect(page.getByText("TRACE_IMPORT").first()).toBeVisible({ timeout: 30_000 });
 });
@@ -249,7 +249,7 @@ test("**供应商受限视图**:只见自己的批次与上游,看不到工单/�
   const s = ids(uniq());
 
   // 内部账号先建链路,供应商用「华强北电子(示例)」= 种子里 SUP-A 的名称
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.request.post("/api/trace/import", {
     data: {
       template: "RECEIPT",
@@ -274,7 +274,7 @@ test("**供应商受限视图**:只见自己的批次与上游,看不到工单/�
   expect(ib.scopeNote).toContain("完整链路");
 
   // 供应商视图:同一个批次
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   const res = await page.request.get(`/api/trace/query?q=${encodeURIComponent(s.lot)}`);
   expect(res.status()).toBe(200);
   const body = await res.json();
@@ -297,12 +297,12 @@ test("**供应商受限视图**:只见自己的批次与上游,看不到工单/�
 test("**供应商查别家批次被拒,且措辞与「不存在」一致(不能拿来枚举)**", async ({ page }) => {
   test.setTimeout(120_000);
   const s = ids(uniq());
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.request.post("/api/trace/import", {
     data: { template: "RECEIPT", text: `PO,供应商,内部批次,收料数量\n${s.po},别家供应商,${s.lot},100` },
   });
 
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   const other = await page.request.get(`/api/trace/query?ref=${encodeURIComponent(`LOT:${s.lot}`)}`);
   expect(other.status()).toBe(404);
   const otherText = await other.text();

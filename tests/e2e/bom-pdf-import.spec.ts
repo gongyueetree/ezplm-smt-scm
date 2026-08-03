@@ -24,7 +24,7 @@ async function login(page: Page, email: string) {
 
 test("PDF(含文本层)BOM:自动重建表格并识别列映射,标注为确定性解析", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom/import");
 
   await page.getByLabel("选择文件(可多选)").setInputFiles(PDF_FIXTURE);
@@ -48,7 +48,7 @@ test("PDF(含文本层)BOM:自动重建表格并识别列映射,标注为确定�
 
 test("图片 BOM:未配置识别凭据时如实说明已归档待人工补录,不静默失败", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom/import");
 
   await page.getByLabel("选择文件(可多选)").setInputFiles(SCAN_FIXTURE);

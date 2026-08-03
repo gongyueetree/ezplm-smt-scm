@@ -15,11 +15,11 @@
 
 | 账号 | 角色 | 主要职责 |
 |---|---|---|
-| `pm@demo.ezplm.cn` | PM | 接客户 RFQ、做报价、看客户影响面 |
-| `procurement@demo.ezplm.cn` | 采购 | 比价、下单、交期协同、对账 |
-| `engineering@demo.ezplm.cn` | 工程 | BOM、物料主数据、替代料、追溯 |
-| `management@demo.ezplm.cn` | 管理层 | 全局查看、审批、系统设置 |
-| `supplier@demo.ezplm.cn` | 供应商 | 只看与自己相关的 PO、批次与通知 |
+| `pm@demo.qianchuang.cn` | PM | 接客户 RFQ、做报价、看客户影响面 |
+| `procurement@demo.qianchuang.cn` | 采购 | 比价、下单、交期协同、对账 |
+| `engineering@demo.qianchuang.cn` | 工程 | BOM、物料主数据、替代料、追溯 |
+| `management@demo.qianchuang.cn` | 管理层 | 全局查看、审批、系统设置 |
+| `supplier@demo.qianchuang.cn` | 供应商 | 只看与自己相关的 PO、批次与通知 |
 
 ### 1.2 你看到的菜单由角色决定
 

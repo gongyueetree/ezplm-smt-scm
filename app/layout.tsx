@@ -4,10 +4,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "ezPLM · AI 供应链协同",
-    template: "%s · ezPLM AI 供应链协同",
+    default: "乾创电子 · AI 供应链协同",
+    template: "%s · 乾创电子 AI 供应链协同",
   },
-  description: "硬禾科技 ezPLM — AI 驱动供应链智能协同系统(乾创电子)",
+  description: "乾创电子 — AI 驱动供应链智能协同系统",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

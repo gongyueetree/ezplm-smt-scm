@@ -40,7 +40,7 @@ async function importBom(page: Page, fixture: string = BOM_FIXTURE): Promise<str
 
 test("BOM 版本页有「导出标准模板 BOM」按钮,导出的是 xlsx", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const versionId = await importBom(page);
   await page.goto(`/bom/version/${versionId}`);
 
@@ -54,7 +54,7 @@ test("BOM 版本页有「导出标准模板 BOM」按钮,导出的是 xlsx", asy
 
 test("BOM 版本页有「生成报价单」按钮;未挂 RFQ/客户时给出可操作的拒绝理由", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const versionId = await importBom(page);
   await page.goto(`/bom/version/${versionId}`);
 
@@ -82,7 +82,7 @@ test("BOM 版本页有「生成报价单」按钮;未挂 RFQ/客户时给出可�
 
 test("BOM 比对:可保存到台账,台账能一键重新打开同一对版本", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const v1 = await importBom(page, CMP_V1);
   const v2 = await importBom(page, CMP_V2);
   expect(v1, "两份内容不同的 BOM 必须产出两个不同版本").not.toBe(v2);
@@ -109,7 +109,7 @@ test("BOM 比对:可保存到台账,台账能一键重新打开同一对版本",
 test("物料查询:一级大类 / 二级细分 / 自定义标签可组合筛选,且标注分类为人工维护", async ({
   page,
 }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials");
 
   await expect(page.getByLabel("一级大类")).toBeVisible();
@@ -131,7 +131,7 @@ test("物料查询:一级大类 / 二级细分 / 自定义标签可组合筛选,
 });
 
 test("自定义标签目录:可新建,重名被拒", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const name = `E2E标签-${Date.now()}`;
 
   // 必须用 page.request:Playwright 的 request fixture 是**独立上下文**,不带页面的会话 cookie,

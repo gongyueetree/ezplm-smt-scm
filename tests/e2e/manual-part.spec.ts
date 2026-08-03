@@ -31,11 +31,11 @@ async function openDrawer(page: Page) {
 }
 
 test("权限:工程可见入口,采购不可见,且直接调 API 被拒并指名缺哪个权限", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials");
   await expect(page.getByRole("button", { name: "+ 新增物料" })).toBeVisible();
 
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials");
   await expect(page.getByRole("button", { name: "+ 新增物料" })).toHaveCount(0);
 
@@ -49,7 +49,7 @@ test("权限:工程可见入口,采购不可见,且直接调 API 被拒并指名
 
 test("正式创建缺必填项被拒,补齐后创建成功并可在物料库检索到", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await openDrawer(page);
 
   const stamp = Date.now();
@@ -77,7 +77,7 @@ test("正式创建缺必填项被拒,补齐后创建成功并可在物料库检�
 });
 
 test("分类驱动:选 IC 后加载该分类专属参数", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await openDrawer(page);
   await page.getByLabel("物料分类 *").selectOption("IC");
   // 通用项 + IC 专属项都应出现
@@ -92,7 +92,7 @@ test("分类驱动:选 IC 后加载该分类专属参数", async ({ page }) => {
 
 test("**同租户内部料号重复必须被拒**,且查重给出具体原因", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await openDrawer(page);
 
   // 种子里已有 QC-IC-0001
@@ -106,7 +106,7 @@ test("**同租户内部料号重复必须被拒**,且查重给出具体原因", 
 });
 
 test("**疑似重复不允许静默创建** —— 未选处置方式即被拒", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = Date.now();
   // 直接打接口:同 MPN(种子里的 STM32F103C8T6)但新内部料号 → 疑似而非阻断
   const res = await page.request.post("/api/materials/parts", {
@@ -156,7 +156,7 @@ test("**疑似重复不允许静默创建** —— 未选处置方式即被拒",
 });
 
 test("草稿可缺字段;ezPLM 未配凭据时如实说待联调,不假装引用成功", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
 
   const stamp = Date.now();
   const draft = await page.request.post("/api/materials/parts", {
@@ -179,7 +179,7 @@ test("草稿可缺字段;ezPLM 未配凭据时如实说待联调,不假装引用
 
 test("建料写入 AuditLog,可在系统设置中查到", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = Date.now();
   const pn = `EE-AUDIT-${stamp}`;
   const res = await page.request.post("/api/materials/parts", {
@@ -194,7 +194,7 @@ test("建料写入 AuditLog,可在系统设置中查到", async ({ page }) => {
   });
   expect(res.status()).toBe(201);
 
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings");
   await expect(page.getByText("PART_CREATE").first()).toBeVisible({ timeout: 30_000 });
 });
@@ -207,7 +207,7 @@ function uniqPn(): string {
 
 test("批量导入:预览不写库;阻断行不建;疑似重复默认不建", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = uniqPn();
 
   // 一行全新、一行内部料号撞种子(QC-IC-0001)、一行同 MPN 撞种子
@@ -244,7 +244,7 @@ test("批量导入:预览不写库;阻断行不建;疑似重复默认不建", as
 });
 
 test("批量导入:同一文件内料号重复在解析阶段就被拦下", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = uniqPn();
   const res = await page.request.post("/api/materials/parts/bulk-import", {
     data: {
@@ -259,7 +259,7 @@ test("批量导入:同一文件内料号重复在解析阶段就被拦下", asyn
 
 test("**文档有效期:未填不视为长期有效**,且过期项进合规预警", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = uniqPn();
 
   const created = await page.request.post("/api/materials/parts", {
@@ -313,7 +313,7 @@ test("**文档有效期:未填不视为长期有效**,且过期项进合规预�
 
 test("文档区在详情页可见,且无文档时不暗示合规", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/STM32F103C8T6");
   await expect(page.getByText("文档与合规").first()).toBeVisible();
   await expect(page.getByText(/不等于该料合规/)).toBeVisible();
