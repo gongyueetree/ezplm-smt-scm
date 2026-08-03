@@ -15,8 +15,13 @@
  * - 只能改**同一租户内**的账号,不接受跨租户操作。
  *
  * 用法:
- *   pnpm reset:password                      # 交互式:列出账号 → 选 → 输入新口令
- *   DATABASE_URL=<远端串> pnpm reset:password  # 对线上库操作
+ *   pnpm reset:password                                  # 交互式:列出账号 → 选 → 输入新口令
+ *   pnpm reset:password <email>                          # 直接指定账号
+ *   pnpm reset:password --domain demo.qianchuang.cn      # 批量:该域名下所有**启用**账号设同一口令
+ *   pnpm reset:password --all                            # 批量:所有启用账号
+ *   DATABASE_URL=<远端串> pnpm reset:password ...          # 对线上库操作
+ *
+ * 批量模式只对演示/测试账号有意义 —— 真实用户共用口令是安全事故。
  */
 import "./bootstrap-env";
 import { createInterface } from "readline";
@@ -119,7 +124,11 @@ async function main() {
   console.log(`\n目标数据库:${describeTarget(connectionString!)}`);
   console.log("  ⚠ 请先确认这是你要改的库 —— 改错库会让你以为已生效但线上依旧登不进去\n");
 
-  const target = process.argv[2]?.trim();
+  const args = process.argv.slice(2).map((a) => a.trim());
+  const wantAll = args.includes("--all");
+  const domainIdx = args.indexOf("--domain");
+  const domain = domainIdx >= 0 ? args[domainIdx + 1]?.replace(/^@/, "") : undefined;
+  const target = args.find((a) => !a.startsWith("--") && a !== domain);
 
   const users = await prisma.user.findMany({
     select: {
@@ -136,6 +145,75 @@ async function main() {
   if (users.length === 0) {
     console.error("库里没有任何用户 —— 先跑 pnpm seed:remote 建演示账号");
     process.exit(1);
+  }
+
+  /*
+   * 批量模式:给一批账号设**同一个**口令。
+   *
+   * 只对演示/测试账号有意义 —— 真实用户共用口令是安全事故。
+   * 因此默认只覆盖**启用**的账号:停用账号即使改了口令也登不进去,
+   * 顺手把它们一起改反而会让人误以为可以用。
+   */
+  if (wantAll || domain) {
+    const matched = users.filter(
+      (u) => u.isActive && (!domain || u.email.toLowerCase().endsWith(`@${domain.toLowerCase()}`)),
+    );
+    const skippedInactive = users.filter(
+      (u) => !u.isActive && (!domain || u.email.toLowerCase().endsWith(`@${domain.toLowerCase()}`)),
+    );
+
+    if (matched.length === 0) {
+      console.error(
+        domain ? `没有匹配 @${domain} 的**启用**账号` : "没有任何启用账号",
+      );
+      process.exit(1);
+    }
+
+    console.log(`将为以下 ${matched.length} 个账号设置**同一个**口令:\n`);
+    for (const u of matched) {
+      console.log(`  ${u.email}  [${u.userRoles.map((r) => r.role.name).join("/") || "无角色"}]`);
+    }
+    if (skippedInactive.length > 0) {
+      console.log(`\n  跳过 ${skippedInactive.length} 个**已停用**账号 —— 改了口令也登不进去:`);
+      for (const u of skippedInactive) console.log(`    ${u.email}`);
+    }
+
+    const yes = await ask("\n确认继续?[y/N] ");
+    if (yes.trim().toLowerCase() !== "y") {
+      console.log("已取消。");
+      return;
+    }
+
+    const pw1 = await askHidden("为以上账号设置新口令(输入不回显):");
+    if (pw1.length < 8) {
+      console.error("口令至少 8 位");
+      process.exit(1);
+    }
+    const pw2 = await askHidden("再输入一次确认:");
+    if (pw1 !== pw2) {
+      console.error("两次输入不一致");
+      process.exit(1);
+    }
+
+    const passwordHash = await hashPassword(pw1);
+    await prisma.$transaction(async (tx) => {
+      for (const u of matched) {
+        await tx.user.update({ where: { id: u.id }, data: { passwordHash } });
+        await writeAudit(tx, {
+          tenantId: u.tenantId,
+          userId: u.id,
+          action: "USER_PASSWORD_RESET",
+          entityType: "User",
+          entityId: u.id,
+          // 只记"改了口令"这件事,不记任何口令内容
+          after: { email: u.email, via: "scripts/reset-password.ts --bulk" },
+        });
+      }
+    });
+
+    console.log(`\n✅ 已为 ${matched.length} 个账号设置同一口令,并逐个记入 AuditLog。`);
+    console.log("   口令不会在任何地方回显 —— 请自行妥善保存。");
+    return;
   }
 
   let picked = target ? users.find((u) => u.email === target) : undefined;
