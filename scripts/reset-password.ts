@@ -33,76 +33,75 @@ if (!connectionString) {
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 /*
- * 输入层。
+ * 输入层。两条路径必须分开处理,任何一条都实测踩过坑:
  *
- * 只用**一个** readline 实例:每次 ask 都新建实例会让管道输入的行被前一个实例
- * 的缓冲吃掉 —— 表现为脚本静默退出、什么都没改(实测踩到过,退出码还是 0,
- * 比直接报错更危险)。
+ * - **TTY(手敲)**:用 rl.question + 覆写 _writeToOutput 屏蔽回显。
+ *   不能用 raw mode 自己逐字符读 —— 回车在 raw 模式下是 `\r`,终端紧接着
+ *   还会送 `\n`;上一次读取消费掉 `\r` 后,残留的 `\n` 会被下一次读取当成
+ *   "用户直接按了回车",确认口令变成空串、报「两次输入不一致」,
+ *   而用户明明输的一样。
+ *
+ * - **非 TTY(管道/CI)**:stdin 结束时 readline 会 close,
+ *   之后再调 rl.question 直接抛 "readline was closed"。
+ *   所以这条路预先把所有行缓冲下来,按需取用。
  */
-const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false });
-const pending: ((line: string) => void)[] = [];
-const buffered: string[] = [];
-rl.on("line", (line) => {
-  const next = pending.shift();
-  if (next) next(line);
-  else buffered.push(line);
-});
+const isTty = Boolean((process.stdin as NodeJS.ReadStream).isTTY);
+const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: isTty });
 
-function readLine(): Promise<string> {
+let muted = false;
+const rlAny = rl as unknown as { _writeToOutput?: (s: string) => void };
+const originalWrite = rlAny._writeToOutput?.bind(rl);
+rlAny._writeToOutput = (str: string) => {
+  if (muted) return;
+  originalWrite?.(str);
+};
+
+/** 非 TTY:缓冲全部输入行 */
+const buffered: string[] = [];
+const waiters: ((l: string) => void)[] = [];
+let closed = false;
+if (!isTty) {
+  rl.on("line", (l) => {
+    const w = waiters.shift();
+    if (w) w(l);
+    else buffered.push(l);
+  });
+  rl.on("close", () => {
+    closed = true;
+    // stdin 已结束仍有人等 → 给空串,由上层校验拒掉,不要挂死
+    while (waiters.length) waiters.shift()!("");
+  });
+}
+
+function readBuffered(): Promise<string> {
   const ready = buffered.shift();
   if (ready !== undefined) return Promise.resolve(ready);
-  return new Promise((resolve) => pending.push(resolve));
+  if (closed) return Promise.resolve("");
+  return new Promise((r) => waiters.push(r));
 }
 
 function ask(prompt: string): Promise<string> {
   process.stdout.write(prompt);
-  return readLine();
+  if (!isTty) return readBuffered();
+  return new Promise((resolve) => rl.question("", resolve));
 }
 
-/**
- * 口令输入。
- *
- * TTY 下逐字符读取并屏蔽回显;**非 TTY(管道/CI)时按行读即可** ——
- * 那种场景没有终端可泄露,强行开 raw mode 反而读不到数据。
- */
-async function askHidden(prompt: string): Promise<string> {
-  const stdin = process.stdin as NodeJS.ReadStream;
+/** 口令输入:TTY 下屏蔽回显;非 TTY 下按行读(没有终端可泄露) */
+function askHidden(prompt: string): Promise<string> {
   process.stdout.write(prompt);
-
-  if (!stdin.isTTY) {
-    const line = await readLine();
-    process.stdout.write("\n");
-    return line;
+  if (!isTty) {
+    return readBuffered().then((v) => {
+      process.stdout.write("\n");
+      return v;
+    });
   }
-
   return new Promise((resolve) => {
-    rl.pause();
-    stdin.setRawMode(true);
-    stdin.resume();
-    let buf = "";
-    const onData = (chunk: Buffer) => {
-      for (const ch of chunk.toString("utf8")) {
-        if (ch === "\r" || ch === "\n") {
-          stdin.off("data", onData);
-          stdin.setRawMode(false);
-          rl.resume();
-          process.stdout.write("\n");
-          resolve(buf);
-          return;
-        }
-        if (ch === "\u0003") {
-          stdin.setRawMode(false);
-          process.stdout.write("\n已取消\n");
-          process.exit(130);
-        }
-        if (ch === "\u007f" || ch === "\b") {
-          buf = buf.slice(0, -1);
-          continue;
-        }
-        buf += ch;
-      }
-    };
-    stdin.on("data", onData);
+    rl.question("", (answer) => {
+      muted = false;
+      process.stdout.write("\n");
+      resolve(answer);
+    });
+    muted = true;
   });
 }
 
