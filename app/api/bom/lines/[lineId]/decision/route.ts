@@ -32,5 +32,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ lineId:
 
   const saved = await saveLineDecision(auth.session, lineId, parsed.data);
   if (!saved) return notFound("BOM 行不存在或不属于当前租户");
+  // PR-F:草稿/停用/淘汰的物料不得进入正式 BOM,拒绝并说明该做什么
+  if ("blocked" in saved && saved.blocked) {
+    return NextResponse.json({ error: saved.reason }, { status: 422 });
+  }
   return NextResponse.json({ decision: saved });
 }

@@ -59,6 +59,30 @@ enum PartStatus {
   ACTIVE
   REJECTED
   DISABLED
+  /// 已淘汰:与 DISABLED 区分 —— DISABLED 是"暂时停用,可能恢复",
+  /// OBSOLETE 是"永久淘汰,不再采购"。两者对 BOM 与采购的含义不同
+  OBSOLETE
+}
+
+/// 合规声明结论(PR-F)。
+/// 原实现是 Part 上的 Boolean —— 无法表达"不适用"与"未知"的区别,
+/// 也承载不了"凭哪份文档、什么版本、谁审的、何时到期"。
+enum ComplianceVerdict {
+  COMPLIANT
+  NON_COMPLIANT
+  /// 不适用(如纯机构件谈 REACH 无意义)
+  NOT_APPLICABLE
+  /// **未知**:没有依据。与 NON_COMPLIANT 必须分开 —— 不知道不等于不合规
+  UNKNOWN
+}
+
+/// 合规声明的审核状态
+enum ComplianceReviewState {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
 }
 
 /// 物料属性的数据类型(分类驱动的动态参数)
@@ -793,6 +817,7 @@ model Part {
   alternateOf PartAlternate[]  @relation("AlternateToParts")
 
   tagLinks PartTagLink[]
+  complianceDeclarations PartComplianceDeclaration[]
   processAttr PartProcessAttr?
   attrValues  PartAttributeValue[]
   documents   PartDocument[]
@@ -835,6 +860,98 @@ model PartProcessAttr {
   createdAt DateTime @default(now())
 
   @@unique([tenantId, partId])
+}
+
+/// 内部料号编码规则(PR-F)。
+///
+/// 原实现把规则写死在提示文案里(`EE-[类别]-[型号]`),
+/// 换个租户就不适用。改为**按租户可配**,并支持预览下一个编号。
+model PartCodeRule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  /// 固定前缀,如 EE
+  prefix       String
+  /// 是否把一级分类码拼进去
+  includeCategory Boolean @default(true)
+  /// 分隔符
+  separator    String   @default("-")
+  /// 流水号位数(不足补零)
+  sequenceWidth Int     @default(4)
+  /// 当前流水号水位(每次发号 +1)
+  currentSequence Int   @default(0)
+  /// 是否允许人工指定料号(关掉即强制走自动编码)
+  allowManual  Boolean  @default(true)
+  /// 仅对某个一级分类生效;空=通用规则
+  categoryL1   String?
+  isDefault    Boolean  @default(false)
+  enabled      Boolean  @default(true)
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, categoryL1, enabled])
+}
+
+/// 合规**声明**(PR-F)。
+///
+/// 与支撑文档彻底分离:
+/// - 一个声明可由**多份**文档支撑(报告 + COC + 检测数据);
+/// - 声明本身有版本、有效期、审核记录;
+/// - 结论区分 合规 / 不合规 / 不适用 / **未知** —— 未知不等于不合规。
+///
+/// Part 上的 rohs / reach 布尔字段**保留不动**(兼容历史),
+/// 新逻辑一律读本表;两者并存期间以本表为准。
+model PartComplianceDeclaration {
+  id          String                @id @default(cuid())
+  tenantId    String
+  partId      String
+  part        Part                  @relation(fields: [partId], references: [id], onDelete: Cascade)
+  /// ROHS / REACH / COC / HALOGEN_FREE / CONFLICT_MINERALS 等
+  scheme      String
+  verdict     ComplianceVerdict     @default(UNKNOWN)
+  /// 声明版本号,便于"同一物料的第 2 版 RoHS 声明"
+  version     String?
+  /// 声明依据的标准与限值说明
+  standard    String?
+  note        String?
+  issuedAt    DateTime?
+  validUntil  DateTime?
+  state       ComplianceReviewState @default(DRAFT)
+  reviewedById String?
+  reviewedAt   DateTime?
+  rejectReason String?
+  /// 外部来源(与 PR-E 同一套字段口径)
+  sourceSystem String?
+  externalId   String?
+  createdById String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  documents PartComplianceEvidence[]
+
+  @@unique([tenantId, partId, scheme, version])
+  @@index([tenantId, partId, scheme])
+  @@index([tenantId, validUntil])
+  @@index([tenantId, state])
+}
+
+/// 声明 ↔ 支撑文档的关联(多对多)。
+/// 同一份 COC 可同时支撑 RoHS 与 REACH 两个声明,故不能把文档挂死在声明下。
+model PartComplianceEvidence {
+  id            String                    @id @default(cuid())
+  tenantId      String
+  declarationId String
+  declaration   PartComplianceDeclaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      PartDocument              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  note          String?
+  createdById   String
+  createdAt     DateTime                  @default(now())
+
+  @@unique([tenantId, declarationId, documentId])
+  @@index([tenantId, documentId])
 }
 
 /// 自定义物料分类标签(客户 docx:要能自定义「国产替代物料」「关键 A 类客户物料」这类分组)。
@@ -995,6 +1112,8 @@ model PartDocument {
   note      String?
   uploadedById String
   createdAt DateTime    @default(now())
+
+  complianceEvidence PartComplianceEvidence[]
 
   @@index([tenantId, partId, kind])
   @@index([tenantId, validUntil])
