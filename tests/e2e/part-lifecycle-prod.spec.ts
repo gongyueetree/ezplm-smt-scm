@@ -14,7 +14,7 @@ async function login(page: Page, email: string) {
 }
 
 test("编码规则:可配置且**能预览下一个号**", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = Date.now().toString(36).toUpperCase();
 
   const res = await page.request.post("/api/settings/part-code-rules", {
@@ -34,7 +34,7 @@ test("编码规则:可配置且**能预览下一个号**", async ({ page }) => {
 });
 
 test("合规声明:**新建后不生效,必须审核**", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = Date.now().toString(36).toUpperCase();
 
   // 先建一颗物料
@@ -69,7 +69,7 @@ test("合规声明:**新建后不生效,必须审核**", async ({ page }) => {
 });
 
 test("**没有声明时如实返回未知**,三个体系都要列出", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const u = Date.now().toString(36).toUpperCase();
   const part = await page.request.post("/api/materials/parts", {
     data: {
@@ -96,7 +96,7 @@ test("**没有声明时如实返回未知**,三个体系都要列出", async ({ 
 });
 
 test("编码规则维护受权限约束", async ({ page }) => {
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   const res = await page.request.post("/api/settings/part-code-rules", {
     data: { name: "X", prefix: "X" },
   });

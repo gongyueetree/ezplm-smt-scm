@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 }
 
 test("**影响面结论带置信度与措辞约束**,低置信度不得断言无影响", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = Date.now();
 
   // 只导收料模板 → 后续段全缺 → 必然低置信度
@@ -46,7 +46,7 @@ test("**影响面结论带置信度与措辞约束**,低置信度不得断言无
 });
 
 test("分析快照可查:同一起点的历史分析留痕", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const list = await page.request.get("/api/traceability/analysis");
   expect(list.status()).toBe(200);
   const body = await list.json();
@@ -60,7 +60,7 @@ test("分析快照可查:同一起点的历史分析留痕", async ({ page }) =>
 });
 
 test("**批次拆分同时补图边**,链路不在拆分处断掉", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = Date.now();
   const src = `E2E-SRC-${stamp}`;
 
@@ -81,7 +81,7 @@ test("**批次拆分同时补图边**,链路不在拆分处断掉", async ({ pag
 });
 
 test("拆分/合并的形态约束被强制", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const bad = await page.request.post("/api/traceability/lot-ops", {
     data: { kind: "SPLIT", sourceLotNos: ["A", "B"], targetLotNos: ["C"] },
   });
@@ -96,7 +96,7 @@ test("拆分/合并的形态约束被强制", async ({ page }) => {
 });
 
 test("**替代料无批准人时显式警示**,不静默接受", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const stamp = Date.now();
 
   const noApproval = await page.request.post("/api/traceability/substitutions", {
@@ -120,7 +120,7 @@ test("**替代料无批准人时显式警示**,不静默接受", async ({ page }
 });
 
 test("新增接口受权限约束", async ({ page }) => {
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   for (const url of ["/api/traceability/lot-ops", "/api/traceability/substitutions"]) {
     const res = await page.request.post(url, { data: {} });
     expect(res.status()).toBe(403);
@@ -131,7 +131,7 @@ test("**BOM 版本下拉不得静默截断** —— 超出上限必须明说", a
   // 实测踩到:原上限 30,库里 37 个版本时较早的版本在下拉里直接消失且无任何提示,
   // 用户会以为"这个版本不能比价",而不是"列表只显示了最近 30 个"。
   // 静默截断是生产事故的常见来源,故用例守住"要么全都在,要么明确说被截断了"。
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/rfq");
 
   const options = page.locator("select[multiple] option");
