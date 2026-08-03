@@ -14,13 +14,30 @@ import {
 } from "@/lib/domain/opo";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
+import { emptyScopeNotice, type ResolvedScope } from "@/lib/domain/data-scope";
+import { scopeFor, scopedWhere } from "@/lib/server/data-scope";
 import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 import type { SessionRef } from "./rfq";
 
 /** 取行 + 最新回复,转成领域视图 */
-export async function loadOpoLines(tenantId: string): Promise<OpoLineView[]> {
+/**
+ * 取在途行。
+ *
+ * ⚠️ PR-G 生产加固:本函数原先只做 tenantWhere,**没有供应商行级过滤**,
+ * 而 /suppliers/opo 对 SUPPLIER 角色开放 ——
+ * 供应商登录后能看到**所有供应商**的 PO 行(对手的料号、数量、单价、交期)。
+ * 演示数据里恰好只有一家供应商,所以一直没暴露。
+ *
+ * 现在统一走 data-scope 策略;内部角色仍是全租户,供应商只见自己的。
+ */
+export async function loadOpoLines(
+  tenantId: string,
+  scope?: ResolvedScope,
+): Promise<OpoLineView[]> {
   const rows = await prisma.oPOLine.findMany({
-    where: tenantWhere(tenantId),
+    where: scope
+      ? scopedWhere(tenantId, scope, { supplierField: "supplierId" })
+      : tenantWhere(tenantId),
     orderBy: [{ poNo: "asc" }, { lineNo: "asc" }],
     include: { replies: { orderBy: { replyAt: "desc" }, take: 1 } },
     take: 2000,
@@ -48,15 +65,24 @@ export async function loadOpoLines(tenantId: string): Promise<OpoLineView[]> {
   }));
 }
 
-/** 一次取全:KPI / 未回复 / 差异 / 异常 —— 全部来自同一份 lines */
-export async function getOpoDashboard(tenantId: string, now: string) {
-  const lines = await loadOpoLines(tenantId);
+/**
+ * 一次取全:KPI / 未回复 / 差异 / 异常 —— 全部来自同一份 lines。
+ *
+ * ⚠️ PR-G:必须传 session 以解析数据范围。
+ * 原签名只收 tenantId,导致供应商登录后看到全部供应商的在途行。
+ */
+export async function getOpoDashboard(session: SessionRef, now: string) {
+  const scope = await scopeFor(session, "OPO_LINE");
+  const lines = await loadOpoLines(session.tenantId, scope);
   return {
     lines,
     kpi: deriveOpoKpi(lines, now),
     noReply: deriveNoReplyLines(lines),
     diffs: deriveDiffRows(lines),
     anomalies: deriveAnomalyRows(lines, now),
+    // 受限视图必须显式告知 —— 看不到的部分不代表不存在
+    scopeNotice: emptyScopeNotice(scope),
+    scopeKind: scope.kind,
   };
 }
 
@@ -124,7 +150,8 @@ export async function runReminderScan(
   session: SessionRef,
   now: string,
 ): Promise<ReminderRunResult> {
-  const lines = await loadOpoLines(session.tenantId);
+  const scope = await scopeFor(session, "OPO_LINE");
+  const lines = await loadOpoLines(session.tenantId, scope);
   const candidates = collectReminderCandidates(lines, now);
 
   let created = 0;

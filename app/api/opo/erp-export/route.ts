@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import ExcelJS from "exceljs";
 import { forbidden, requireSession } from "@/lib/server/api";
+import { scopeFor } from "@/lib/server/data-scope";
 import { createErpExportJob, loadOpoLines } from "@/lib/server/repositories/opo";
 
 export const runtime = "nodejs";
@@ -16,7 +17,9 @@ export async function GET() {
     return forbidden("仅采购或管理层可导出 ERP 模板");
   }
 
-  const lines = await loadOpoLines(auth.session.tenantId);
+  // PR-G:导出同样受数据范围约束 —— 否则供应商可用导出绕过页面过滤
+  const scope = await scopeFor(auth.session, "OPO_LINE");
+  const lines = await loadOpoLines(auth.session.tenantId, scope);
   const day = new Date().toISOString().slice(0, 10);
   const key = createHash("sha256")
     .update(`erp-export:${auth.session.tenantId}:${day}:${lines.length}`)
