@@ -26,7 +26,7 @@ async function login(page: Page, email: string) {
 
 test("匹配确认页可人工指定型号,并写回 BOM 行", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
 
   await page.goto("/bom/import");
   await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
@@ -49,7 +49,7 @@ test("匹配确认页可人工指定型号,并写回 BOM 行", async ({ page }) 
 
 test("替代料查询:两段式流程,四维评分,Pin-to-Pin 未验证引脚必须警示", async ({ page }) => {
   test.setTimeout(240_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/alternates");
 
   await expect(page.locator(".page-title")).toHaveText("替代料查询");
@@ -100,7 +100,7 @@ test("替代料查询:两段式流程,四维评分,Pin-to-Pin 未验证引脚必
 
 test("市场行情:显示阶梯价与供货,并明示非实时且不做汇率换算", async ({ page }) => {
   test.setTimeout(300_000);
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/alternates");
 
   await page.getByLabel("待查型号").fill("STM32F103C8T6");

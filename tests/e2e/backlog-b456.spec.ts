@@ -52,9 +52,9 @@ async function createProcurementRfq(page: Page, bomVersionId?: string) {
 }
 
 test("B5 线下报价导入识别 MOQ/SPQ/Lead Time 并回显列映射", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const bomVersionId = await importBomFixture(page);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createProcurementRfq(page, bomVersionId);
 
   await page.getByLabel("线下报价文件(CSV/XLSX)").setInputFiles(QUOTE_FIXTURE);
@@ -72,9 +72,9 @@ test("B5 线下报价导入识别 MOQ/SPQ/Lead Time 并回显列映射", async (
 });
 
 test("B4 多源询价分批推进,进度跑到 100% 且不截断", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const bomVersionId = await importBomFixture(page);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createProcurementRfq(page, bomVersionId);
 
   await page.getByRole("button", { name: "查询 DigiKey / Mouser" }).click();
@@ -89,7 +89,7 @@ test("B4 多源询价分批推进,进度跑到 100% 且不截断", async ({ page
 });
 
 test("B6 报价打印视图只读快照:草稿态拒绝,提交后可打印", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
 
   // 建 RFQ 与报价
   await page.goto("/rfq");

@@ -35,7 +35,7 @@ async function mockConnectionId(page: Page): Promise<string> {
 }
 
 test("页面:未配凭据显示「待联调」,且明确声明「已连接」只在实测通过后出现", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/integrations/erp");
 
   await expect(page.locator(".page-title")).toHaveText("ERP 同步");
@@ -47,14 +47,14 @@ test("页面:未配凭据显示「待联调」,且明确声明「已连接」只
 });
 
 test("权限:采购只能看不能配;管理层可配", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const res = await page.request.post("/api/erp/connections", {
     data: { name: `E2E-${Date.now()}`, vendor: "MOCK" },
   });
   expect(res.status()).toBe(403);
   expect(await res.text()).toContain("erp.connection.manage");
 
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const ok = await page.request.post("/api/erp/connections", {
     data: { name: `E2E-OK-${Date.now()}`, vendor: "MOCK" },
   });
@@ -62,7 +62,7 @@ test("权限:采购只能看不能配;管理层可配", async ({ page }) => {
 });
 
 test("**凭据不回传明文**,只回掩码", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const secret = `SUPER-SECRET-${Date.now()}`;
   const created = await page.request.post("/api/erp/connections", {
     data: {
@@ -85,7 +85,7 @@ test("**凭据不回传明文**,只回掩码", async ({ page }) => {
 });
 
 test("**未联调厂商报「尚未联调」,不返回空数据冒充同步完成**", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const created = await page.request.post("/api/erp/connections", {
     data: { name: `E2E-YY-${Date.now()}`, vendor: "YONYOU", edition: "U8" },
   });
@@ -113,7 +113,7 @@ test("**未联调厂商报「尚未联调」,不返回空数据冒充同步完�
 });
 
 test("字段映射:缺必填项禁止保存;样例值转换失败也禁止保存", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const id = await mockConnectionId(page);
 
   const bad = await page.request.put(`/api/erp/connections/${id}/mapping`, {
@@ -137,7 +137,7 @@ test("字段映射:缺必填项禁止保存;样例值转换失败也禁止保存
 
 test("预览不写库;重复同步幂等;冲突不自动覆盖", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const id = await mockConnectionId(page);
 
   // Mock 的物料字段就是本系统字段名,直接一一映射
@@ -185,7 +185,7 @@ test("预览不写库;重复同步幂等;冲突不自动覆盖", async ({ page }
 
 test("四步向导可走到预览,且预览区明确写「不写入任何业务数据」", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/integrations/erp");
   await page.getByRole("button", { name: "配置 ERP 连接" }).click();
 

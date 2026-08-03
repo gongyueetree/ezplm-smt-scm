@@ -18,7 +18,7 @@ async function login(page: Page, email: string) {
 }
 
 test("看板可达,且口径说明到位", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/compliance");
 
   await expect(page.locator(".page-title")).toHaveText("合规到期看板");
@@ -31,7 +31,7 @@ test("看板可达,且口径说明到位", async ({ page }) => {
 });
 
 test("KPI 可下钻筛选到对应档位", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/compliance");
 
   await page.locator(".kpi", { hasText: "未标注有效期" }).click();
@@ -41,7 +41,7 @@ test("KPI 可下钻筛选到对应档位", async ({ page }) => {
 });
 
 test("**缺文档统计与过期统计是两张表**,不混为一谈", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   await page.goto("/materials/compliance");
 
   // 缺文档表按类型列出物料数

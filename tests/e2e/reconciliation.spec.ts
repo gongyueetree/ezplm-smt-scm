@@ -36,7 +36,7 @@ async function createStatement(page: Page, code: string): Promise<string> {
 }
 
 test("台账页不再是占位页,且如实声明本系统不拥有出入库数据", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/reconciliation");
 
   await expect(page.locator(".page-title")).toHaveText("AR/AP 对账");
@@ -50,19 +50,19 @@ test("台账页不再是占位页,且如实声明本系统不拥有出入库数�
 });
 
 test("AR/AP 按角色区分:采购只见应付,PM 只见应收", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/reconciliation");
   await expect(page.getByText(/当前角色可见:.*应付/)).toBeVisible();
   // 采购直接点 AR 也不该被放进去
   await page.goto("/reconciliation?kind=AR");
   await expect(page.getByText(/当前角色可见:.*应付/)).toBeVisible();
 
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/reconciliation");
   await expect(page.getByText(/当前角色可见:.*应收/)).toBeVisible();
 
   // 管理层两侧都能看,且有 Tab 可切
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/reconciliation");
   await expect(page.getByRole("link", { name: /应收/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /应付/ })).toBeVisible();
@@ -70,7 +70,7 @@ test("AR/AP 按角色区分:采购只见应付,PM 只见应收", async ({ page }
 
 test("差异识别:金额差异 / 仅一方有 / 异币种,逐类判定并高亮", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   const stamp = Date.now();
   await createStatement(page, `E2E-REC-${stamp}`);
 
@@ -115,7 +115,7 @@ test("差异识别:金额差异 / 仅一方有 / 异币种,逐类判定并高亮
 
 test("**金额对得上但数量与单价互相抵消,绝不判一致**", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createStatement(page, `E2E-RECX-${Date.now()}`);
   await page.getByRole("button", { name: "上传 ERP 导出明细" }).click();
 
@@ -133,7 +133,7 @@ test("**金额对得上但数量与单价互相抵消,绝不判一致**", async 
 
 test("账龄分析:到期日未知单列,不并入 0–30", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createStatement(page, `E2E-RECA-${Date.now()}`);
   await page.getByRole("button", { name: "上传 ERP 导出明细" }).click();
 
@@ -166,7 +166,7 @@ test("账龄分析:到期日未知单列,不并入 0–30", async ({ page }) => 
 
 test("解析报错逐行给出;导出附件的措辞不是「发送」", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await createStatement(page, `E2E-RECE-${Date.now()}`);
 
   // 既无金额也无数量单价 → 整表拒绝

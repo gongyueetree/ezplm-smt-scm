@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
 
 test("批量 update 报价:逐 BOM 独立成败,失败逐条给出原因", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/quotes");
 
   await page.getByRole("button", { name: "批量 update 报价" }).click();
@@ -46,7 +46,7 @@ test("批量 update 报价:逐 BOM 独立成败,失败逐条给出原因", async
 
 test("损耗报告:导入 → 分析 → 导出,发料为 0 时损耗率标「不可算」", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/scrap");
 
   // 数据主权要写明:本系统没有工单投料
@@ -84,7 +84,7 @@ test("损耗报告:导入 → 分析 → 导出,发料为 0 时损耗率标「�
 });
 
 test("损耗导入:缺必需列整表拒绝,缺发料只提示不阻断", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/scrap");
 
   await page.getByLabel(/损耗明细/).fill("期间,MPN\n2026-07,A");

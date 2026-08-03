@@ -5,11 +5,11 @@ import { useState, type FormEvent } from "react";
 
 /** 演示账号(与 prisma/seed.ts 一致;仅种子数据,非硬编码后门) */
 const DEMO_ACCOUNTS = [
-  { email: "pm@demo.ezplm.cn", label: "PM 经理" },
-  { email: "procurement@demo.ezplm.cn", label: "采购" },
-  { email: "engineering@demo.ezplm.cn", label: "工程" },
-  { email: "management@demo.ezplm.cn", label: "管理层" },
-  { email: "supplier@demo.ezplm.cn", label: "供应商" },
+  { email: "pm@demo.qianchuang.cn", label: "PM 经理" },
+  { email: "procurement@demo.qianchuang.cn", label: "采购" },
+  { email: "engineering@demo.qianchuang.cn", label: "工程" },
+  { email: "management@demo.qianchuang.cn", label: "管理层" },
+  { email: "supplier@demo.qianchuang.cn", label: "供应商" },
 ];
 
 export default function LoginPage() {
@@ -46,9 +46,9 @@ export default function LoginPage() {
       <div className="card" style={{ width: "min(420px, 100%)" }}>
         <div className="card-body" style={{ padding: 28 }}>
           <div className="brand-logo" style={{ marginBottom: 18 }}>
-            <div className="brand-mark">硬</div>
+            <div className="brand-mark">乾</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>硬禾科技 ezPLM</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>乾创电子</div>
               <div className="small muted">AI 供应链协同 · 登录</div>
             </div>
           </div>

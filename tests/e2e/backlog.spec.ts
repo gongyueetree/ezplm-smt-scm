@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 }
 
 test("B1 采购申请单:GTB 试算展示完整过程并标注损耗率待确认", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/request");
 
   await page.getByLabel("需求数量").fill("1000");
@@ -41,7 +41,7 @@ test("B1 采购申请单:GTB 试算展示完整过程并标注损耗率待确认
 });
 
 test("B3 采购策略:未确认口径标注为非正式风控,保存后生效", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/suppliers");
 
   // 自建前置:先落一份「口径未确认」的策略(库中数据跨运行保留,不能假设初始态)
@@ -61,7 +61,7 @@ test("B3 采购策略:未确认口径标注为非正式风控,保存后生效", 
 });
 
 test("B2 供应商预设:多阶价格可维护并显示", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/suppliers");
 
   await page.getByLabel("MPN", { exact: true }).fill("GRM188R71H104KA93D");
@@ -75,7 +75,7 @@ test("B2 供应商预设:多阶价格可维护并显示", async ({ page }) => {
 });
 
 test("PR7 遗留:草稿态不可导出;批准后可从快照导出 XLSX", async ({ page }) => {
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/rfq");
   await page.getByLabel("标题").fill("E2E 导出验证");
   await page.getByRole("button", { name: "创建 RFQ" }).click();

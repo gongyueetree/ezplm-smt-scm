@@ -19,11 +19,11 @@ if (!connectionString) throw new Error("DATABASE_URL 未配置");
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 const DEMO_USERS: { email: string; name: string; role: RoleName }[] = [
-  { email: "pm@demo.ezplm.cn", name: "王工(PM)", role: RoleName.PM },
-  { email: "procurement@demo.ezplm.cn", name: "李采(采购)", role: RoleName.PROCUREMENT },
-  { email: "engineering@demo.ezplm.cn", name: "张研(工程)", role: RoleName.ENGINEERING },
-  { email: "management@demo.ezplm.cn", name: "赵总(管理层)", role: RoleName.MANAGEMENT },
-  { email: "supplier@demo.ezplm.cn", name: "供方演示(供应商)", role: RoleName.SUPPLIER },
+  { email: "pm@demo.qianchuang.cn", name: "王工(PM)", role: RoleName.PM },
+  { email: "procurement@demo.qianchuang.cn", name: "李采(采购)", role: RoleName.PROCUREMENT },
+  { email: "engineering@demo.qianchuang.cn", name: "张研(工程)", role: RoleName.ENGINEERING },
+  { email: "management@demo.qianchuang.cn", name: "赵总(管理层)", role: RoleName.MANAGEMENT },
+  { email: "supplier@demo.qianchuang.cn", name: "供方演示(供应商)", role: RoleName.SUPPLIER },
 ];
 
 async function main() {
@@ -74,6 +74,24 @@ async function main() {
       create: { tenantId: tenant.id, userId: user.id, roleId: roles.get(u.role)! },
     });
     created.push(`${u.email} [${u.role}]`);
+  }
+
+  /*
+   * 白标改造遗留处理:演示账号域名从 @demo.ezplm.cn 改为 @demo.qianchuang.cn。
+   *
+   * 种子按 (tenantId, email) upsert,改域名会**新建 5 个账号而旧的仍然启用**,
+   * 线上就变成 10 个可登录账号 —— 客户会困惑该用哪套。
+   *
+   * 这里把旧域名账号**停用**而不是删除:
+   * CLAUDE.md 要求用户只停用不删除(AuditLog 必须比 User 行长寿,
+   * 删掉会让历史审计记录指向一个不存在的 userId)。
+   */
+  const legacy = await prisma.user.updateMany({
+    where: { tenantId: tenant.id, email: { endsWith: "@demo.ezplm.cn" }, isActive: true },
+    data: { isActive: false },
+  });
+  if (legacy.count > 0) {
+    console.log(`  已停用 ${legacy.count} 个旧域名演示账号(@demo.ezplm.cn)—— 保留记录以维持审计可追溯`);
   }
 
   // 示例客户(联创科技等为示例数据中的下游客户)
@@ -163,7 +181,7 @@ async function main() {
 
   // 建这些目录数据记在管理层演示账号名下(种子里唯一有"系统性"含义的账号)
   const seedActor = await prisma.user.findUniqueOrThrow({
-    where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.ezplm.cn" } },
+    where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.qianchuang.cn" } },
     select: { id: true },
   });
 
@@ -205,7 +223,7 @@ async function main() {
   });
   if (supA0) {
     await prisma.user.updateMany({
-      where: { tenantId: tenant.id, email: "supplier@demo.ezplm.cn" },
+      where: { tenantId: tenant.id, email: "supplier@demo.qianchuang.cn" },
       data: { supplierId: supA0.id },
     });
   }
@@ -299,7 +317,7 @@ async function main() {
   }
 
   const admin = await prisma.user.findUniqueOrThrow({
-    where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.ezplm.cn" } },
+    where: { tenantId_email: { tenantId: tenant.id, email: "management@demo.qianchuang.cn" } },
   });
   await writeAudit(prisma, {
     tenantId: tenant.id,

@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 }
 
 test("模板页:系统不预设百分比,未评级客户明确落通用模板", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/quote-templates");
 
   await expect(page.getByText(/系统不预设任何百分比/)).toBeVisible();
@@ -28,7 +28,7 @@ test("模板页:系统不预设百分比,未评级客户明确落通用模板", 
 
 test("新建模板:留空 Markup 显示「未维护」,未确认口径全程标注", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/quote-templates");
 
   const name = `E2E通用-${Date.now()}`;
@@ -50,7 +50,7 @@ test("新建模板:留空 Markup 显示「未维护」,未确认口径全程标�
 
 test("客户等级可设置,且未评级时命中说明写明不等于 C 级", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/quote-templates");
 
   // 先确保有一套通用模板可回落

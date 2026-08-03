@@ -58,7 +58,7 @@ function okLines(mpn: string): string {
 }
 
 test("台账页不再是占位页,KPI 与筛选可用,且措辞不含虚假完成态", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/orders");
 
   await expect(page.locator(".page-title")).toHaveText("采购订单");
@@ -83,7 +83,7 @@ test("台账页不再是占位页,KPI 与筛选可用,且措辞不含虚假完�
 });
 
 test("批量录入:坏行逐行报错带行号,好行照常入库", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/procurement/orders");
   await page.getByRole("button", { name: "新建采购订单" }).click();
 
@@ -105,7 +105,7 @@ test("全流程:提交复核 → 复核通过 → 终审通过 → 生成在途�
   page,
 }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn"); // 管理层可走完全部环节
+  await login(page, "management@demo.qianchuang.cn"); // 管理层可走完全部环节
   const stamp = Date.now();
   const id = await createPo(page, `E2E-PO-${stamp}`, okLines(`E2E-PART-${stamp}`));
 
@@ -138,7 +138,7 @@ test("全流程:提交复核 → 复核通过 → 终审通过 → 生成在途�
   // 生成的在途行应出现在 OPO 页。
   // 换回采购身份:/suppliers/opo 的角色是 PROCUREMENT / SUPPLIER,**不含 MANAGEMENT**
   // (角色模型如此设计,不是缺陷)——用管理层账号去看在途页本来就看不到。
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
   await expect(page.getByText(`E2E-PO-${stamp}`).first()).toBeVisible();
 
@@ -152,7 +152,7 @@ test("全流程:提交复核 → 复核通过 → 终审通过 → 生成在途�
 
 test("退回必须记原因;退回后可回草稿继续改", async ({ page }) => {
   test.setTimeout(120_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const stamp = Date.now();
   const id = await createPo(page, `E2E-POR-${stamp}`, okLines(`E2E-RPART-${stamp}`));
 
@@ -177,7 +177,7 @@ test("退回必须记原因;退回后可回草稿继续改", async ({ page }) =>
 
 test("历史价对比:同料第二单涨幅超线时被判异常并挡住提交复核", async ({ page }) => {
   test.setTimeout(180_000);
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const stamp = Date.now();
   const mpn = `E2E-HIST-${stamp}`;
 

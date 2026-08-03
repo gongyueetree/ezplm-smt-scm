@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
 }
 
 test("物料页:SMT 工艺列存在,未维护时说明是数据源不提供而非系统没做", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials");
 
   await expect(
@@ -28,7 +28,7 @@ test("物料页:SMT 工艺列存在,未维护时说明是数据源不提供而�
 });
 
 test("SMT 工艺属性可本地维护,MSL 只接受标准等级", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/materials?q=STM32F103C8T6");
   const link = page.locator("a.mpn-link").first();
   await expect(link).toBeVisible();
@@ -44,7 +44,7 @@ test("SMT 工艺属性可本地维护,MSL 只接受标准等级", async ({ page 
 });
 
 test("库存页:可按客户与日期筛选,且写明客户维度的真实口径", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/inventory");
 
   await expect(page.getByLabel("客户")).toBeVisible();
@@ -57,7 +57,7 @@ test("库存页:可按客户与日期筛选,且写明客户维度的真实口径
 });
 
 test("管理工作台:库存与呆滞入口在管理层,并说明客户维度不代表专属备料", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/");
   const card = page.locator(".card", { hasText: "库存总览与呆滞分析" });
   await expect(card).toBeVisible();
@@ -66,7 +66,7 @@ test("管理工作台:库存与呆滞入口在管理层,并说明客户维度不
 });
 
 test("ERP 同步日志:可筛选可导出,且不声称 ERP 已接收", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   await page.goto("/settings/sync-log");
 
   await expect(page.locator(".page-title")).toHaveText("ERP 同步日志");
