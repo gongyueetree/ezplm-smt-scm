@@ -106,7 +106,20 @@ async function askHidden(prompt: string): Promise<string> {
   });
 }
 
+/**
+ * 只显示 host:port/dbname,**不显示用户名与密码**。
+ * 改口令是敏感操作,不知道自己在改哪个库比改错更糟 ——
+ * seed-remote.sh 一开始就有这个确认,本脚本最初漏了(实测踩到:
+ * 列出来的账号与本机库对不上,才发现连的是另一个库)。
+ */
+function describeTarget(url: string): string {
+  return url.replace(/^[a-z]+:\/\//, "").replace(/^[^@]*@/, "").replace(/\?.*$/, "");
+}
+
 async function main() {
+  console.log(`\n目标数据库:${describeTarget(connectionString!)}`);
+  console.log("  ⚠ 请先确认这是你要改的库 —— 改错库会让你以为已生效但线上依旧登不进去\n");
+
   const target = process.argv[2]?.trim();
 
   const users = await prisma.user.findMany({
