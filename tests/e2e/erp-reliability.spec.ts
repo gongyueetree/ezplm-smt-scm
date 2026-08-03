@@ -20,7 +20,7 @@ async function login(page: Page, email: string) {
 }
 
 test("连接健康接口:每条连接都带判定依据,不只给一个分数", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const res = await page.request.get("/api/settings/integrations/erp/health");
   expect(res.status()).toBe(200);
   const body = await res.json();
@@ -42,7 +42,7 @@ test("连接健康接口:每条连接都带判定依据,不只给一个分数", 
 test("**查看与执行分离**:普通角色可看健康状态,但不能执行同步/重试", async ({ page }) => {
   // 设计如此(原始要求:「管理层和系统管理员可配置;普通用户只可查看同步状态」)——
   // erp.connection.view 对所有角色开放,受限的是 erp.sync.execute。
-  await login(page, "pm@demo.ezplm.cn");
+  await login(page, "pm@demo.qianchuang.cn");
   const canView = await page.request.get("/api/settings/integrations/erp/health");
   expect(canView.status()).toBe(200);
 
@@ -54,7 +54,7 @@ test("**查看与执行分离**:普通角色可看健康状态,但不能执行�
 });
 
 test("重试不存在的作业返回 404,而不是 500", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const res = await page.request.post(
     "/api/settings/integrations/erp/jobs/no-such-job-id/retry",
   );
@@ -63,7 +63,7 @@ test("重试不存在的作业返回 404,而不是 500", async ({ page }) => {
 });
 
 test("重试受权限约束:无 erp.sync.execute 的角色被拒", async ({ page }) => {
-  await login(page, "engineering@demo.ezplm.cn");
+  await login(page, "engineering@demo.qianchuang.cn");
   const res = await page.request.post(
     "/api/settings/integrations/erp/jobs/whatever/retry",
   );

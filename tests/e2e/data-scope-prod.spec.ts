@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 }
 
 test("**供应商看到的是受限视图**,且页面明确告知", async ({ page }) => {
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
 
   const notice = page.getByTestId("opo-scope-notice");
@@ -29,20 +29,20 @@ test("**供应商看到的是受限视图**,且页面明确告知", async ({ pag
 });
 
 test("内部角色不显示受限提示(看的是全量)", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
   await expect(page.getByTestId("opo-scope-notice")).toHaveCount(0);
 });
 
 test("**供应商看到的行数不多于内部角色** —— 过滤真的生效了", async ({ page }) => {
-  await login(page, "procurement@demo.ezplm.cn");
+  await login(page, "procurement@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
   const internalRows = await page
     .locator(".card", { hasText: "未回复供应商" })
     .locator("tbody tr")
     .count();
 
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   await page.goto("/suppliers/opo");
   const supplierRows = await page
     .locator(".card", { hasText: "未回复供应商" })
@@ -53,7 +53,7 @@ test("**供应商看到的行数不多于内部角色** —— 过滤真的生�
 });
 
 test("**ERP 导出同样受范围约束**,不能用导出绕过页面过滤", async ({ page }) => {
-  await login(page, "supplier@demo.ezplm.cn");
+  await login(page, "supplier@demo.qianchuang.cn");
   // 供应商没有导出权限 → 403;这条同时守住"导出不是绕过口"
   const res = await page.request.get("/api/opo/erp-export");
   expect([403, 200]).toContain(res.status());

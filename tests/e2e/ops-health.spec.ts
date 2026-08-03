@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
 }
 
 test("运维总览:含整体指标、分连接指标、连接健康与人工队列", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const res = await page.request.get("/api/settings/ops-health?days=7");
   expect(res.status()).toBe(200);
   const b = await res.json();
@@ -31,7 +31,7 @@ test("运维总览:含整体指标、分连接指标、连接健康与人工队�
 });
 
 test("**无样本时是 null 而不是 0** —— 两者含义完全不同", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const res = await page.request.get("/api/settings/ops-health?days=1");
   const b = await res.json();
 
@@ -47,14 +47,14 @@ test("**无样本时是 null 而不是 0** —— 两者含义完全不同", asy
 });
 
 test("时间窗有上下限,不会被极值搞爆", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   expect((await (await page.request.get("/api/settings/ops-health?days=9999")).json()).windowDays).toBe(90);
   expect((await (await page.request.get("/api/settings/ops-health?days=0")).json()).windowDays).toBe(1);
   expect((await (await page.request.get("/api/settings/ops-health?days=abc")).json()).windowDays).toBe(7);
 });
 
 test("连接健康**每条都带判定依据**,不只给分数", async ({ page }) => {
-  await login(page, "management@demo.ezplm.cn");
+  await login(page, "management@demo.qianchuang.cn");
   const b = await (await page.request.get("/api/settings/ops-health")).json();
   for (const c of b.connections) {
     expect(Array.isArray(c.health.reasons)).toBe(true);
