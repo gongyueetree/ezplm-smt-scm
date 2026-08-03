@@ -5,6 +5,9 @@ import {
   detectGaps,
   makeRef,
   parseRef,
+  quantityCompleteness,
+  segmentStats,
+  timeCompleteness,
   traceBackward,
   traceForward,
   type TraceEdgeInput,
@@ -177,5 +180,41 @@ describe("时间线", () => {
     ];
     const t = buildTimeline(edges);
     expect(t[t.length - 1].occurredAt).toBeNull();
+  });
+});
+
+describe("PR-E:分段统计与完整度", () => {
+  it("按段统计预期与实际关系数", () => {
+    const r = traceForward("LOT:L1", FULL);
+    const stats = segmentStats(r.visited, FULL);
+    const issue = stats.find((s) => s.segment === "ISSUE")!;
+    // 起点 L1 有两条发料边 → 预期 1 个上游批次,实际 1 个有边
+    expect(issue.expected).toBe(1);
+    expect(issue.actual).toBe(1);
+  });
+
+  it("**上游有节点但没有下游边 → actual 为 0**,这正是覆盖率要暴露的情况", () => {
+    const partial: TraceEdgeInput[] = [
+      { fromRef: "LOT:L1", toRef: "WO:WO-1", kind: "LOT_TO_ISSUE", qty: "200" },
+    ];
+    const r = traceForward("LOT:L1", partial);
+    const stats = segmentStats(r.visited, partial);
+    expect(stats.find((s) => s.segment === "PRODUCTION")).toMatchObject({ expected: 1, actual: 0 });
+  });
+
+  it("时间完整度:**没有边时返回 null 而不是 1**", () => {
+    expect(timeCompleteness([])).toBeNull();
+    expect(timeCompleteness(FULL)).toBe(1);
+    expect(
+      timeCompleteness([
+        { fromRef: "A:1", toRef: "B:2", kind: "X", occurredAt: "2026-01-01" },
+        { fromRef: "A:1", toRef: "B:3", kind: "X" },
+      ]),
+    ).toBe(0.5);
+  });
+
+  it("数量完整度按传入判定函数算", () => {
+    expect(quantityCompleteness(FULL, (e) => Boolean(e.qty))).toBeCloseTo(6 / 7, 5);
+    expect(quantityCompleteness([], () => true)).toBeNull();
   });
 });

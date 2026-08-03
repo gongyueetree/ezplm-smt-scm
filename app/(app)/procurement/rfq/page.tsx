@@ -10,6 +10,9 @@ import { CreateProcurementRfqForm } from "./create-form";
 
 export const dynamic = "force-dynamic";
 
+/** 版本下拉的上限。超出时必须显示截断提示 —— 静默截断是生产事故的常见来源 */
+const BOM_VERSION_LIMIT = 200;
+
 const STATUS_LABEL: Record<string, { text: string; tone: "gray" | "blue" | "green" | "amber" }> = {
   DRAFT: { text: "草稿", tone: "gray" },
   SOURCING: { text: "比价中", tone: "blue" },
@@ -19,7 +22,7 @@ const STATUS_LABEL: Record<string, { text: string; tone: "gray" | "blue" | "gree
 
 export default async function ProcurementRfqPage() {
   const session = (await getSession())!;
-  const [items, versions] = await Promise.all([
+  const [items, versions, totalVersions] = await Promise.all([
     prisma.procurementRFQ.findMany({
       where: tenantWhere(session.tenantId),
       orderBy: { createdAt: "desc" },
@@ -29,10 +32,17 @@ export default async function ProcurementRfqPage() {
       where: tenantWhere(session.tenantId),
       orderBy: { createdAt: "desc" },
       include: { bom: { select: { name: true } } },
-      take: 30,
+      // PR-E 生产加固:原为 30,**静默截断** ——
+      // 版本超过 30 个后,较早的版本在下拉里直接消失且没有任何提示,
+      // 用户会以为"这个版本不能比价",而不是"列表只显示了最近 30 个"。
+      // 实测:库里 37 个版本时,07-29 那批已不可选。
+      take: BOM_VERSION_LIMIT,
     }),
+    prisma.bOMVersion.count({ where: tenantWhere(session.tenantId) }),
   ]);
   const canCreate = session.roles.some((r) => r === "PROCUREMENT" || r === "MANAGEMENT");
+  // 截断必须**显式告知**,不能让人以为"没有这个版本"
+  const truncated = totalVersions > versions.length;
 
   return (
     <div>
@@ -47,12 +57,23 @@ export default async function ProcurementRfqPage() {
       </Banner>
 
       {canCreate ? (
-        <CreateProcurementRfqForm
-          versions={versions.map((v) => ({
-            id: v.id,
-            label: `${v.bom.name} V${v.versionNo}`,
-          }))}
-        />
+        <>
+          {truncated ? (
+            <Banner tone="warn">
+              <span>
+                共 <b>{totalVersions}</b> 个 BOM 版本,下拉仅显示最近{" "}
+                <b>{versions.length}</b> 个 —— 更早的版本<b>暂不可选</b>,
+                这不代表它们不存在。需要对更早版本比价时,请从 BOM 台账进入该版本发起。
+              </span>
+            </Banner>
+          ) : null}
+          <CreateProcurementRfqForm
+            versions={versions.map((v) => ({
+              id: v.id,
+              label: `${v.bom.name} V${v.versionNo}`,
+            }))}
+          />
+        </>
       ) : (
         <Banner tone="soft">当前角色只读:仅采购与管理层可创建采购 RFQ。</Banner>
       )}

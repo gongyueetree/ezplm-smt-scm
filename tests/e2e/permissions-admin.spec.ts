@@ -15,6 +15,15 @@ import { expect, test, type Page } from "@playwright/test";
  * - 用户级回收覆盖角色默认;
  * - **不允许回收自己的权限管理权**(否则谁都进不来)。
  */
+/**
+ * **本文件必须串行**。
+ * 这些用例会改动**全局共享的权限状态**,并行跑时会互相打架 ——
+ * 实测:一条用例在角色级撤销 PM 的 material.create 后断言 403,
+ * 而另一条同时在用户级授予了同一权限,于是撤销那条看到 201。
+ * 这不是产品缺陷,是用例设计问题:改全局状态的测试不能并发。
+ */
+test.describe.configure({ mode: "serial" });
+
 const PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
 
 async function login(page: Page, email: string) {

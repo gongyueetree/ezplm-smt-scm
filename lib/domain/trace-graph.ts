@@ -12,6 +12,8 @@
  * - 环路必须能终止(现实中不该有,但脏数据会造出来)。
  */
 
+import type { SegmentStat, TraceSegment } from "./trace-coverage";
+
 /** 节点引用:`类型:业务键`,如 `LOT:LOT-2026-001` */
 export type NodeRef = string;
 
@@ -52,8 +54,15 @@ export interface TraceEdgeInput {
   fromRef: NodeRef;
   toRef: NodeRef;
   kind: string;
+  /** 原始数量字段(历史数据);单位换算见下列字段 */
   qty?: string | null;
   occurredAt?: string | null;
+  /** ---- 单位换算(PR-E)---- */
+  quantity?: string | null;
+  uom?: string | null;
+  baseQuantity?: string | null;
+  baseUom?: string | null;
+  conversionFactor?: string | null;
 }
 
 /** 正向顺序:每一跳的上游节点类型 → 下游节点类型 */
@@ -206,6 +215,15 @@ export function detectGaps(result: TraverseResult, edges: readonly TraceEdgeInpu
   return gaps;
 }
 
+/** 边上的单位信息(PR-E);老数据只有 qty 时这些字段为空 */
+export interface EdgeUom {
+  quantity?: string | null;
+  uom?: string | null;
+  baseQuantity?: string | null;
+  baseUom?: string | null;
+  conversionFactor?: string | null;
+}
+
 export interface BlastRadiusInput {
   sourceRef: NodeRef;
   edges: readonly TraceEdgeInput[];
@@ -352,3 +370,77 @@ export function buildTimeline(edges: readonly TraceEdgeInput[]): TimelineEntry[]
 }
 
 export { FORWARD_ORDER };
+
+/* ============================================================
+ * PR-E:分段统计(供覆盖率与置信度计算)
+ * ============================================================ */
+
+
+/** 每一段由哪种边承载 */
+const SEGMENT_EDGE_KIND: Record<TraceSegment, TraceEdgeKindName> = {
+  RECEIPT: "RECEIPT_TO_LOT",
+  ISSUE: "LOT_TO_ISSUE",
+  PRODUCTION: "WORK_ORDER_TO_FG_LOT",
+  SHIPMENT: "FG_LOT_TO_SHIPMENT",
+};
+
+type TraceEdgeKindName =
+  | "PO_TO_RECEIPT"
+  | "RECEIPT_TO_LOT"
+  | "LOT_TO_ISSUE"
+  | "ISSUE_TO_WORK_ORDER"
+  | "WORK_ORDER_TO_FG_LOT"
+  | "FG_LOT_TO_SHIPMENT"
+  | "SHIPMENT_TO_CUSTOMER"
+  | "LOT_SPLIT"
+  | "LOT_MERGE";
+
+/** 每一段的上游节点类型 —— 预期关系数由它推出 */
+const SEGMENT_UPSTREAM: Record<TraceSegment, NodeKind> = {
+  RECEIPT: "RECEIPT",
+  ISSUE: "LOT",
+  PRODUCTION: "WO",
+  SHIPMENT: "FG",
+};
+
+/**
+ * 统计各段的"预期 vs 实际"。
+ *
+ * 预期数 = 该段上游节点的个数(每个上游节点**至少**应有一条下游关系)。
+ * 这是保守估计:真实可能一对多,所以覆盖率算出来只会偏低不会偏高 ——
+ * 宁可低估自己的数据完整度,也不要高估。
+ */
+export function segmentStats(
+  visited: ReadonlySet<NodeRef>,
+  edges: readonly TraceEdgeInput[],
+): SegmentStat[] {
+  return (Object.keys(SEGMENT_EDGE_KIND) as TraceSegment[]).map((segment) => {
+    const upstreamKind = SEGMENT_UPSTREAM[segment];
+    const upstreamRefs = [...visited].filter((r) => parseRef(r)?.kind === upstreamKind);
+    const edgeKind = SEGMENT_EDGE_KIND[segment];
+    const withEdge = new Set(
+      edges.filter((e) => e.kind === edgeKind && upstreamRefs.includes(e.fromRef)).map((e) => e.fromRef),
+    );
+    return {
+      segment,
+      expected: upstreamRefs.length,
+      actual: withEdge.size,
+      coverage: null,
+    };
+  });
+}
+
+/** 有时间戳的边占比;没有边时返回 null(不是 1) */
+export function timeCompleteness(edges: readonly TraceEdgeInput[]): number | null {
+  if (edges.length === 0) return null;
+  return edges.filter((e) => Boolean(e.occurredAt)).length / edges.length;
+}
+
+/** 数量可折算的边占比;没有边时返回 null */
+export function quantityCompleteness(
+  edges: readonly TraceEdgeInput[],
+  isConvertible: (e: TraceEdgeInput) => boolean,
+): number | null {
+  if (edges.length === 0) return null;
+  return edges.filter(isConvertible).length / edges.length;
+}

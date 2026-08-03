@@ -172,6 +172,38 @@ enum TraceEdgeKind {
   WORK_ORDER_TO_FG_LOT
   FG_LOT_TO_SHIPMENT
   SHIPMENT_TO_CUSTOMER
+  /// 批次拆分:一个批次拆成多个子批次(图必须保持连续,否则追溯在拆分处会断)
+  LOT_SPLIT
+  /// 批次合并:多个批次并成一个新批次
+  LOT_MERGE
+}
+
+/// 追溯事件类型(PR-E)。
+/// 原字段是自由字符串,无法做统计与筛选;改为受控枚举并**保留原字段**兼容历史数据。
+enum TraceEventKind {
+  RECEIVED
+  ISSUED
+  RETURNED
+  PRODUCED
+  SHIPPED
+  REWORK
+  REPAIR
+  SCRAP
+  RETURN
+  RETEST
+  REPACKAGE
+  SPLIT
+  MERGE
+  FREEZE
+  UNFREEZE
+  OTHER
+}
+
+/// 数据完整度评级(Blast Radius 用)
+enum TraceConfidence {
+  HIGH
+  MEDIUM
+  LOW
 }
 
 /// 质量事件状态
@@ -2071,6 +2103,15 @@ model ReceiptLot {
   warehouse     String?
   location      String?
   source        TraceSource @default(IMPORT)
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdById   String
   createdAt     DateTime    @default(now())
 
@@ -2093,6 +2134,15 @@ model MaterialLot {
   frozenAt   DateTime?
   frozenById String?
   frozenReason String?
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt  DateTime @default(now())
 
   @@unique([tenantId, lotNo])
@@ -2115,6 +2165,15 @@ model TraceWorkOrder {
   pausedAt    DateTime?
   pausedById  String?
   pausedReason String?
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   source      TraceSource @default(IMPORT)
   createdAt   DateTime    @default(now())
 
@@ -2133,6 +2192,15 @@ model WorkOrderMaterialIssue {
   returnedQty   Decimal? @db.Decimal(18, 4)
   issuedAt      DateTime?
   operator      String?
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt     DateTime @default(now())
 
   @@unique([tenantId, workOrderNo, lotNo])
@@ -2149,6 +2217,15 @@ model FinishedGoodsLot {
   product     String?
   producedQty Decimal? @db.Decimal(18, 4)
   producedAt  DateTime?
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt   DateTime @default(now())
 
   @@unique([tenantId, fgLotNo])
@@ -2164,6 +2241,15 @@ model TraceShipment {
   customerName String?
   customerPo   String?
   shippedAt    DateTime?
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt    DateTime @default(now())
 
   lines TraceShipmentLine[]
@@ -2194,10 +2280,29 @@ model TraceEdge {
   /// 源与目标用「类型:业务键」表达,如 LOT:LOT-2026-001 / WO:WO-26-0412
   fromRef  String
   toRef    String
-  /// 该跳的数量(发料量/产出量/出货量)
+  /// 该跳的数量。**保留原字段**兼容历史数据
   qty      Decimal?      @db.Decimal(18, 4)
+  /// ---- 单位换算(PR-E)----
+  /// 原始数量与单位(如 2 Reel)
+  quantity   Decimal?    @db.Decimal(18, 6)
+  uom        String?
+  /// 折算到基准单位后的值(如 10000 PCS)。
+  /// **合计只能用 baseQuantity 且 baseUom 一致时相加** —— 不能把 PCS 和 Reel 直接相加
+  baseQuantity Decimal?  @db.Decimal(18, 6)
+  baseUom      String?
+  /// 换算系数(1 Reel = 5000 PCS 则为 5000);未知时留空,该边计入"数量不可比"
+  conversionFactor Decimal? @db.Decimal(18, 6)
   occurredAt DateTime?
   source   TraceSource   @default(IMPORT)
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt DateTime     @default(now())
 
   @@unique([tenantId, kind, fromRef, toRef])
@@ -2210,13 +2315,112 @@ model TraceEvent {
   id        String      @id @default(cuid())
   tenantId  String
   ref       String
+  /// 原自由字符串字段,**保留不动**以兼容历史数据
   eventType String
+  /// 受控枚举(PR-E);历史行为空,新写入必填
+  kind      TraceEventKind?
   detail    Json?
   occurredAt DateTime
   source    TraceSource @default(IMPORT)
+  /// ---- 外部来源(PR-E:真实 ERP 映射)----
+  sourceSystem       String?
+  sourceConnectionId String?
+  /// ERP 侧主键与行号;用于幂等与回查
+  externalId         String?
+  externalLineId     String?
+  /// ERP 侧版本号/时间戳:判断"这条是不是比我手上的新"
+  externalVersion    String?
+  sourceUpdatedAt    DateTime?
   createdAt DateTime    @default(now())
 
   @@index([tenantId, ref, occurredAt])
+}
+
+/// 批次拆分/合并(PR-E)。
+///
+/// 为什么必须显式建模:拆分与合并是**图的连接点**。只在 TraceEdge 加两条边,
+/// 追溯能走通,但回答不了"这 3000 颗是从哪一批的哪一段拆出来的、拆时还剩多少"。
+/// 拆合记录本身就是审计对象。
+model LotSplitMerge {
+  id           String   @id @default(cuid())
+  tenantId     String
+  /// SPLIT:一进多出;MERGE:多进一出
+  kind         String
+  sourceLotNos String[]
+  targetLotNos String[]
+  /// 各目标批次分到的数量(与 targetLotNos 同序)
+  quantities   Decimal[] @db.Decimal(18, 6)
+  uom          String?
+  reason       String?
+  operator     String?
+  occurredAt   DateTime
+  source       TraceSource @default(IMPORT)
+  sourceSystem       String?
+  sourceConnectionId String?
+  externalId         String?
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, kind, occurredAt])
+  @@index([tenantId, externalId])
+}
+
+/// 生产替代料实际使用记录(PR-E)。
+///
+/// **不改动已有 BOM**:BOM 记"设计要什么料",本表记"这批实际投了什么料"。
+/// 两者必须分开 —— 把实际用料写回 BOM 会让历史 BOM 失真,
+/// 而客诉调查恰恰需要知道"当时到底投的是哪颗"。
+model TraceSubstitution {
+  id               String   @id @default(cuid())
+  tenantId         String
+  workOrderNo      String
+  bomMpn           String?
+  bomInternalPn    String?
+  actualMpn        String?
+  actualInternalPn String?
+  actualLotNo      String?
+  quantity         Decimal? @db.Decimal(18, 6)
+  uom              String?
+  /// 替代必须有人批准 —— 无批准人的替代记录本身就是异常
+  approvedById     String?
+  approvedAt       DateTime?
+  approvalReason   String?
+  source           TraceSource @default(IMPORT)
+  sourceSystem       String?
+  sourceConnectionId String?
+  externalId         String?
+  createdById      String
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId, workOrderNo])
+  @@index([tenantId, actualLotNo])
+  @@index([tenantId, bomMpn])
+}
+
+/// 影响面分析快照(PR-E)。
+///
+/// 异常调查往往持续数周,期间数据在变。
+/// **不保存快照,事后没人说得清"当时是按什么数据下的隔离决定"**。
+model TraceAnalysisRun {
+  id              String   @id @default(cuid())
+  tenantId        String
+  sourceRef       String
+  /// 分析基准时刻 —— 与 createdAt 分开,可按历史时点重算
+  analysisAsOf    DateTime
+  snapshot        Json
+  /// 当时哪几段没有数据
+  dataGapSnapshot Json?
+  /// 便于台账直接排序,不必解快照
+  confidence      TraceConfidence
+  coverageScore   Int
+  /// 图数据变化后可判断快照是否已过时
+  inputVersion    String?
+  incidentId      String?
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, sourceRef, analysisAsOf])
+  @@index([tenantId, incidentId])
 }
 
 /// 质量事件(客诉 / 来料异常 / 制程异常的登记入口)
