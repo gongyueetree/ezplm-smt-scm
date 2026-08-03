@@ -19,6 +19,7 @@
  *   pnpm reset:password <email>                          # 直接指定账号
  *   pnpm reset:password --domain demo.qianchuang.cn      # 批量:该域名下所有**启用**账号设同一口令
  *   pnpm reset:password --all                            # 批量:所有启用账号
+ *   pnpm reset:password --domain X --password <口令>      # 非交互,一步到位(仅限演示账号)
  *   DATABASE_URL=<远端串> pnpm reset:password ...          # 对线上库操作
  *
  * 批量模式只对演示/测试账号有意义 —— 真实用户共用口令是安全事故。
@@ -129,6 +130,14 @@ async function main() {
   const domainIdx = args.indexOf("--domain");
   const domain = domainIdx >= 0 ? args[domainIdx + 1]?.replace(/^@/, "") : undefined;
   const target = args.find((a) => !a.startsWith("--") && a !== domain);
+  /*
+   * 非交互:直接给定口令,不问任何问题。
+   *
+   * 口令会进 shell 历史 —— 所以**只适合演示账号**(那种口令本来就要发给客户,
+   * 不是秘密)。真实用户口令一律走交互式输入。
+   */
+  const pwIdx = args.indexOf("--password");
+  const inlinePassword = pwIdx >= 0 ? args[pwIdx + 1] : process.env.NEW_PASSWORD;
 
   const users = await prisma.user.findMany({
     select: {
@@ -178,20 +187,25 @@ async function main() {
       for (const u of skippedInactive) console.log(`    ${u.email}`);
     }
 
-    const yes = await ask("\n确认继续?[y/N] ");
-    if (yes.trim().toLowerCase() !== "y") {
-      console.log("已取消。");
-      return;
+    let pw1: string;
+    if (inlinePassword) {
+      // 非交互:不问确认、不问两遍 —— 口令已由命令行给定
+      pw1 = inlinePassword;
+    } else {
+      const yes = await ask("\n确认继续?[y/N](这里只接受 y 或 n,**不是**输密码的地方)");
+      if (yes.trim().toLowerCase() !== "y") {
+        console.log("已取消。");
+        return;
+      }
+      pw1 = await askHidden("为以上账号设置新口令(输入不回显):");
+      const pw2 = await askHidden("再输入一次确认:");
+      if (pw1 !== pw2) {
+        console.error("两次输入不一致");
+        process.exit(1);
+      }
     }
-
-    const pw1 = await askHidden("为以上账号设置新口令(输入不回显):");
     if (pw1.length < 8) {
-      console.error("口令至少 8 位");
-      process.exit(1);
-    }
-    const pw2 = await askHidden("再输入一次确认:");
-    if (pw1 !== pw2) {
-      console.error("两次输入不一致");
+      console.error(`口令至少 8 位(当前 ${pw1.length} 位)`);
       process.exit(1);
     }
 
@@ -244,14 +258,19 @@ async function main() {
     }
   }
 
-  const pw1 = await askHidden(`为「${picked.email}」设置新口令(输入不回显):`);
-  if (pw1.length < 8) {
-    console.error("口令至少 8 位");
-    process.exit(1);
+  let pw1: string;
+  if (inlinePassword) {
+    pw1 = inlinePassword;
+  } else {
+    pw1 = await askHidden(`为「${picked.email}」设置新口令(输入不回显):`);
+    const pw2 = await askHidden("再输入一次确认:");
+    if (pw1 !== pw2) {
+      console.error("两次输入不一致");
+      process.exit(1);
+    }
   }
-  const pw2 = await askHidden("再输入一次确认:");
-  if (pw1 !== pw2) {
-    console.error("两次输入不一致");
+  if (pw1.length < 8) {
+    console.error(`口令至少 8 位(当前 ${pw1.length} 位)`);
     process.exit(1);
   }
 
