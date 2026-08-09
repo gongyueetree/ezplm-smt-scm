@@ -8,7 +8,8 @@
  *   所以"密码忘了就重跑种子"这条路是不通的。
  *
  * 纪律:
- * - 口令从**隐藏输入**读取,不进命令行参数、不进 shell 历史;
+ * - 口令默认从**隐藏输入**读取;非交互场景优先用管道/文件,
+ *   **明文进 argv 的方式对远端库默认拒绝**(见 scripts/lib/password-input.ts);
  * - 全程不打印口令,连长度都不打;
  * - 写 AuditLog(谁在什么时候重设了谁的口令)——
  *   口令重设是敏感操作,不留痕等于给自己埋雷;
@@ -19,17 +20,28 @@
  *   pnpm reset:password <email>                          # 直接指定账号
  *   pnpm reset:password --domain demo.qianchuang.cn      # 批量:该域名下所有**启用**账号设同一口令
  *   pnpm reset:password --all                            # 批量:所有启用账号
- *   pnpm reset:password --domain X --password <口令>      # 非交互,一步到位(仅限演示账号)
+ *   echo -n '<口令>' | pnpm reset:password --domain X --password-stdin   # 非交互(推荐)
+ *   NEW_PASSWORD_FILE=/path/secret pnpm reset:password --domain X       # 非交互(文件)
+ *   pnpm reset:password --domain X --password <口令>      # 非交互;明文进 argv,仅限本机演示库
  *   DATABASE_URL=<远端串> pnpm reset:password ...          # 对线上库操作
  *
  * 批量模式只对演示/测试账号有意义 —— 真实用户共用口令是安全事故。
  */
 import "./bootstrap-env";
+import { readFileSync } from "fs";
 import { createInterface } from "readline";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../lib/auth/password";
 import { writeAudit } from "../lib/server/audit";
+import {
+  checkPasswordSource,
+  classifyDbTarget,
+  normalizePipedSecret,
+  parseResetArgs,
+  SOURCE_LABEL,
+  type PasswordSourceKind,
+} from "./lib/password-input";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -52,30 +64,59 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
  *   所以这条路预先把所有行缓冲下来,按需取用。
  */
 const isTty = Boolean((process.stdin as NodeJS.ReadStream).isTTY);
-const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: isTty });
+
+/*
+ * readline **必须懒建**。
+ * `--password-stdin` 要把整个 stdin 当作口令读走;若模块加载时就建好 readline,
+ * 它会先把 stdin 切成行消费掉,管道进来的口令就再也拿不到了。
+ */
+let rlInstance: ReturnType<typeof createInterface> | null = null;
+function readline() {
+  if (!rlInstance) {
+    rlInstance = createInterface({ input: process.stdin, output: process.stdout, terminal: isTty });
+    setupInput(rlInstance);
+  }
+  return rlInstance;
+}
 
 let muted = false;
-const rlAny = rl as unknown as { _writeToOutput?: (s: string) => void };
-const originalWrite = rlAny._writeToOutput?.bind(rl);
-rlAny._writeToOutput = (str: string) => {
-  if (muted) return;
-  originalWrite?.(str);
-};
-
 /** 非 TTY:缓冲全部输入行 */
 const buffered: string[] = [];
 const waiters: ((l: string) => void)[] = [];
 let closed = false;
-if (!isTty) {
-  rl.on("line", (l) => {
-    const w = waiters.shift();
-    if (w) w(l);
-    else buffered.push(l);
-  });
-  rl.on("close", () => {
-    closed = true;
-    // stdin 已结束仍有人等 → 给空串,由上层校验拒掉,不要挂死
-    while (waiters.length) waiters.shift()!("");
+
+function setupInput(rl: ReturnType<typeof createInterface>) {
+  const rlAny = rl as unknown as { _writeToOutput?: (s: string) => void };
+  const originalWrite = rlAny._writeToOutput?.bind(rl);
+  rlAny._writeToOutput = (str: string) => {
+    if (muted) return;
+    originalWrite?.(str);
+  };
+
+  if (!isTty) {
+    rl.on("line", (l) => {
+      const w = waiters.shift();
+      if (w) w(l);
+      else buffered.push(l);
+    });
+    rl.on("close", () => {
+      closed = true;
+      // stdin 已结束仍有人等 → 给空串,由上层校验拒掉,不要挂死
+      while (waiters.length) waiters.shift()!("");
+    });
+  }
+}
+
+/** 把整个 stdin 当作口令读走 —— `--password-stdin` 用,必须在 readline 建立之前调用 */
+function readAllStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let buf = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => {
+      buf += c;
+    });
+    process.stdin.on("end", () => resolve(buf));
+    process.stdin.on("error", reject);
   });
 }
 
@@ -87,6 +128,7 @@ function readBuffered(): Promise<string> {
 }
 
 function ask(prompt: string): Promise<string> {
+  const rl = readline();
   process.stdout.write(prompt);
   if (!isTty) return readBuffered();
   return new Promise((resolve) => rl.question("", resolve));
@@ -94,6 +136,7 @@ function ask(prompt: string): Promise<string> {
 
 /** 口令输入:TTY 下屏蔽回显;非 TTY 下按行读(没有终端可泄露) */
 function askHidden(prompt: string): Promise<string> {
+  const rl = readline();
   process.stdout.write(prompt);
   if (!isTty) {
     return readBuffered().then((v) => {
@@ -125,19 +168,57 @@ async function main() {
   console.log(`\n目标数据库:${describeTarget(connectionString!)}`);
   console.log("  ⚠ 请先确认这是你要改的库 —— 改错库会让你以为已生效但线上依旧登不进去\n");
 
-  const args = process.argv.slice(2).map((a) => a.trim());
-  const wantAll = args.includes("--all");
-  const domainIdx = args.indexOf("--domain");
-  const domain = domainIdx >= 0 ? args[domainIdx + 1]?.replace(/^@/, "") : undefined;
-  const target = args.find((a) => !a.startsWith("--") && a !== domain);
+  const parsed = parseResetArgs(process.argv.slice(2).map((a) => a.trim()));
+  if (parsed.unknown.length > 0) {
+    // 拼错的标志位不能默默忽略 —— `--pasword xxx` 会被当成邮箱,跑到完全不同的分支
+    console.error(`无法识别的参数:${parsed.unknown.join(" ")}`);
+    console.error("可用参数:--all / --domain <域名> / --password <口令> / --password-stdin / --allow-insecure-cli-password");
+    process.exit(1);
+  }
+  const wantAll = parsed.all;
+  const domain = parsed.domain;
+  const target = parsed.target;
+
   /*
-   * 非交互:直接给定口令,不问任何问题。
-   *
-   * 口令会进 shell 历史 —— 所以**只适合演示账号**(那种口令本来就要发给客户,
-   * 不是秘密)。真实用户口令一律走交互式输入。
+   * 口令来源。优先级按**暴露面从低到高**排,先命中的先用。
+   * 具体准入规则见 scripts/lib/password-input.ts —— 明文进 argv 且目标是
+   * 远端库时会被直接拒掉。
    */
-  const pwIdx = args.indexOf("--password");
-  const inlinePassword = pwIdx >= 0 ? args[pwIdx + 1] : process.env.NEW_PASSWORD;
+  let inlinePassword: string | undefined;
+  let sourceKind: PasswordSourceKind = "PROMPT";
+  if (parsed.passwordStdin) {
+    sourceKind = "STDIN";
+    inlinePassword = normalizePipedSecret(await readAllStdin());
+  } else if (process.env.NEW_PASSWORD_FILE) {
+    sourceKind = "FILE";
+    try {
+      inlinePassword = normalizePipedSecret(readFileSync(process.env.NEW_PASSWORD_FILE, "utf8"));
+    } catch (e) {
+      // 只报路径,不报内容
+      console.error(`读取 NEW_PASSWORD_FILE 失败(${process.env.NEW_PASSWORD_FILE}):${e instanceof Error ? e.message : e}`);
+      process.exit(1);
+    }
+  } else if (parsed.inlinePassword !== undefined) {
+    sourceKind = "ARGV";
+    inlinePassword = parsed.inlinePassword;
+  } else if (process.env.NEW_PASSWORD) {
+    sourceKind = "ENV";
+    inlinePassword = process.env.NEW_PASSWORD;
+  }
+
+  if (inlinePassword !== undefined) {
+    const decision = checkPasswordSource({
+      kind: sourceKind,
+      target: classifyDbTarget(connectionString),
+      allowInsecure: parsed.allowInsecureCliPassword,
+    });
+    if (!decision.ok) {
+      console.error(decision.reason);
+      process.exit(1);
+    }
+    for (const w of decision.warnings) console.warn(w);
+    console.log(`口令来源:${SOURCE_LABEL[sourceKind]}\n`);
+  }
 
   const users = await prisma.user.findMany({
     select: {
@@ -220,7 +301,8 @@ async function main() {
           entityType: "User",
           entityId: u.id,
           // 只记"改了口令"这件事,不记任何口令内容
-          after: { email: u.email, via: "scripts/reset-password.ts --bulk" },
+          // 记"怎么进来的",不记口令本身 —— 事后审计要能分辨是隐藏输入还是命令行明文
+          after: { email: u.email, via: "scripts/reset-password.ts --bulk", source: SOURCE_LABEL[sourceKind] },
         });
       }
     });
@@ -284,7 +366,7 @@ async function main() {
       entityType: "User",
       entityId: picked!.id,
       // 只记"改了口令"这件事,**不记任何口令内容**
-      after: { email: picked!.email, via: "scripts/reset-password.ts" },
+      after: { email: picked!.email, via: "scripts/reset-password.ts", source: SOURCE_LABEL[sourceKind] },
     });
   });
 
@@ -298,6 +380,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    rl.close();
+    rlInstance?.close();
     await prisma.$disconnect();
   });

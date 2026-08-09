@@ -361,6 +361,39 @@ mv .env .env.bak && mv .env.local .env.local.bak && pnpm build; mv .env.bak .env
 
 ---
 
+## 七之二、重设账号口令
+
+口令以 bcrypt 存储,**无法找回**,只能重设。重跑种子也不会重置已有账号的口令
+(种子的 upsert 只有 `update: { name }`)。
+
+```bash
+pnpm reset:password                                     # 交互式:列账号 → 选 → 隐藏输入
+pnpm reset:password pm@example.com                      # 指定账号
+pnpm reset:password --domain demo.qianchuang.cn         # 批量:该域名下所有启用账号设同一口令
+```
+
+对**远端库**做非交互重设时,用下面两种之一 —— 口令不进命令行、不进 shell 历史:
+
+```bash
+echo -n '<口令>' | DATABASE_URL=<远端串> pnpm reset:password --domain <域名> --password-stdin
+```
+
+```bash
+NEW_PASSWORD_FILE=/path/to/secret DATABASE_URL=<远端串> pnpm reset:password --domain <域名>
+```
+
+⚠ `--password <明文>` 会把口令写进进程命令行。Linux 下 `/proc/<pid>/cmdline`
+**同主机任何用户可读**,还会留在 shell 历史里。因此目标是远端库时脚本会**直接拒绝**,
+除非显式加 `--allow-insecure-cli-password` 认领这个风险(仅适用于本来就要发给客户的演示口令)。
+
+脚本每次会先打印目标库的 `host:port/dbname`(不含用户名口令)——
+**先确认改的是哪个库**,改错库会让人以为已生效而线上依旧登不进去。
+每次重设都写 AuditLog,并记录口令来源(隐藏输入 / 管道 / 文件 / 环境变量 / 命令行),不记口令内容。
+
+> 尚未实现:用户自助改密、忘记密码、管理员 UI 重置、首次登录强制改密。
+> 会话是 8 小时无状态 JWT,**重设口令不会让已登录的会话立即失效** ——
+> 账号疑似泄露时请同时轮换 `AUTH_SECRET`(会踢掉全部在线会话)。
+
 ## 八、定时任务(催办)
 
 SPEC §14:每日扫描 `nextReminderAt`,提前 4 天催办。
