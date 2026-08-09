@@ -13,12 +13,34 @@ import { Card } from "@/components/ui/card";
 import { NODE_KIND_LABEL, parseRef, type BlastRadius } from "@/lib/domain/trace-graph";
 import { TEMPLATE_HEADERS, TEMPLATE_LABEL, type TraceTemplate } from "@/lib/domain/trace-import";
 
+interface TraceCoverage {
+  score: number;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  reasons: string[];
+}
+
 interface TraceResult {
   sourceRef: string;
   forward: { layers: string[][] };
   backward: { layers: string[][] };
   blastRadius: BlastRadius;
+  /*
+   * ⚠️ A-3:下面四项以前**接口返回了但页面没渲染**。
+   * 影响面 KPI 照常显示、截断与低置信度却看不见 ——
+   * 使用者看到的是一份"看起来很确定"的结论。
+   */
+  scopeNote?: string;
+  truncatedNotice?: string | null;
+  edgeCapHit?: boolean;
+  coverage?: TraceCoverage;
+  conclusionCaveat?: string;
 }
+
+const CONFIDENCE_LABEL: Record<TraceCoverage["confidence"], string> = {
+  HIGH: "高",
+  MEDIUM: "中",
+  LOW: "低",
+};
 
 const ACTION_KINDS = [
   { id: "FREEZE_LOT", label: "冻结库存批次" },
@@ -240,7 +262,42 @@ export function TraceConsole({
           <div style={{ marginTop: 12 }} data-testid="trace-result">
             <div className="banner soft">
               <b>{br.granularityNote}</b>
+              {result?.scopeNote ? <div className="small">{result.scopeNote}</div> : null}
             </div>
+
+            {/*
+              截断提示优先于一切结论显示 ——
+              图不完整时,下面的 KPI 全是**下限**,不是真实影响面。
+            */}
+            {result?.truncatedNotice ? (
+              <div className="banner danger" data-testid="trace-truncated">
+                <b>{result.truncatedNotice}</b>
+              </div>
+            ) : null}
+
+            {result?.coverage ? (
+              <div
+                className={result.coverage.confidence === "HIGH" ? "banner soft" : "banner warn"}
+                data-testid="trace-confidence"
+              >
+                <b>
+                  结论置信度:{CONFIDENCE_LABEL[result.coverage.confidence]}(覆盖分{" "}
+                  {result.coverage.score})
+                </b>
+                {result.conclusionCaveat ? (
+                  <div className="small">{result.conclusionCaveat}</div>
+                ) : null}
+                {result.coverage.reasons.length > 0 ? (
+                  <ul style={{ margin: "4px 0 0 18px" }}>
+                    {result.coverage.reasons.map((r, i) => (
+                      <li key={i} className="small muted">
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="kpi-grid">
               <div className="kpi">

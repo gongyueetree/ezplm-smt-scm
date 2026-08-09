@@ -313,3 +313,40 @@ test("**供应商查别家批次被拒,且措辞与「不存在」一致(不能�
   // 两种情况的响应必须一样,否则可以据此判断某个批次号是否真实存在
   expect(otherText).toBe(await nonexistent.text());
 });
+
+/**
+ * A-3 回归:结论置信度**必须显示在页面上**。
+ *
+ * 之前的缺陷不是"算错了",而是接口算出的 coverage / conclusionCaveat /
+ * truncatedNotice **前端一个都没渲染** —— 页面只显示四个漂亮的影响面 KPI。
+ * 使用者据此做隔离与召回决策,却看不到"这份结论有多可信"。
+ *
+ * 截断本身需要 2 万条边才能触发,不适合在 E2E 里造;这里守的是
+ * 「同一条通道确实通到 UI」——截断提示走的正是这条通道。
+ */
+test("追溯结论必须在页面上给出置信度与限定措辞,而不是只显示 KPI", async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page, "engineering@demo.qianchuang.cn");
+  const s = ids(uniq());
+  await seedChain(page, s);
+
+  await page.goto("/traceability");
+  await page.getByLabel("查询条件").fill(s.lot);
+  await page.getByRole("button", { name: "开始追溯" }).click();
+
+  const conf = page.getByTestId("trace-confidence");
+  await expect(conf).toBeVisible();
+  await expect(conf).toContainText("结论置信度");
+
+  // 措辞必须是三档之一,且不能是空壳标签
+  await expect(conf).toContainText(/结论置信度:(高|中|低)/);
+  // 非高置信度时必须写清"只反映已导入数据的范围"这类限定语,
+  // 高置信度时才允许说可直接用于决策 —— 两者不得同时出现
+  const text = (await conf.textContent()) ?? "";
+  if (/结论置信度:高/.test(text)) {
+    expect(text).toContain("可直接用于");
+  } else {
+    expect(text).toMatch(/不代表真实影响面|建议补齐/);
+    expect(text).not.toContain("可直接用于");
+  }
+});

@@ -231,6 +231,8 @@ a { color: inherit; text-decoration: none; }
 .banner.warn { background: var(--amber-50); border-color: #fde68a; color: #92400e; }
 .banner.ai { background: var(--ai-50); border-color: var(--ai-200); color: var(--ai-700); }
 .banner.soft { background: var(--gray-50); border-color: var(--gray-200); color: var(--gray-600); }
+/* 比 warn 更重一级:图被截断 / 结论不可用于「无影响」判定 */
+.banner.danger { background: var(--red-50); border-color: #fecaca; color: #991b1b; }
 .banner b { font-weight: 700; }
 
 /* ===== 表单 ===== */

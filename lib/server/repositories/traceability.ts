@@ -341,12 +341,34 @@ export async function resolveScope(session: SessionRef): Promise<TraceScope> {
 }
 
 /** 取全部图边(一期数据量小,一次load;大了再按需分片) */
-export async function loadEdges(session: SessionRef): Promise<TraceEdgeInput[]> {
+/** 单次查询的图边上限 */
+export const EDGE_QUERY_CAP = 20000;
+
+export interface LoadedEdges {
+  edges: TraceEdgeInput[];
+  /** 是否触到上限 —— 触顶意味着**图不完整**,影响面必然算少 */
+  capHit: boolean;
+  cap: number;
+}
+
+/**
+ * 取全部图边。
+ *
+ * ⚠️ A-3:原实现固定 take: 20000 且**触顶时无人知晓**。
+ * 图被截断意味着影响面算少 —— 在追溯场景里这不是"少显示几行",
+ * 而是**漏召回**:真正受影响的客户不会出现在结论里。
+ *
+ * 现在多取一条判断是否触顶,并把结论一路带到 UI 与置信度。
+ */
+export async function loadEdges(session: SessionRef): Promise<LoadedEdges> {
   const rows = await prisma.traceEdge.findMany({
     where: tenantWhere(session.tenantId),
-    take: 20000,
+    // 多取一条:能取到第 N+1 条就说明还有更多
+    take: EDGE_QUERY_CAP + 1,
   });
-  return rows.map((e) => ({
+  const capHit = rows.length > EDGE_QUERY_CAP;
+  const kept = capHit ? rows.slice(0, EDGE_QUERY_CAP) : rows;
+  const edges = kept.map((e) => ({
     fromRef: e.fromRef,
     toRef: e.toRef,
     kind: e.kind,
@@ -359,6 +381,7 @@ export async function loadEdges(session: SessionRef): Promise<TraceEdgeInput[]> 
     baseUom: e.baseUom,
     conversionFactor: e.conversionFactor?.toString() ?? null,
   }));
+  return { edges, capHit, cap: EDGE_QUERY_CAP };
 }
 
 /** 把用户输入解析成节点引用:支持批次/工单/成品/出货/PO/客户 */
@@ -402,6 +425,8 @@ export interface TraceQueryResult {
   /** ---- PR-E:结论可信度 ---- */
   /** 分段覆盖率与置信度(HIGH/MEDIUM/LOW),含人可读依据 */
   coverage: CoverageResult;
+  /** A-3:图边是否触到查询上限 —— 触顶即图不完整,结论强制降为 LOW */
+  edgeCapHit: boolean;
   /** 数量按基准单位分组合计;mixedUom=true 时不可直接比较 */
   quantityByUom: SumResult;
   /** 置信度对应的结论措辞约束 —— LOW 时不得断言「无影响」 */
@@ -427,8 +452,8 @@ export async function queryTrace(
   sourceRef: string,
   scope: TraceScope = { role: "INTERNAL" },
 ): Promise<TraceQueryResult> {
-  const allEdges = await loadEdges(session);
-  const scoped = scopeEdges(allEdges, scope);
+  const loaded = await loadEdges(session);
+  const scoped = scopeEdges(loaded.edges, scope);
   const edges = scoped.edges;
 
   // 数量口径:出货量按成品批次汇总;在库量 = 收料量 − 已发料量(**没有数据的批次不参与**)
@@ -473,11 +498,36 @@ export async function queryTrace(
   // 数量按基准单位分组合计 —— **绝不把 PCS 和 Reel 加在一起**
   const quantityByUom = sumByBaseUom(fwdEdges);
 
+  /*
+   * A-3:图被截断时**必须降级结论**。
+   *
+   * 覆盖率算的是"已加载的这张图里各段有多完整",它看不到被 take 砍掉的边。
+   * 若不降级,一张残缺的图仍可能报出 HIGH,而 HIGH 的措辞是
+   * "数据完整,可直接用于决策" —— 这会让人据此判定"没影响",
+   * 而真正受影响的客户根本不在图里。
+   */
+  const effectiveCoverage = loaded.capHit
+    ? {
+        ...coverage,
+        confidence: "LOW" as const,
+        reasons: [
+          `关系数据达到单次查询上限 ${loaded.cap} 条并被截断 —— 本图不完整,影响面必然算少`,
+          ...coverage.reasons,
+        ],
+      }
+    : coverage;
+
+  const capNotice = loaded.capHit
+    ? `⚠ 关系数据超过单次查询上限(${loaded.cap} 条),本次仅加载其中一部分。` +
+      `影响面与覆盖率均基于**不完整的图**计算,结论只可作下限参考,不得据此判定「无影响」。`
+    : null;
+
   return {
     sourceRef,
     scopeNote: scopeDescription(scope),
     truncatedEdges: scoped.truncatedEdges,
-    truncatedNotice: scoped.notice,
+    truncatedNotice: [capNotice, scoped.notice].filter(Boolean).join(" ") || null,
+    edgeCapHit: loaded.capHit,
     forward: { layers: fwd.layers, edges: fwd.edges },
     backward: { layers: bwd.layers, edges: bwd.edges },
     blastRadius: computeBlastRadius({
@@ -489,9 +539,9 @@ export async function queryTrace(
       customerByShipment,
     }),
     // ---- PR-E:覆盖率 / 置信度 / 按单位分组的数量 ----
-    coverage,
+    coverage: effectiveCoverage,
     quantityByUom,
-    conclusionCaveat: conclusionCaveat(coverage.confidence),
+    conclusionCaveat: conclusionCaveat(effectiveCoverage.confidence),
   };
 }
 
