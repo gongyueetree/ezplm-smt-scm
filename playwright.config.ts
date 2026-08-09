@@ -32,7 +32,11 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     // 催办接口的鉴权必须在**已配置** CRON_SECRET 的前提下测,
     // 否则它一律 503,测不到"带正确 secret 能过、带错的过不去"
-    env: { CRON_SECRET: process.env.CRON_SECRET ?? "e2e-cron-secret" },
+    env: {
+      CRON_SECRET: process.env.CRON_SECRET ?? "e2e-cron-secret",
+      // 自助注册默认关闭;E2E 必须显式打开才测得到注册流程
+      ALLOW_SELF_REGISTRATION: "true",
+    },
     timeout: 300_000,
   },
 });

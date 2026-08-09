@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -97,6 +98,10 @@ export default function LoginPage() {
                 {a.label}
               </button>
             ))}
+          </div>
+          <div className="divider" />
+          <div className="small muted">
+            没有账号?<Link href="/register">注册一个</Link>
           </div>
         </div>
       </div>
