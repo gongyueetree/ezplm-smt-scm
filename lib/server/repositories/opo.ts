@@ -97,8 +97,21 @@ export interface RecordReplyInput {
 
 /** 记录供应商回复(五字段齐备) */
 export async function recordOpoReply(session: SessionRef, input: RecordReplyInput) {
+  /*
+   * ⚠️ A-1 生产加固:**写路径也必须走数据范围**。
+   *
+   * 原实现只做 tenantWhere —— 供应商可以对本租户**任意**在途行(含别家的)
+   * 写 ETA 回复。PR-G 只收口了读路径,写路径漏了。
+   * 伪造的 ETA 会直接进 OPO 差异表与催办扫描,驱动错误的采购决策。
+   *
+   * 不属于自己的行返回 null(上层转 404,措辞与"不存在"一致)——
+   * 若回 403 就等于确认"这行存在",反倒可被用来枚举别家单号。
+   */
+  const scope = await scopeFor(session, "OPO_LINE");
   const line = await prisma.oPOLine.findFirst({
-    where: tenantWhere(session.tenantId, { id: input.opoLineId }),
+    where: scopedWhere(session.tenantId, scope, { supplierField: "supplierId" }, {
+      id: input.opoLineId,
+    }),
     select: { id: true, poNo: true, lineNo: true },
   });
   if (!line) return null;
