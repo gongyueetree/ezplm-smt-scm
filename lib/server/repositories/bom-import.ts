@@ -417,9 +417,26 @@ export async function saveLineDecision(
    * 全都建立在一份没人负责的数据上,而且往往要到出货后才被发现。
    * 每种被拒状态给不同说明,让人知道该去催审核还是该换料。
    */
-  if (input.partId) {
+  /*
+   * A-5:守卫必须覆盖**所有**确认路径,不能只看 input.partId。
+   *
+   * 「采纳此候选」这条路径前端只发 candidateId(见 review.tsx 的 decide()),
+   * partId 为空 —— 原来的守卫压根不触发,草稿料点一下就进了正式 BOM。
+   * 所以这里先把候选反查成 partId,两条路径合并成同一个判定。
+   */
+  let effectivePartId = input.partId ?? null;
+  if (!effectivePartId && input.candidateId) {
+    const cand = await prisma.bomMatchCandidate.findFirst({
+      where: tenantWhere(session.tenantId, { id: input.candidateId }),
+      select: { partId: true },
+    });
+    // 候选可能来自三方 Provider(没有本地 partId)—— 那种没有生命周期可判,放行
+    effectivePartId = cand?.partId ?? null;
+  }
+
+  if (effectivePartId) {
     const part = await prisma.part.findFirst({
-      where: tenantWhere(session.tenantId, { id: input.partId }),
+      where: tenantWhere(session.tenantId, { id: effectivePartId }),
       select: { status: true, internalPn: true },
     });
     if (part) {
