@@ -9,7 +9,7 @@
  * - 幂等键防重复写入。
  */
 import { createHash } from "crypto";
-import type { ErpEntityType, ErpSyncDirection, PartOrigin, Prisma } from "@prisma/client";
+import type { ErpEntityType, ErpSyncDirection, JobStatus, PartOrigin, Prisma } from "@prisma/client";
 import {
   canExecute,
   diffRow,
@@ -129,11 +129,30 @@ export async function runSync(
   const direction: ErpSyncDirection = policy?.direction ?? "IMPORT_ONLY";
   const conflictPolicy = policy?.conflictPolicy ?? "QUEUE_FOR_HUMAN";
 
+  /*
+   * A-2:执行前先拿租约。
+   *
+   * 原实现在同步**跑完之后**才创建作业行(startedAt 与 finishedAt 都是 now),
+   * 全程没有 RUNNING 窗口,也就没有任何互斥 ——
+   * 两个并发请求会各自完整执行一遍,EXECUTE 模式下等于向 ERP **双写**,
+   * 并且各自推进游标、互相覆盖水位。
+   *
+   * 租约行由 DB 的部分唯一索引兜底
+   * (ErpSyncJob_one_running_per_scope:同一 租户+连接+实体 只允许一条 RUNNING)。
+   * 应用层"先查再插"在并发下必然有竞态窗口,只有唯一索引能真正保证。
+   *
+   * 租约带到期时间:进程崩溃时作业会永远停在 RUNNING,
+   * 靠到期时间才能让后来者接管,而不是永久卡死。
+   */
+  const lease = await acquireSyncLease(session, input.connectionId, input.entityType, direction, input.mode);
+  if (!lease.ok) return lease.outcome;
+
   // 拉数据 —— 未联调的厂商在这里抛错,如实报出来而不是当成 0 条
   let erpRows: Record<string, unknown>[];
   try {
     erpRows = await pullEntity(getErpProvider(built.conn.vendor), built.cfg, input.entityType);
   } catch (e) {
+    await releaseSyncLease(lease.jobId, "FAILED", e instanceof Error ? e.message : "拉取失败");
     if (e instanceof ErpNotImplementedError || e instanceof ErpNotConfiguredError) {
       return { ok: false, code: "not_ready", reason: e.message };
     }
@@ -260,17 +279,20 @@ export async function runSync(
   });
 
   const job = await prisma.$transaction(async (tx) => {
-    const created = await tx.erpSyncJob.create({
-      data: tenantData(session.tenantId, {
-        connectionId: input.connectionId,
-        entityType: input.entityType,
+    // A-2:更新**已持有租约的那一行**,不再新建 —— 新建会让每次同步多出一条 RUNNING 幽灵行
+    const created = await tx.erpSyncJob.update({
+      where: { id: lease.jobId },
+      data: {
         direction,
         mode: input.mode,
+        lockedBy: null,
+        lockedAt: null,
+        leaseExpiresAt: null,
+        version: { increment: 1 },
         // **不再写死 SUCCEEDED**:由行级结果派生。
         // 有失败也有成功时是 PARTIAL_SUCCESS —— 写死成功会让人以为整批都进去了,
         // 重跑还会把已成功的行再写一遍。
         status: jobStatus,
-        startedAt: new Date(),
         finishedAt: new Date(),
         retryCount: 0,
         backoffStrategy: "EXPONENTIAL",
@@ -285,8 +307,9 @@ export async function runSync(
         conflictCount: summary.conflict,
         failedCount: summary.failed,
         idempotencyKey: key,
+        // startedAt 保留租约创建时写入的真实开始时刻,不覆盖
         triggeredById: session.userId,
-      }),
+      },
     });
 
     let lineNo = 0;
@@ -387,6 +410,106 @@ export async function runSync(
           ? `已执行;${summary.conflict} 行冲突未写入,已入人工处置队列`
           : null,
   };
+}
+
+/** A-2:租约获取结果 */
+type LeaseResult =
+  | { ok: true; jobId: string }
+  | { ok: false; outcome: SyncOutcome };
+
+/** 租约时长:一次同步的合理上限。超时后允许他人接管,避免崩溃后永久卡死 */
+const LEASE_MS = 15 * 60 * 1000;
+
+/** 枚举字面量要显式收窄,否则 Prisma 的 where 类型匹配不上 */
+const RUNNING: JobStatus = "RUNNING";
+
+/**
+ * 获取同步租约:插入一条 RUNNING 作业行。
+ *
+ * 冲突由 DB 的部分唯一索引判定(P2002)——
+ * 应用层"先查再插"在并发下必然有竞态窗口。
+ *
+ * 已过期的租约先回收再重试一次:进程崩溃留下的 RUNNING 不该让该连接永久不可用。
+ */
+async function acquireSyncLease(
+  session: SessionRef,
+  connectionId: string,
+  entityType: ErpEntityType,
+  direction: ErpSyncDirection,
+  mode: "PREVIEW" | "EXECUTE",
+): Promise<LeaseResult> {
+  const now = new Date();
+  const create = () =>
+    prisma.erpSyncJob.create({
+      data: tenantData(session.tenantId, {
+        connectionId,
+        entityType,
+        direction,
+        mode,
+        status: "RUNNING",
+        startedAt: now,
+        lockedBy: session.userId,
+        lockedAt: now,
+        leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
+        triggeredById: session.userId,
+      }),
+    });
+
+  try {
+    const job = await create();
+    return { ok: true, jobId: job.id };
+  } catch {
+    // 已有 RUNNING:看它的租约是否过期
+    const holder = await prisma.erpSyncJob.findFirst({
+      where: tenantWhere(session.tenantId, { connectionId, entityType, status: RUNNING }),
+      select: { id: true, leaseExpiresAt: true, lockedBy: true, startedAt: true },
+    });
+    if (holder && holder.leaseExpiresAt && holder.leaseExpiresAt < now) {
+      // 过期租约:标记为失败并回收,然后重试一次
+      await prisma.erpSyncJob.updateMany({
+        where: tenantWhere(session.tenantId, { id: holder.id, status: RUNNING }),
+        data: {
+          status: "FAILED",
+          finishedAt: now,
+          errorSummary: "租约超时被回收 —— 执行进程可能已崩溃,本次结果不可信",
+          lockedBy: null,
+          lockedAt: null,
+          leaseExpiresAt: null,
+        },
+      });
+      try {
+        const job = await create();
+        return { ok: true, jobId: job.id };
+      } catch {
+        // 回收后仍冲突 = 有人抢先了,如实拒绝
+      }
+    }
+    return {
+      ok: false,
+      outcome: {
+        ok: false,
+        code: "already_running",
+        reason: holder
+          ? `该连接的「${entityType}」已有同步在执行中(开始于 ${holder.startedAt?.toISOString() ?? "未知"}）—— 同一时刻只允许一个,避免向 ERP 重复写入`
+          : "该连接的同一实体已有同步在执行中",
+      },
+    };
+  }
+}
+
+/** 释放租约并落终态 */
+async function releaseSyncLease(jobId: string, status: "FAILED" | "CANCELLED", reason: string) {
+  await prisma.erpSyncJob.updateMany({
+    where: { id: jobId, status: RUNNING },
+    data: {
+      status,
+      finishedAt: new Date(),
+      errorSummary: reason,
+      lockedBy: null,
+      lockedAt: null,
+      leaseExpiresAt: null,
+    },
+  });
 }
 
 export async function listJobs(session: SessionRef, connectionId: string) {

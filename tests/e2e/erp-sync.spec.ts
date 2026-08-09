@@ -204,3 +204,34 @@ test("四步向导可走到预览,且预览区明确写「不写入任何业务�
   await expect(page.getByTestId("erp-step2")).toBeVisible();
   await expect(page.getByText(/缺一项都.*不允许保存映射/)).toBeVisible();
 });
+
+test("**并发同步:同一连接+实体恰好一个被挡**(A-2)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "management@demo.qianchuang.cn");
+
+  // 自建连接与必需映射 —— 靠"库里正好有一个配好的连接"会让用例随环境漂移
+  const u = Date.now().toString(36).toUpperCase();
+  const created = await page.request.post("/api/erp/connections", {
+    data: { name: `E2E并发-${u}`, vendor: "MOCK", config: {} },
+  });
+  expect(created.status()).toBe(201);
+  const connectionId = (await created.json()).id;
+
+  // 映射用 PUT(整份替换)而不是 POST
+  const map = await page.request.put(
+    `/api/erp/connections/${connectionId}/mapping`,
+    { data: { entityType: "MATERIAL", mappings: [{ erpField: "internalPn", localField: "internalPn", required: true }] } },
+  );
+  expect([200, 201]).toContain(map.status());
+
+  // 同时发两个 —— EXECUTE 模式下双跑等于向 ERP 双写
+  const body = { entityType: "MATERIAL", mode: "PREVIEW" };
+  const [a, b] = await Promise.all([
+    page.request.post(`/api/erp/connections/${connectionId}/sync`, { data: body }),
+    page.request.post(`/api/erp/connections/${connectionId}/sync`, { data: body }),
+  ]);
+
+  const texts = [await a.text(), await b.text()];
+  const blocked = texts.filter((t) => t.includes("already_running") || t.includes("已有同步在执行中"));
+  expect(blocked, "两个并发同步应恰好挡掉一个").toHaveLength(1);
+});

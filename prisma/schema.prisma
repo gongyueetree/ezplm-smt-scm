@@ -2066,6 +2066,14 @@ model ErpSyncJob {
   lastRetryAt    DateTime?
   /// 下次可重试时间;未到点不得重试(防止刷爆外部系统)
   nextRetryAt    DateTime?
+
+  /// ---- A-2 并发租约 ----
+  /// 谁持有这次执行(userId 或 worker 标识);仅 RUNNING 期间有值
+  lockedBy       String?
+  lockedAt       DateTime?
+  /// 租约到期时间。进程崩溃时作业会永远停在 RUNNING,
+  /// 靠到期时间才能让后来者接管,而不是永久卡死
+  leaseExpiresAt DateTime?
   backoffStrategy RetryBackoff    @default(EXPONENTIAL)
   /// 重跑时指向原作业,形成重试链,便于回溯"这批到底试了几次"
   parentJobId    String?
