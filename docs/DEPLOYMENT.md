@@ -394,6 +394,42 @@ NEW_PASSWORD_FILE=/path/to/secret DATABASE_URL=<远端串> pnpm reset:password -
 > 会话是 8 小时无状态 JWT,**重设口令不会让已登录的会话立即失效** ——
 > 账号疑似泄露时请同时轮换 `AUTH_SECRET`(会踢掉全部在线会话)。
 
+## 七之三、清理演示数据(保留基线)
+
+客户测试一段时间后单据堆积,影响下一轮演示。用这个脚本清掉**测试期产生的业务单据**,
+保留物料、供应商、客户、库存与在途快照、模板与配置,以及**全部账号**(含自助注册的新账号)。
+
+```bash
+pnpm demo:reset
+```
+
+上面这条**只统计不删** —— 会逐表列出各会删多少条,先看清楚。确认后:
+
+```bash
+pnpm demo:reset --apply --as management@demo.qianchuang.cn
+```
+
+对线上库操作时在前面加 `DATABASE_URL=<远端串>`。
+
+| 参数 | 说明 |
+|---|---|
+| `--apply` | 真删。**不加就什么都不会删** |
+| `--as <邮箱>` | 执行人,`--apply` 时必填。审计的 userId 不可空,随手挂到某个管理层账号上等于伪造「是他干的」 |
+| `--yes` | 跳过 `yes` 二次确认(CI 用) |
+| `--include-audit` | 连审计日志一起清(默认保留) |
+| `--tenant <slug>` | 指定租户,默认 `qianchuang` |
+
+护栏:
+
+- 先打印目标库 `host:port/dbname`(不含用户名口令);
+- 表分类必须**穷尽**(`lib/domain/demo-reset-plan.ts`)。schema 新增了表却没分类时**拒绝执行** ——
+  宁可不跑,也不要留下一张谁都没想起来的表。`tests/unit/demo-reset-plan.test.ts` 拿真实
+  Prisma 模型清单校验,忘了分类会在 CI 就红;
+- 全程 tenant scoped,多租户部署下不会波及别的租户;
+- 清理动作本身写 `DEMO_DATA_RESET` 审计,含逐表条数与执行人。
+
+清完之后系统立刻还能演示 —— 物料主数据与配置都在,不是一个空壳。
+
 ## 八、定时任务(催办)
 
 SPEC §14:每日扫描 `nextReminderAt`,提前 4 天催办。
