@@ -1,8 +1,13 @@
 # PR2 反馈溯源矩阵(GAP MATRIX)
 
-基线:`main` @ `46dc1f4`(#37 已合)
-依据:`docs/AI PR2版本适用反馈.pdf`
-建立:2026-08-11 · 本文件是 PR2 反馈的**唯一验收台账**
+基线:`main` @ `e261564`(#38/#40 已合)
+依据:`docs/AI PR2版本适用反馈.pdf` + **客户第二轮答复 `问题清单-reply120260811.pdf`**
+建立:2026-08-11 · 更新:2026-08-11(第二轮)· 本文件是 PR2 反馈的**唯一验收台账**
+
+> **第二轮更新说明**:客户 13 个问题**已全部答复**,状态见下方「客户答复确认表」。
+> 原「本轮重点」里有 8 项已由 PR #39/#41/#42/#43/#44 关闭,
+> 各小节顶部加了 `✅ 已关闭` 标记并注明 PR 号 —— **原始差距描述保留不删**,
+> 那是当时判断的依据,删掉就没法回头核对我们有没有做对。
 
 ## 状态取值(不允许其它措辞)
 
@@ -15,6 +20,45 @@
 | `BLOCKED_BY_EXTERNAL_SYSTEM` | 等 ERP / SMTP / 汇率源等外部依赖 |
 
 > 禁止「基本支持」「差不多完成」「后续可扩展」。
+
+---
+
+## 客户答复确认表(第二轮,`问题清单-reply120260811.pdf`)
+
+全部 13 问已答。`CONFIRMED` = 客户给出明确结论,可据此实施。
+
+| # | 问题 | 客户结论 | 状态 | 对实现的影响 |
+|---|---|---|---|---|
+| Q1 | Excess 来源 | **来自 ERP Excess Report**,必须引用进本系统 | `CONFIRMED` | 依赖 Q2 凭据 → `WAITING_FOR_CREDENTIALS` |
+| Q2 | ERP 型号 | **金蝶 K3 云星空**;客户提供 API 文档与测试账号 | `CONFIRMED` | 状态 = `WAITING_FOR_CREDENTIALS / API_DOC`;**只做金蝶,不铺开用友/SAP/Oracle** |
+| Q3 | 邮件通道 | 发送 = **公司 SMTP**;回执 = **已读回执** | `CONFIRMED` | 参数未到(O4);已读回执的技术限制待客户确认(O5) |
+| Q4 | BOM 分家 | **两套 + 一键转换**;正式 BOM 必须关联客户编码;**优先匹配内部料号** | `CONFIRMED` | ✅ PR #42 已实现;匹配失败的处置仍待定(O7) |
+| Q5 | 采购申请 | **归 PM** | `CONFIRMED` | ✅ PR #39 已实现 |
+| Q6 | NRE | **PM 派工**;工程填完**直接回报价**;标准项客户后续提供;项目可选 + 备注 | `CONFIRMED` | ✅ PR #43 已实现;标准清单待提供(O6) |
+| Q7 | 订单转化 | **人工标记中标** | `CONFIRMED` | ✅ PR #43 已实现 |
+| Q8 | 汇率 | **来源 = ERP** | `CONFIRMED` | 不再找外部汇率 API;依赖 Q2 |
+| Q9 | 批量导入 | 需要**物料替代**与**预 BOM**的批量导入/导出 | `CONFIRMED` | 两项均为新功能 → PR-E3 / PR-E4 |
+| Q10 | 替代料 | **功能一致优先级最高**;还需「功能一致+封装一致」「功能一致+封装细微差异」 | `CONFIRMED` | 现有 5 种互斥模式不够 → PR-E2 三维模型 |
+| Q11 | AR/AP | 功能没错,**是不知道入口与流程,需要举例** | `CONFIRMED` | 不重写引擎,只做可发现性 → PR-E5 |
+| Q12 | 质量/追溯 | 质量事件归**品质**;当前缺品质模块;长期希望 **SN 级**(依赖 MES) | `CONFIRMED` | 最小品质模块 + SN-ready schema → PR-E6;MES 信息待提供(O9) |
+| Q13 | RFQ/BOM 导入 | **Gerber 上传会死机**;**正常 BOM 导入 AI 会漏数据** | `CONFIRMED` | **P0 数据完整性/稳定性** → PR-E1a / PR-E1b |
+
+---
+
+## 第二轮已关闭清单 —— `DONE — NO CHANGE RECOMMENDED`
+
+**这些不得重写。** 每条都有单测 + E2E,门禁在 main 上重跑过(99 files / 1367 tests,E2E 204 passed)。
+
+| 能力 | PR | 关键代码 |
+|---|---|---|
+| PM 创建采购申请 + 角色归属 | [#39](https://github.com/gongyueetree/ezplm-smt-scm/pull/39) | `app/api/procurement/requests/route.ts`(角色门在 previewOnly 之后) |
+| 建议采购量 / GTB 公式拆解 | #39 | `lib/domain/gtb.ts` `breakdown[]` |
+| Excess 契约 + 跨客户禁止自动占用 | #39 | `lib/providers/excess/index.ts` `splitExcessByOwnership` |
+| 缺料单驱动 + Call Material | [#41](https://github.com/gongyueetree/ezplm-smt-scm/pull/41) | `lib/domain/shortage-sheet.ts`、`/api/shortage/*` |
+| PRE_QUOTE / PRODUCTION BOM + 一键转换 + 绑客户 | [#42](https://github.com/gongyueetree/ezplm-smt-scm/pull/42) | `lib/domain/bom-purpose.ts`(变异测试验证过不改原件) |
+| PM 派工 NRE + 工程填完直接回报价 | [#43](https://github.com/gongyueetree/ezplm-smt-scm/pull/43) | `lib/domain/quote-tasks.ts`、`/api/quotes/[id]/nre` |
+| Quote Outcome 人工标记 WON/LOST | #43 | `lib/domain/quote-outcome.ts` |
+| 订单转化率与审批通过率口径分离 | #43 + [#44](https://github.com/gongyueetree/ezplm-smt-scm/pull/44) | `lib/domain/management-kpi.ts`(原口径正名为 `approvalPassRate`) |
 
 ---
 
@@ -47,6 +91,8 @@
 
 ### `PR2-PROC-05` 采购申请单主链(用户指令 A)
 
+> ✅ **已关闭 —— #39**。以下差距描述是当时的判断依据,保留备查。
+
 | 项 | 内容 |
 |---|---|
 | 客户要求 | 申请单应由 PM 递交或从 ERP 引用;不要只显示 GTB |
@@ -62,6 +108,8 @@
 | 推荐 PR | **PR-A** |
 
 ### `PR2-PROC-05-D` / `PR2-PROC-12` Excess 建模(用户指令 B)
+
+> ✅ **已关闭 —— #39(契约与模型部分;ERP 真实取数仍等 Q2 凭据)**。以下差距描述是当时的判断依据,保留备查。
 
 | 项 | 内容 |
 |---|---|
@@ -103,6 +151,8 @@
 
 ### `PR2-PROC-10` 缺料单驱动(用户指令 F)
 
+> ✅ **已关闭 —— #41**。以下差距描述是当时的判断依据,保留备查。
+
 | **状态** | `MISSING` |
 |---|---|
 | 代码证据 | `/shortage` 入参仍是 `v/boards/scrap`,调 `buildKittingReport` —— **仍是 BOM 推算,不是缺料单驱动** |
@@ -129,6 +179,8 @@
 
 ### `PR2-PM-03` / `PR2-ENG-02` 预 BOM 与正式 BOM(用户指令 I)
 
+> ✅ **已关闭 —— #42(Q4 已 CONFIRMED;匹配失败处置仍待客户裁定 → O7)**。以下差距描述是当时的判断依据,保留备查。
+
 | **状态** | `MISSING` |
 |---|---|
 | 代码证据 | `BOMPurpose` 不存在;BOM 无 PRE_QUOTE/PRODUCTION 区分 |
@@ -137,6 +189,8 @@
 | 推荐 PR | **PR-C** |
 
 ### `PR2-PM-06` 报价责任拆分 + NRE(用户指令 J/K)
+
+> ✅ **已关闭 —— #43(Q6 已 CONFIRMED;NRE 标准清单待客户提供 → O6,字典可配置,代码不用改)**。以下差距描述是当时的判断依据,保留备查。
 
 | **状态** | `MISSING` |
 |---|---|
@@ -147,6 +201,8 @@
 
 ### `PR2-PM-06` 订单转化率(用户指令 L)
 
+> ✅ **已关闭 —— #43 + #44(Q7 已 CONFIRMED = 人工标记)**。以下差距描述是当时的判断依据,保留备查。
+
 | **状态** | `PARTIAL` — **当前指标口径与客户要的不是一回事** |
 |---|---|
 | 代码证据 | `management-kpi.ts:55` `conversionRate = APPROVED / settled` —— 这是**审批通过率**,不是**转成订单率** |
@@ -155,6 +211,9 @@
 | 推荐 PR | **PR-D** |
 
 ### `PR2-PM-09` 批量报价 update(用户指令 M)
+
+> ✅ **已核实 —— 无需改动**。`lib/server/repositories/quote-batch-update.ts` 的语义正是
+> 「多个 BOM → 已有报价开新 Revision / 没有才新建」,与客户要的一致。**没有另造第二套。**
 
 | **状态** | `PARTIAL` |
 |---|---|
@@ -210,6 +269,8 @@
 
 ### `PR2-ENG-04` 批量导入入口(用户指令 S)
 
+> ✅ **已关闭 —— #42(工程工作台已加显式 CTA;Q9 追加的两项批量导入导出属新功能 → PR-E3 / PR-E4)**。以下差距描述是当时的判断依据,保留备查。
+
 | **状态** | `PARTIAL` |
 |---|---|
 | 代码证据 | `/bom/import` 在导航;物料页有「批量导入物料」按钮 —— **功能都在** |
@@ -227,18 +288,47 @@
 
 ---
 
-## 三、外部依赖总表
+## 三、外部依赖总表(第二轮更新)
 
-| 依赖 | 阻塞条目 | 问题编号 |
-|---|---|---|
-| Excess 数据源 | PR-A | Q1 |
-| ERP 型号与凭据 | PR-A / PR-G | Q2 |
-| SMTP + 回执定义 | PR-B / PR-E | Q3 |
-| 品质范围 | PR-I | Q4 |
-| 网页抓取授权 | 参数补充 | Q5 |
-| 客户账号方式 | PR-H | Q6 |
-| BOM 分家决策 | PR-C | Q7 |
-| 申请单归属 | PR-A | Q8 |
-| NRE 定义 | PR-D | Q9 |
-| 订单来源 | PR-D | Q10 |
-| 汇率源 | PR-F | Q11 |
+客户 13 问全部已答,**依赖不再是"问题没答"，而是"东西还没给"**。
+详见 `OPEN-QUESTIONS.md` 的 O1–O11。
+
+| 依赖 | 阻塞什么 | 编号 | 当前状态 |
+|---|---|---|---|
+| 金蝶 K3 云星空 API 文档 / 测试账号 | PR-E8 全部 | O1 | `WAITING_FOR_CREDENTIALS`;骨架已就位,无凭据时抛 `ErpNotConfiguredError` |
+| Excess Report 字段与样表 | Excess 真实取数 | O2 | 契约已就位;未配置时**不扣减也不按 0 计** |
+| 汇率字段与有效日期口径 | PR-E8 的 FX | O3 | 比价页**继续拒绝跨币种比大小**(正确行为,非缺陷) |
+| SMTP 参数 | PR-E7 真实发信 | O4 | 全部邮件停在 `DRAFT`,代码里没有分支能写 SENT |
+| 已读回执技术限制确认 | PR-E7 验收口径 | O5 | 三态分开存,不把 SENT 当 READ |
+| NRE 标准项清单 | 不卡实现 | O6 | 字典**刻意不预置条目**;清单到位后录入即可 |
+| 正式 BOM 匹配失败处置 | 一个分支 | O7 | 当前:允许转换 + 显式确认 + 标「待补内部料号」 |
+| 品质是否需要独立角色 | PR-E6 | O8 | 推荐用权限,不动 Role 枚举 |
+| MES 厂商 / SN 结构 | SN 级追溯 | O9 | 无 MES 则**无法实现**,不是排期问题 |
+| BOM 丢数据样本 | 验证 P0 修复 | O10 | 已不等样本动手;但没样本无法证明客户那份不丢了 |
+| Gerber 失败样例 | 确认 P0 根因 | O11 | 已定位嫌疑(formData 先缓冲后校验),待样本确认 |
+
+---
+
+## 四、第二轮新增差距(PR-E 批次)
+
+依据客户第二轮答复 + 对 main @ `e261564` 的代码审计。
+
+| ID | 要求 | 状态 | 代码证据 | 推荐 PR |
+|---|---|---|---|---|
+| `P0-BOM-INTEGRITY` | 正常 BOM 导入不得丢行 | `MISSING` | `lib/domain/bom-parse.ts::buildLines()` 有 **5 处 `continue` 无痕迹丢行**(空行 / 重复表头 / 续行合并 / `!hasKey` / `!hasIdentifier`);原始行数与输出行数**从未比对**;`RawBomRow` 表不存在 | **PR-E1a** |
+| `P0-GERBER-UPLOAD` | Gerber 上传不得卡死 | `MISSING` | `app/api/rfq/[id]/attachments/route.ts`:`await req.formData()` **先把所有文件整个缓冲进内存,之后才检查 20MB 上限**;无 Content-Length 早拒、无进度、无取消/重试。客户端无 FileReader/base64(**不是前端读整包**) | **PR-E1b** |
+| `ALT-COMPAT-MODEL` | 三维兼容 + 功能一致优先 | `PARTIAL` | `lib/domain/alternate-score.ts` 现为 **5 个互斥模式**(PIN_TO_PIN / PACKAGE_COMPATIBLE / FUNCTIONAL / DOMESTIC / LOW_COST),不是 Functional × Package × Pin 三维正交;排序未把功能一致置首;`PartAlternate` 只有 `grade` 一个字符串 | **PR-E2** |
+| `ALT-BULK-IO` | 替代料批量导入/导出 | `MISSING` | `/materials/alternates` 只有 finder,**无任何导入导出入口** | **PR-E3** |
+| `PREBOM-BULK-IO` | 预 BOM 批量导入/导出 | `PARTIAL` | 单文件导入在(`/bom/import`);**多文件各自建 BOM、批量导出均无** | **PR-E4** |
+| `RECON-DISCOVERABILITY` | 对账入口与示例 | `MISSING` | `/reconciliation` 空状态只有「暂无对账单」;无步骤引导、无示例下载、无「加载示例」 | **PR-E5** |
+| `QUALITY-MIN` | 最小品质模块 | `PARTIAL` | `QualityIncident` + `ContainmentAction` **模型已存在**;但无独立页面、无 `quality.*` 权限、无客诉/供应商问题分类 | **PR-E6** |
+| `TRACE-SN-READY` | SN 级数据模型准备 | `MISSING` | 无 `SERIAL_NUMBER` 节点类型、无 `FinishedGoodsSerial`、无 `MesTraceProvider` | **PR-E6** |
+| `SMTP-SEND` | 真实发信 + 回执语义 | `MISSING` | 无 nodemailer / `SmtpMailProvider`;只有 `EmailDraft`(注释明写「没有 SENT」);`OutboundMessage` 等四表不存在 | **PR-E7** |
+| `ERP-KINGDEE` | K3 云星空 Adapter | `PARTIAL` | `lib/providers/erp/kingdee/index.ts` **已有 176 行骨架**:testConnection / getMetadata / pullMaterials / pullInventory / pullOpenPurchaseOrders / pullWorkOrders / pushPurchaseOrders / pushEtaUpdates / getJobStatus。**缺** `getOrganizations` / `pullExcessReport` / `pullExchangeRates` | **PR-E8** |
+| `ERP-EXCESS-FX` | Excess 与汇率真实落库 | `BLOCKED_BY_EXTERNAL_SYSTEM` | 依赖 O1 凭据 | **PR-E8** |
+
+### 实施顺序
+
+`PR-E1a`(BOM 丢行)→ `PR-E1b`(Gerber)→ `PR-E2` → `PR-E3` → `PR-E4` → `PR-E5` → `PR-E6` → `PR-E7`(等 SMTP)→ `PR-E8`(等金蝶凭据)。
+
+**先做 E1a**:丢行是数据正确性问题,下游是报价、采购、追溯全部。
