@@ -39,7 +39,13 @@ test("N-5.E 导出比价总表:两张表,含最高/最低价与对应供应商",
   expect(res.headers()["content-type"]).toContain("spreadsheetml");
 
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await res.body());
+  /*
+   * Playwright 的 res.body() 返回 Buffer<ArrayBufferLike>,与 exceljs 类型定义里的
+   * Buffer 对不上(TS 认为缺 resizable/detached 等)。**运行时是同一个东西**,
+   * 只是类型收敛不一致 —— 用 Buffer.from 复制一份得到标准 Buffer,
+   * 既不改运行时行为,也不用 any 把类型问题藏起来。
+   */
+  await wb.xlsx.load(Buffer.from(await res.body()) as unknown as Parameters<typeof wb.xlsx.load>[0]);
 
   const s1 = wb.getWorksheet("比价汇总");
   const s2 = wb.getWorksheet("逐条报价");
