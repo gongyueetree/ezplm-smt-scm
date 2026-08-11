@@ -87,10 +87,18 @@ export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) 
           <div className="kpi-value">
             {quotes.approvalPassRate === null ? "—" : `${(quotes.approvalPassRate * 100).toFixed(1)}%`}
           </div>
-          <div className="kpi-foot">
-            {quotes.approvalPassRate === null
-              ? "尚无终局版本,不显示为 0%"
-              : "已批准 / 终局版本 —— 内部流程指标,不是成单率"}
+          {/*
+            「不是成单率」这句**不放进条件分支**。
+            原来它只在有终局版本时才出现 —— 可是没有数据的时候,
+            「审批通过率」这个标题一样在,一样会被读成成单率,
+            甚至更容易(值是「—」,人只会去看标题)。
+            澄清口径的话在任何数据状态下都必须在。
+            (CI 就是在全新种子库上把这条打红的:本地开发库里攒了终局版本,
+             正好走到了另一个分支,于是本地绿、CI 红。)
+          */}
+          <div className="kpi-foot" data-testid="approval-rate-foot">
+            {quotes.approvalPassRate === null ? "尚无终局版本,不显示为 0%" : "已批准 / 终局版本"}
+            {" —— 内部流程指标,不是成单率"}
           </div>
         </Link>
         <Link className={opo.errorLines > 0 ? "kpi danger" : "kpi"} href="/suppliers/opo">
