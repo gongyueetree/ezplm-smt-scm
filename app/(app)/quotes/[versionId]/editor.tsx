@@ -33,7 +33,6 @@ export function QuoteEditor({
   lines,
   summaryLines,
   bomVersions,
-  canExport,
 }: {
   versionId: string;
   status: QuoteStatusValue;
@@ -45,7 +44,6 @@ export function QuoteEditor({
   lines: EditorLine[];
   summaryLines: CalculatedLine[];
   bomVersions: { id: string; label: string }[];
-  canExport: boolean;
 }) {
   const [bomVersionId, setBomVersionId] = useState(bomVersions[0]?.id ?? "");
   const [validity, setValidity] = useState(validUntil ?? "");
@@ -438,16 +436,11 @@ export function QuoteEditor({
               新建 Revision
             </button>
           ) : null}
-          {canExport ? (
-            <>
-              <a className="btn" href={`/api/quotes/${versionId}/export`}>
-                导出 XLSX(取快照)
-              </a>
-              <a className="btn" href={`/quotes/${versionId}/print`} target="_blank" rel="noreferrer">
-                打印视图 / 另存为 PDF
-              </a>
-            </>
-          ) : null}
+          {/*
+            S-2:导出入口已移到页面上方的「正式导出」卡片 —— 那张卡片本来就叫这个名字,
+            按钮却在这里,客户自然找不到。这里不再重复放一份:同一页两个一模一样的
+            「导出 XLSX」既是噪音,也会让自动化与读屏都产生歧义。
+          */}
         </div>
       </Card>
     </div>

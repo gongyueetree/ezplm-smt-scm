@@ -100,8 +100,22 @@ export async function POST(req: Request) {
   if (!isMappingUsable(mapping)) {
     return NextResponse.json(
       {
-        error: "未能识别必需列,请人工指定列映射",
-        missingFields: missingRequiredFields(mapping),
+        /*
+         * D-4(客户 PR2 反馈 工程-1):原文案是「未能识别必需列,请人工指定列映射」——
+         * 但系统**根本没有**人工指定列映射的入口,客户照做无门,只好怀疑
+         * 是不是格式不兼容。承诺一个不存在的动作比不给提示更糟。
+         * 改为说清缺什么、怎么办;缺哪几列、识别到了什么、前几行长什么样
+         * 都已在下面返回,由前端展示。
+         */
+        error:
+          "没能从表头认出「数量」列 —— 这不是格式不兼容,文件已经读进来了,只是列名不认识。" +
+          "请把数量列的表头改成「数量」「用量」「Qty」之一后重新上传。",
+        // 用中文标签,不要把内部字段名(qty/mpn)甩给客户
+        missingFields: missingRequiredFields(mapping).map((f) => BOM_FIELD_LABELS[f]),
+        // 已经认出来的列 —— 让人一眼看出"认出了这些、就差数量",而不是以为整份没读懂
+        detectedFields: Object.entries(mapping.fields)
+          .filter(([, idx]) => idx !== undefined)
+          .map(([f]) => BOM_FIELD_LABELS[f as keyof typeof BOM_FIELD_LABELS] ?? f),
         mapping,
         preview: rows.slice(0, 5),
         fileKeys,
