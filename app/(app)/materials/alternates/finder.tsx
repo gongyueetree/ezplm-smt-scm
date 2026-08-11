@@ -277,7 +277,7 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
               </button>
             ))}
           </div>
-          <p className="small muted" style={{ marginTop: 6 }}>
+          <p className="small muted" style={{ marginTop: 6 }} data-testid="mode-desc">
             {MODE_LABELS[mode].desc}
           </p>
 

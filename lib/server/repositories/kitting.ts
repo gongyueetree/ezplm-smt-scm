@@ -27,10 +27,12 @@ export async function buildKittingReport(
   const parts = mpns.length
     ? await prisma.part.findMany({
         where: tenantWhere(tenantId, { mpn: { in: mpns } }),
-        select: { id: true, mpn: true },
+        select: { id: true, mpn: true, internalPn: true },
       })
     : [];
   const partIdByMpn = new Map(parts.map((p) => [p.mpn ?? "", p.id]));
+  // S-5:客户要求缺料表显示 PN(内部料号)—— 主数据里没有这颗料时为 null,不编造
+  const internalPnByMpn = new Map(parts.map((p) => [p.mpn ?? "", p.internalPn]));
 
   const [snapshots, openPo, opoLines] = await Promise.all([
     parts.length
@@ -75,6 +77,7 @@ export async function buildKittingReport(
       lineNo: l.lineNo,
       refDes: l.refDes,
       mpn: l.mpn,
+      internalPn: l.mpn ? internalPnByMpn.get(l.mpn) ?? null : null,
       manufacturer: l.manufacturer,
       qtyPerBoard: Number(l.qty),
       // 主数据里没有这颗料 → 库存未知(不是 0)

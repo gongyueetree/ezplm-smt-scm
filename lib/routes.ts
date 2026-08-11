@@ -222,15 +222,24 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "缺料分析",
         icon: "alert",
         plannedPr: "PR8",
-        desc: "缺料分析与 Call 料表。",
-        roles: ["PROCUREMENT"],
+        desc: "缺料分析与 Call 料表:PN / MPN / 位号 / 需求 / 库存 / 在途 / 缺口 / 交期。GTB = ceil(需求×(1+损耗率)) − 库存 − 在途,≥MOQ 再按 SPQ 向上圆整。齐料检查已并入本页(S-5),/kitting 会重定向过来。",
+        roles: ["PROCUREMENT", "ENGINEERING"],
       },
       {
+        /*
+         * S-5:客户要求「齐套分析合并到缺料分析中即可」。列已并入 /shortage,
+         * 本路由改为重定向。
+         *
+         * **但不删除**:SPEC §2 的路由清单里 /kitting 是独立一条,
+         * 删掉等于单方面改规范(CLAUDE.md:范围变更一律进待商务确认池)。
+         * 保留注册 + 明示「已并入」,点进去落到缺料分析就不会意外;
+         * 是否真正下线由商务确认后再定。
+         */
         path: "/kitting",
-        label: "齐料检查",
+        label: "齐料检查(已并入缺料分析)",
         icon: "box",
         plannedPr: "PR8",
-        desc: "工单齐料检查(GTB:ceil(需求×(1+损耗率)) − 库存 − 在途,≥MOQ 再按 SPQ 向上圆整)。",
+        desc: "已并入「缺料分析」:两者入参与算法完全相同(同一份 buildKittingReport)。本路由保留重定向,书签仍可用。",
         roles: ["PROCUREMENT", "ENGINEERING"],
       },
       {

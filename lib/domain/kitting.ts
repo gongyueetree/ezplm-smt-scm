@@ -13,6 +13,8 @@ import { Decimal } from "decimal.js";
 import { calculateGtb } from "./gtb";
 
 export interface KittingLineInput {
+  /** 内部料号;主数据里没有这颗料时为 null */
+  internalPn?: string | null;
   lineNo: number;
   refDes: string | null;
   mpn: string | null;
@@ -32,6 +34,7 @@ export interface KittingLineInput {
 export interface KittingLineResult {
   lineNo: number;
   refDes: string | null;
+  internalPn: string | null;
   mpn: string | null;
   manufacturer: string | null;
   /** 本次投产总需求(含损耗,向上取整) */
@@ -99,6 +102,7 @@ export function calculateKitting(
       return {
         lineNo: l.lineNo,
         refDes: l.refDes,
+        internalPn: l.internalPn ?? null,
         mpn: l.mpn,
         manufacturer: l.manufacturer,
         requiredQty,
@@ -115,6 +119,7 @@ export function calculateKitting(
     return {
       lineNo: l.lineNo,
       refDes: l.refDes,
+      internalPn: l.internalPn ?? null,
       mpn: l.mpn,
       manufacturer: l.manufacturer,
       requiredQty,
