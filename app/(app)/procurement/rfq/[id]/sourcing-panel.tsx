@@ -376,7 +376,25 @@ export function SourcingPanel({
       </Card>
 
       {results ? (
-        <Card title="② 多源比价" sub={`${results.length} 个料号`} flush>
+        <Card
+          title="② 多源比价"
+          sub={`${results.length} 个料号`}
+          flush
+          actions={
+            /*
+              N-5.E:导出总表。链接直下,不经前端状态 ——
+              接口从 SupplierQuoteLine 取全部报价(线下 + 三方),
+              导出的是库里的事实,而不是页面上当前恰好显示了什么。
+            */
+            <a
+              className="btn"
+              href={`/api/procurement/rfq/${procurementRfqId}/compare-export`}
+              data-testid="compare-export"
+            >
+              导出比价总表(xlsx)
+            </a>
+          }
+        >
           <div className="tbl-scroll">
             <table className="tbl">
               <thead>
