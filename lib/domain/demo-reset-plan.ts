@@ -94,6 +94,12 @@ export const PURGE_MODELS = [
   "ErpWebhookEvent",
   "IntegrationJob",
 
+  // ---- Excess 快照(导入的业务数据,子表在前)----
+  // 归 PURGE 而非 KEEP:它是"某次导入的呆滞清单",属测试期产生的单据;
+  // 主数据侧(Part/Customer)不受影响。
+  "ExcessLine",
+  "ExcessSnapshot",
+
   // ---- 其它测试期产物 ----
   "EmailDraft",
   "SupplierOnboardInvite",
