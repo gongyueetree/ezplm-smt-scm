@@ -43,7 +43,26 @@ export async function loadOpoLines(
     take: 2000,
   });
 
+  /*
+   * S-6(客户 PR2 反馈 采购-8B:「要 show 出供应商,并显示 request date」)。
+   *
+   * OPOLine 只存 supplierId,没有 Supplier 关联 —— 页面上「未回复供应商」
+   * 这张表因此连供应商名字都没有(卡片标题却叫这个)。这里补一次批量查名。
+   * 查不到名字时**返回 null 而不是回落成 id** —— 把一串 cuid 摆在
+   * 「供应商」列里比留空更容易被误读成编码。
+   */
+  const supplierIds = [...new Set(rows.map((r) => r.supplierId).filter(Boolean))];
+  const suppliers = supplierIds.length
+    ? await prisma.supplier.findMany({
+        where: tenantWhere(tenantId, { id: { in: supplierIds } }),
+        select: { id: true, code: true, name: true },
+      })
+    : [];
+  const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+
   return rows.map((r) => ({
+    supplierName: supplierById.get(r.supplierId)?.name ?? null,
+    supplierCode: supplierById.get(r.supplierId)?.code ?? null,
     id: r.id,
     poNo: r.poNo,
     lineNo: r.lineNo,

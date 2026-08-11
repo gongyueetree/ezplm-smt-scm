@@ -38,22 +38,27 @@ async function importBomFixture(page: Page): Promise<string> {
   return id!;
 }
 
-test("齐料检查:按台数核算需求,数据未知不当作有货", async ({ page }) => {
+/**
+ * S-5:齐料检查已并入缺料分析(两页入参与算法完全相同)。
+ *
+ * 本用例随之改为验证**合并后的结果**,而不是迁就实现:
+ * ① /kitting 仍可访问(书签不 404),但会重定向到 /shortage,**查询参数不丢**;
+ * ② 齐套率这个指标必须被带过去 —— 合并不能变成删指标;
+ * ③ 「数据未知」仍用文字而非 0 表达。
+ */
+test("齐料检查已并入缺料分析:重定向保参数,且齐套率没有丢", async ({ page }) => {
   await login(page, "procurement@demo.qianchuang.cn");
   const versionId = await importBomFixture(page);
 
   await page.goto(`/kitting?v=${versionId}&boards=100`);
-  await expect(page.locator(".page-title")).toHaveText("齐料检查");
 
-  // 齐套率与三类计数都在
-  await expect(page.locator(".kpi", { hasText: "齐套率" })).toBeVisible();
-  // 用 kpi-label 精确定位:齐料日期卡片的说明文字里也含「数据未知」
-  await expect(page.locator(".kpi .kpi-label", { hasText: /^数据未知$/ })).toBeVisible();
+  // 重定向到缺料分析,且 v / boards 原样带过去(否则书签点开是空页)
+  await expect(page).toHaveURL(new RegExp(`/shortage\\?.*v=${versionId}.*boards=100`));
+  await expect(page.locator(".page-title")).toHaveText("缺料分析");
 
-  // 明细表存在,且「数据未知」用文字而非 0 表达
-  const table = page.locator(".card", { hasText: "逐行齐料明细" }).locator("table.tbl");
-  await expect(table).toBeVisible();
-  await expect(table).toContainText("未知");
+  // 齐套率必须在 —— 它原本只在齐料检查页,合并时不能丢
+  await expect(page.locator(".kpi .kpi-label", { hasText: /^齐套率$/ })).toBeVisible();
+  await expect(page.locator(".kpi .kpi-label", { hasText: /^数据未知行$/ })).toBeVisible();
 
   // 损耗率口径提示
   await expect(page.locator(".banner")).toContainText("口径待甲方确认");

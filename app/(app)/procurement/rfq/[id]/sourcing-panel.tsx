@@ -281,42 +281,23 @@ export function SourcingPanel({
         </div>
       ) : null}
 
-      <Card title="① 询价与线下报价导入">
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+      {/*
+        S-4(客户 PR2 反馈 采购-4B:「DigiKey、Mouser 线下报价文件和线下供应商报价的
+        文件窗口要分开显示 —— digikey mouser 的需要报价,而线下供应商的目的是比较价格」)。
+
+        原来两件事挤在同一张卡片的同一行:左边按官方 API 去「要」报价,
+        右边上传对方发来的报价文件回来「比」价。来源、动作、用途都不同,
+        并排放既难认也容易点错(还共用同一个 busy 状态)。
+      */}
+      <Card title="①A 三方实时询价" sub="DigiKey / Mouser 官方 API · 主动去「要」报价">
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn ai" onClick={runSourcing} disabled={busy}>
             {busy ? "查询中…" : "查询 DigiKey / Mouser"}
           </button>
-          <label className="fld" style={{ marginBottom: 0, minWidth: 180 }}>
-            <span>线下供应商</span>
-            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} · {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="fld" style={{ marginBottom: 0, flex: 1, minWidth: 220 }}>
-            <span>线下报价文件(CSV/XLSX)</span>
-            <input ref={fileRef} type="file" />
-          </label>
-          <button className="btn" onClick={importQuote} disabled={busy}>
-            导入线下报价
-          </button>
+          <span className="small muted">
+            按本 RFQ 的料清单批量查询,结果进下方比价集合。显示的是数据更新时间,不代表实时价。
+          </span>
         </div>
-        <p className="small muted" style={{ marginTop: 10 }}>
-          价格线 {THRESHOLDS.currency} {THRESHOLDS.maxUnitPrice ?? "未设"} · 交期线{" "}
-          {THRESHOLDS.maxLeadTimeDays ?? "未设"} 天
-          {policy.confirmedByBusiness ? (
-            <Badge tone="green">口径已业务确认</Badge>
-          ) : (
-            <Badge tone="amber">
-              {policy.isFallback ? "未配置,使用兜底值" : "口径待业务确认"} · 非正式风控
-            </Badge>
-          )}
-          。导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
-          阈值在<a href="/procurement/suppliers">「供应商与采购策略」</a>维护。
-        </p>
         {sourcingProgress ? (
           <div style={{ marginTop: 12 }}>
             <div
@@ -356,6 +337,42 @@ export function SourcingPanel({
             ))}
           </div>
         ) : null}
+      </Card>
+
+      <Card title="①B 线下供应商报价导入" sub="上传对方发来的报价文件 · 拿回来「比」价">
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label className="fld" style={{ marginBottom: 0, minWidth: 180 }}>
+            <span>线下供应商</span>
+            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} · {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="fld" style={{ marginBottom: 0, flex: 1, minWidth: 220 }}>
+            {/* label 保持原文 —— 卡片标题已给上下文,但改短它只会打断既有用例、不带来价值 */}
+            <span>线下报价文件(CSV/XLSX)</span>
+            <input ref={fileRef} type="file" />
+          </label>
+          <button className="btn" onClick={importQuote} disabled={busy}>
+            导入线下报价
+          </button>
+        </div>
+        <p className="small muted" style={{ marginTop: 10 }}>
+          价格线 {THRESHOLDS.currency} {THRESHOLDS.maxUnitPrice ?? "未设"} · 交期线{" "}
+          {THRESHOLDS.maxLeadTimeDays ?? "未设"} 天
+          {policy.confirmedByBusiness ? (
+            <Badge tone="green">口径已业务确认</Badge>
+          ) : (
+            <Badge tone="amber">
+              {policy.isFallback ? "未配置,使用兜底值" : "口径待业务确认"} · 非正式风控
+            </Badge>
+          )}
+          。导入时按此阈值<b>固化原始异常集合</b>,此后阈值调整不改写既有标记。
+          阈值在<a href="/procurement/suppliers">「供应商与采购策略」</a>维护。
+        </p>
       </Card>
 
       {results ? (

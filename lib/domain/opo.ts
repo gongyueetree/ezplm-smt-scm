@@ -23,6 +23,10 @@ export interface OpoLineView {
   poNo: string;
   lineNo: number;
   supplierId: string;
+  /** 供应商名称/编码;主数据里查不到时为 null —— **不回落成 id**,
+   *  一串 cuid 摆在「供应商」列里比留空更容易被误读成编码 */
+  supplierName: string | null;
+  supplierCode: string | null;
   mpn: string | null;
   qtyOrdered: number;
   qtyOpen: number;

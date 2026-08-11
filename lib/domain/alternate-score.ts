@@ -25,10 +25,26 @@ export type SubstitutionMode =
   | "DOMESTIC"
   | "LOW_COST";
 
+/*
+ * S-7(客户 PR2 反馈 采购-3a:「筛选条件 Pin to Pin 是否和封装重复了?」)。
+ *
+ * 核实结论:**不重复**,是两层判定,但原文案没说清,难怪会被当成一回事:
+ *   - 封装兼容 = 焊盘/外形一样,**贴得上去**;
+ *   - Pin-to-Pin = 在封装一样的基础上,**每个引脚的功能定义也一样**,贴上去还能正常工作。
+ * 同封装不同引脚定义在 IC 上极常见(同是 SOT-23-5,引脚功能可以完全不同),
+ * 把两者合并会让"贴得上但工作不了"的候选混进来 —— 那是烧板的错。
+ * 所以保留两个模式,改成能互相对照的措辞。
+ */
 export const MODE_LABELS: Record<SubstitutionMode, { title: string; desc: string }> = {
-  PIN_TO_PIN: { title: "Pin-to-Pin", desc: "引脚完全兼容" },
-  PACKAGE_COMPATIBLE: { title: "封装兼容", desc: "相同封装可直接替换" },
-  FUNCTIONAL: { title: "功能兼容", desc: "功能相近但可能需改板" },
+  PIN_TO_PIN: {
+    title: "Pin-to-Pin",
+    desc: "封装相同,且每个引脚功能一致 —— 比「封装兼容」更严格,可直接换料",
+  },
+  PACKAGE_COMPATIBLE: {
+    title: "封装兼容",
+    desc: "外形/焊盘相同,贴得上去;引脚功能是否一致不保证,需工程核对",
+  },
+  FUNCTIONAL: { title: "功能兼容", desc: "功能相近,封装可能不同,可能需改板" },
   DOMESTIC: { title: "国产替代", desc: "优先推荐国产品牌" },
   LOW_COST: { title: "低成本优先", desc: "价格最优方案" },
 };
