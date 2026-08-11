@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -139,7 +140,7 @@ export default async function SyncLogPage({
                 jobs.map((j) => (
                   <tr key={j.id}>
                     <td className="small">
-                      {j.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                      {formatDateTime(j.createdAt)}
                     </td>
                     <td className="small">{TYPE_LABEL[j.type] ?? j.type}</td>
                     <td>

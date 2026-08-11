@@ -10,6 +10,7 @@ import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { SaveCompareRun } from "./save-run";
+import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export default async function BomComparePage({
                   <td className="num">{r.qtyChangedCount}</td>
                   <td className="num">{r.partChangedCount}</td>
                   <td className="small muted">
-                    {r.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                    {formatDateTime(r.createdAt)}
                   </td>
                   <td>
                     <Link

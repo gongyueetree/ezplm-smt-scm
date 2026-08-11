@@ -14,6 +14,7 @@ import { getSession } from "@/lib/server/session";
 import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { RfqActions } from "./actions";
+import { formatDate, formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,8 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
           </h1>
           <p className="page-desc">
             客户 {customer?.name ?? rfq.customerId} · 创建于{" "}
-            {rfq.createdAt.toISOString().slice(0, 16).replace("T", " ")} · 截止{" "}
-            {rfq.dueAt ? rfq.dueAt.toISOString().slice(0, 10) : "未设置"}
+            {formatDateTime(rfq.createdAt)} · 截止{" "}
+            {rfq.dueAt ? formatDate(rfq.dueAt) : "未设置"}
           </p>
         </div>
         <div className="page-actions">
@@ -95,7 +96,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
                       {a.sizeBytes ? `${(a.sizeBytes / 1024).toFixed(1)} KB` : "-"}
                     </td>
                     <td className="small">
-                      {a.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                      {formatDateTime(a.createdAt)}
                     </td>
                     <td>
                       <Link className="btn sm" href={`/api/files/${a.fileKey}`}>
@@ -160,7 +161,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
             <tbody>
               {rfq.statusHistory.map((h) => (
                 <tr key={h.id}>
-                  <td className="small">{h.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                  <td className="small">{formatDateTime(h.createdAt)}</td>
                   <td className="small">
                     {h.fromStatus ? RFQ_STATUS_LABELS[h.fromStatus as RfqStatusValue] : "—"} →{" "}
                     <b>{RFQ_STATUS_LABELS[h.toStatus as RfqStatusValue]}</b>

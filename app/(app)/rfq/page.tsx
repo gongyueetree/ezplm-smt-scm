@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { CreateRfqForm } from "./create-form";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ export default async function RfqListPage() {
                     </td>
                     <td className="num">{r._count.boms}</td>
                     <td className="num">{r._count.attachments}</td>
-                    <td className="small">{r.dueAt ? r.dueAt.toISOString().slice(0, 10) : "-"}</td>
+                    <td className="small">{r.dueAt ? formatDate(r.dueAt) : "-"}</td>
                   </tr>
                 ))
               )}

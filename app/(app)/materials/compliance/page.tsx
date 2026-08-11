@@ -15,6 +15,7 @@ import {
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -188,7 +189,7 @@ export default async function CompliancePage({
                     <td className="small muted">{r.version ?? "-"}</td>
                     <td className="small">
                       {r.validUntil ? (
-                        r.validUntil.toISOString().slice(0, 10)
+                        formatDate(r.validUntil)
                       ) : (
                         <span className="muted">未标注</span>
                       )}

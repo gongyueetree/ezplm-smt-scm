@@ -9,6 +9,7 @@ import { llmStatus } from "@/lib/ai";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { formatDateTimeSeconds } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -174,7 +175,7 @@ export default async function SettingsPage() {
                 auditLogs.map((a) => (
                   <tr key={a.id}>
                     <td className="small">
-                      {a.createdAt.toISOString().slice(0, 19).replace("T", " ")}
+                      {formatDateTimeSeconds(a.createdAt)}
                     </td>
                     <td className="mono small">{a.action}</td>
                     <td className="small">
