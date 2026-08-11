@@ -13,6 +13,7 @@ import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { CATEGORY_L1 } from "@/lib/domain/part-category";
+import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -309,10 +310,15 @@ export default async function MaterialsPage({
                         )}
                       </td>
                       <td className="small">
-                        {snap?.fetchedAt.toISOString().slice(0, 16).replace("T", " ") ??
-                          p.syncedAt?.toISOString().slice(0, 16).replace("T", " ") ?? (
-                            <span className="muted">未知</span>
-                          )}
+                        {/* 优先用快照时刻;没有快照才退回物料同步时刻;都没有才是「未知」——
+                            不能用 ?? 串联格式化结果:格式化总会返回字符串,?? 永远短路不到后面 */}
+                        {snap?.fetchedAt ? (
+                          formatDateTime(snap.fetchedAt)
+                        ) : p.syncedAt ? (
+                          formatDateTime(p.syncedAt)
+                        ) : (
+                          <span className="muted">未知</span>
+                        )}
                       </td>
                     </tr>
                   );

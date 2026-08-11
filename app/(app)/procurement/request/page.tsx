@@ -5,6 +5,7 @@ import { listPurchaseRequests } from "@/lib/server/repositories/purchase-request
 import { getSession } from "@/lib/server/session";
 import { GtbCalculator } from "./calculator";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,7 @@ export default async function PurchaseRequestPage() {
                     </td>
                     <td className="num">{String(p.qty)}</td>
                     <td className="small">{p.status}</td>
-                    <td className="small">{p.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                    <td className="small">{formatDateTime(p.createdAt)}</td>
                   </tr>
                 ))
               )}

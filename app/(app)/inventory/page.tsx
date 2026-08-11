@@ -11,6 +11,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export default async function InventoryPage({
   const aging = deriveDcAging(rows, asOf);
   const slow = deriveSlowMoving(rows);
   const oldestFetch = snapshots.length
-    ? snapshots[snapshots.length - 1].fetchedAt.toISOString().slice(0, 16).replace("T", " ")
+    ? formatDateTime(snapshots[snapshots.length - 1].fetchedAt)
     : null;
 
   return (

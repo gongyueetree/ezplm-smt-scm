@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/server/api";
 import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { formatDateTimeSeconds } from "@/lib/format/datetime";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,8 @@ export async function GET(req: Request) {
   ws.addRow(["时间", "类型", "状态", "重试次数", "幂等键", "载荷", "错误"]);
   for (const j of jobs) {
     ws.addRow([
-      j.createdAt.toISOString().slice(0, 19).replace("T", " "),
+      // 导出给人看的对账用表,时间同样按部署时区(与页面一致),不能是 UTC
+      formatDateTimeSeconds(j.createdAt),
       j.type,
       j.status,
       j.attempts,

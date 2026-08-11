@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { CollabActions } from "./actions";
+import { formatDate, formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export default async function SupplierCollabPage() {
                       <Badge tone="amber">{draftStatusLabel(d.status)}</Badge>
                     </td>
                     <td className="small muted">
-                      {d.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                      {formatDateTime(d.createdAt)}
                     </td>
                   </tr>
                 ))
@@ -140,7 +141,7 @@ export default async function SupplierCollabPage() {
                             : "已建档"}
                       </Badge>
                     </td>
-                    <td className="small muted">{i.expiresAt?.toISOString().slice(0, 10) ?? "不限"}</td>
+                    <td className="small muted">{formatDate(i.expiresAt, "不限")}</td>
                     <td className="small mono">/onboard/{i.token.slice(0, 8)}…</td>
                   </tr>
                 ))
@@ -187,7 +188,7 @@ export default async function SupplierCollabPage() {
                     </td>
                     <td className="small muted">{a.note ?? "—"}</td>
                     <td className="small muted">
-                      {a.recordedAt.toISOString().slice(0, 16).replace("T", " ")}
+                      {formatDateTime(a.recordedAt)}
                     </td>
                   </tr>
                 ))

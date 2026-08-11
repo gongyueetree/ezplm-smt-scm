@@ -17,6 +17,7 @@ import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { getSession } from "@/lib/server/session";
 import { QuoteEditor } from "./editor";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -130,7 +131,7 @@ export default async function QuoteVersionPage({
         versionId={version.id}
         status={status}
         currency={version.currency}
-        validUntil={version.validUntil ? version.validUntil.toISOString().slice(0, 10) : null}
+        validUntil={version.validUntil ? formatDate(version.validUntil) : null}
         frozen={isFrozen(status)}
         transitions={transitions}
         lines={version.lines.map((l) => ({

@@ -9,6 +9,7 @@ import { getSession } from "@/lib/server/session";
 import { MatchReview, type ReviewLine } from "./review";
 import { needsAlternate } from "@/lib/domain/alternate-rank";
 import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
+import { formatDate, formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -58,10 +59,10 @@ export default async function BomVersionPage({
       stockQty: c.stockQty === null ? null : Number(c.stockQty),
       slowMovingQty: c.slowMovingQty === null ? null : Number(c.slowMovingQty),
       opoQty: c.opoQty === null ? null : Number(c.opoQty),
-      eta: c.eta ? c.eta.toISOString().slice(0, 10) : null,
+      eta: c.eta ? formatDate(c.eta) : null,
       price: c.price === null ? null : String(c.price),
       currency: c.currency,
-      dataUpdatedAt: c.dataUpdatedAt ? c.dataUpdatedAt.toISOString().slice(0, 16).replace("T", " ") : null,
+      dataUpdatedAt: c.dataUpdatedAt ? formatDateTime(c.dataUpdatedAt) : null,
     })),
   }));
 

@@ -67,11 +67,65 @@ test("B2 供应商预设:多阶价格可维护并显示", async ({ page }) => {
   await page.getByLabel("MPN", { exact: true }).fill("GRM188R71H104KA93D");
   await page.getByLabel("MOQ", { exact: true }).fill("1000");
   await page.getByLabel("Lead Time(天)").fill("21");
+
+  /*
+   * D-2 之后价格阶梯是**每档一行**,且单价不再有预填默认值。
+   *
+   * 原来表单预填 "1:0.12, 1000:0.10, 5000:0.085",用户不改就把这串假价格
+   * 当真数据存了进去 —— 与本项目「缺列必须留空并说明,不能填默认值」的纪律相悖。
+   * 所以这里改为显式填价,不是为了迁就实现,而是实现有意变严了。
+   */
+  await page.getByLabel("第 1 档起订数量").fill("1");
+  await page.getByLabel("第 1 档单价").fill("0.12");
+  await page.getByRole("button", { name: "+ 增加一档" }).click();
+  await page.getByLabel("第 2 档起订数量").fill("1000");
+  await page.getByLabel("第 2 档单价").fill("0.10");
   await page.getByRole("button", { name: "保存预设" }).click();
 
   const table = page.locator(".card", { hasText: "已维护的供应商预设" }).locator("table.tbl");
   await expect(table).toContainText("GRM188R71H104KA93D");
   await expect(table.locator(".badge").first()).toContainText("≥1");
+});
+
+/**
+ * D-2(客户 PR2 反馈 采购-6C:「阶梯价格以报价数量分行显示,不用分号区别」)。
+ *
+ * 原实现是一个文本框靠逗号冒号解析,填错的档被 `filter` **静默丢掉** ——
+ * 人看不出少了哪一档,却已经按错的阶梯价在比价。
+ */
+test("D-2 阶梯价按档分行录入:填一半必须报错,不得静默丢档", async ({ page }) => {
+  await login(page, "procurement@demo.qianchuang.cn");
+  await page.goto("/procurement/suppliers");
+
+  await page.getByLabel("MPN", { exact: true }).fill(`E2E-BRK-${Date.now().toString(36)}`);
+  await page.getByLabel("第 1 档起订数量").fill("1");
+  await page.getByLabel("第 1 档单价").fill("0.5");
+  await page.getByRole("button", { name: "+ 增加一档" }).click();
+  // 第 2 档只填数量、不填单价 —— 原实现会把它悄悄丢掉
+  await page.getByLabel("第 2 档起订数量").fill("500");
+  await page.getByRole("button", { name: "保存预设" }).click();
+
+  const err = page.locator(".banner.warn[role=alert]");
+  await expect(err).toBeVisible();
+  await expect(err).toContainText("第 2 档");
+  await expect(err).toContainText("单价不能为空");
+});
+
+test("D-2 起订数量重复必须当场拒绝 —— 后一档会覆盖前一档", async ({ page }) => {
+  await login(page, "procurement@demo.qianchuang.cn");
+  await page.goto("/procurement/suppliers");
+
+  await page.getByLabel("MPN", { exact: true }).fill(`E2E-DUP-${Date.now().toString(36)}`);
+  await page.getByLabel("第 1 档起订数量").fill("100");
+  await page.getByLabel("第 1 档单价").fill("0.5");
+  await page.getByRole("button", { name: "+ 增加一档" }).click();
+  await page.getByLabel("第 2 档起订数量").fill("100");
+  await page.getByLabel("第 2 档单价").fill("0.4");
+  await page.getByRole("button", { name: "保存预设" }).click();
+
+  const err = page.locator(".banner.warn[role=alert]");
+  await expect(err).toBeVisible();
+  await expect(err).toContainText("重复");
 });
 
 test("PR7 遗留:草稿态不可导出;批准后可从快照导出 XLSX", async ({ page }) => {

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { CreateProcurementRfqForm } from "./create-form";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,7 @@ export default async function ProcurementRfqPage() {
                       </Badge>
                     </td>
                     <td className="num">{p._count.supplierQuotes}</td>
-                    <td className="small">{p.createdAt.toISOString().slice(0, 10)}</td>
+                    <td className="small">{formatDate(p.createdAt)}</td>
                   </tr>
                 ))
               )}

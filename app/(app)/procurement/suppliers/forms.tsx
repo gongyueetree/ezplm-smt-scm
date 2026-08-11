@@ -110,24 +110,46 @@ export function SupplierOfferForm({ suppliers }: { suppliers: { id: string; labe
   const [moq, setMoq] = useState("");
   const [spq, setSpq] = useState("");
   const [leadTimeDays, setLeadTimeDays] = useState("");
-  const [breaks, setBreaks] = useState("1:0.12, 1000:0.10, 5000:0.085");
+  /*
+   * D-2(客户 PR2 反馈 采购-6C:「阶梯价格以报价数量分行显示,不用分号区别」)。
+   *
+   * 原来是**一个文本框** `"1:0.12, 1000:0.10, 5000:0.085"`,靠逗号与冒号解析:
+   * 少一个冒号、用了中文逗号、或数量里带千分位,整档就被 filter 静默丢掉 ——
+   * 人看不出少了哪一档,却已经按错的阶梯价在比价。
+   * 改成每档一行的结构化输入,数量与单价各自成格,不再有分隔符可写错。
+   */
+  const [rows, setRows] = useState<{ minQty: string; unitPrice: string }[]>([
+    { minQty: "1", unitPrice: "" },
+  ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const priceBreaks = breaks
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((s) => {
-        const [q, p] = s.split(":").map((x) => x.trim());
-        return { minQty: Number(q), unitPrice: p };
-      })
-      .filter((b) => Number.isFinite(b.minQty) && !!b.unitPrice);
-
-    if (priceBreaks.length === 0) {
-      setError("请至少填写一档价格,格式:数量:单价");
+    const filled = rows.filter((r) => r.minQty.trim() !== "" || r.unitPrice.trim() !== "");
+    if (filled.length === 0) {
+      setError("请至少填写一档价格");
+      return;
+    }
+    /*
+     * 填了一半的行**必须报错**,不能像原来那样静默丢掉 ——
+     * 少一档价格会直接改变比价结论,而人以为自己填了。
+     */
+    const bad = filled.findIndex(
+      (r) => !Number.isFinite(Number(r.minQty)) || Number(r.minQty) <= 0 || r.unitPrice.trim() === "",
+    );
+    if (bad >= 0) {
+      setError(`第 ${bad + 1} 档填写不完整:数量需为正数,单价不能为空`);
+      return;
+    }
+    const priceBreaks = filled.map((r) => ({
+      minQty: Number(r.minQty),
+      unitPrice: r.unitPrice.trim(),
+    }));
+    // 同一数量出现两次时后一档会覆盖前一档,与其让人事后困惑,不如当场拒绝
+    const dup = priceBreaks.map((b) => b.minQty).findIndex((q, i, arr) => arr.indexOf(q) !== i);
+    if (dup >= 0) {
+      setError(`起订数量 ${priceBreaks[dup].minQty} 重复,请合并为一档`);
       return;
     }
     setBusy(true);
@@ -153,6 +175,7 @@ export function SupplierOfferForm({ suppliers }: { suppliers: { id: string; labe
         return;
       }
       setMpn("");
+      setRows([{ minQty: "1", unitPrice: "" }]);
       router.refresh();
     } finally {
       setBusy(false);
@@ -198,10 +221,64 @@ export function SupplierOfferForm({ suppliers }: { suppliers: { id: string; labe
             <input value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} />
           </label>
         </div>
-        <label className="fld">
-          <span>价格阶梯(格式 数量:单价,逗号分隔)</span>
-          <input value={breaks} onChange={(e) => setBreaks(e.target.value)} />
-        </label>
+        <div className="fld">
+          <span>价格阶梯(每档一行)</span>
+          <table className="tbl" data-testid="price-break-rows">
+            <thead>
+              <tr>
+                <th style={{ width: "40%" }}>起订数量</th>
+                <th>单价</th>
+                <th style={{ width: 72 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      aria-label={`第 ${i + 1} 档起订数量`}
+                      value={r.minQty}
+                      onChange={(e) =>
+                        setRows(rows.map((x, j) => (j === i ? { ...x, minQty: e.target.value } : x)))
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      aria-label={`第 ${i + 1} 档单价`}
+                      value={r.unitPrice}
+                      onChange={(e) =>
+                        setRows(
+                          rows.map((x, j) => (j === i ? { ...x, unitPrice: e.target.value } : x)),
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    {/* 只剩一档时不给删 —— 删光了表单就没有价格可提交 */}
+                    {rows.length > 1 ? (
+                      <button
+                        type="button"
+                        className="btn sm"
+                        onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                      >
+                        删除
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            type="button"
+            className="btn sm"
+            style={{ marginTop: 6 }}
+            onClick={() => setRows([...rows, { minQty: "", unitPrice: "" }])}
+          >
+            + 增加一档
+          </button>
+        </div>
         {error ? <div className="banner warn" role="alert">{error}</div> : null}
         <button className="btn primary" type="submit" disabled={busy || !supplierId}>
           {busy ? "保存中…" : "保存预设"}
