@@ -803,6 +803,11 @@ model Part {
   descriptionEn String?
   brand         String?
   note          String?
+  /// N-12:标准成本(STD 价)。损耗报告要按金额分析,靠的就是它。
+  /// **可空且不设默认** —— 没维护标准价时报表显示「未维护」而不是按 0 算,
+  /// 按 0 算会让损耗金额凭空变成 0,反而掩盖问题。
+  standardCost     Decimal? @db.Decimal(18, 6)
+  standardCostCurrency String?
   /// **来源与流程状态**:origin=EZPLM 的行是只读缓存,改写接口必须拒绝
   origin       PartOrigin @default(EZPLM)
   status       PartStatus @default(ACTIVE)

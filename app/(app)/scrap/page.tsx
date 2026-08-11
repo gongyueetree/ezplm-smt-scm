@@ -3,7 +3,10 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import {
-  groupScrap,
+  buildPeriodTrend,
+  groupScrapWithAmount,
+  recentPeriods,
+  type StandardCostLookup,
   summarizeScrap,
   UNKNOWN_KEY,
   type ScrapDimension,
@@ -13,6 +16,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { ScrapImport } from "./import-form";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -68,8 +72,70 @@ export default async function ScrapPage({
   }));
 
   const summary = summarizeScrap(rows);
-  const groups = groupScrap(rows, dim);
   const customerName = new Map(customers.map((c) => [c.id, c.name]));
+
+  /*
+   * N-12:标准价(STD)从物料主数据取。**没维护的料不计入金额**,
+   * 由 groupScrapWithAmount 单列出来 —— 按 0 算会让损耗金额凭空变小,
+   * 而损耗最严重的料往往正是没人维护主数据的那些。
+   */
+  const scrapMpns = [...new Set(rows.map((r) => r.mpn).filter((m): m is string => !!m))];
+  const costParts = scrapMpns.length
+    ? await prisma.part.findMany({
+        where: tenantWhere(session.tenantId, {
+          mpn: { in: scrapMpns },
+          standardCost: { not: null },
+        }),
+        select: { mpn: true, standardCost: true, standardCostCurrency: true },
+      })
+    : [];
+  const costByMpn = new Map(
+    costParts.map((p) => [
+      p.mpn ?? "",
+      { unitCost: p.standardCost!.toString(), currency: p.standardCostCurrency ?? "CNY" },
+    ]),
+  );
+  const lookupCost: StandardCostLookup = (mpn) => (mpn ? costByMpn.get(mpn) ?? null : null);
+
+  const groups = groupScrapWithAmount(rows, dim, lookupCost);
+
+  /*
+   * 多月比较:期间列由 recentPeriods 生成而不是从数据里推 ——
+   * 数据里没有的月份也要出现在表里。那个月为空本身就是信息:
+   * 是真的零损耗,还是那个月忘了导数据?两者绝不能长得一样。
+   */
+  const trendDim = dim === "period" ? "mpn" : dim;
+  /*
+   * 取**最近的合法 YYYY-MM 期间**作为趋势表的终点。
+   *
+   * 不能直接用 periods[0] —— 期间标签是自由文本,库里可能存在
+   * 「2026年7月」「Q3」这类值,字典序排序后它们会排到真实月份前面,
+   * 于是 recentPeriods 拿到一个解析不了的值,趋势表塌成一列而没人察觉。
+   * (实测:E2E 遗留的 "E2E-93912" 就把表压成了 1 列。)
+   */
+  const latestPeriod =
+    periods.map((p) => p.period).find((p) => /^\d{4}-\d{2}$/.test(p.trim())) ??
+    // 兜底期间也要按部署时区取 —— 用 UTC 会在每月 1 号的早八小时里给出上个月
+    formatDate(new Date()).slice(0, 7);
+  const trendPeriods = recentPeriods(latestPeriod, 6);
+  // 趋势表用**不带期间筛选**的数据,否则选了单月就没有"多月"可比
+  const trendRecords = await prisma.scrapRecord.findMany({
+    where: tenantWhere(session.tenantId, {
+      period: { in: trendPeriods },
+      ...(sp.customerId ? { customerId: sp.customerId } : {}),
+    }),
+    take: 20000,
+  });
+  const trendRows: ScrapRow[] = trendRecords.map((r) => ({
+    period: r.period,
+    customerId: r.customerId,
+    workOrder: r.workOrder,
+    mpn: r.mpn,
+    issuedQty: r.issuedQty.toString(),
+    scrapQty: r.scrapQty.toString(),
+    reason: r.reason,
+  }));
+  const trend = buildPeriodTrend(trendRows, trendDim, trendPeriods, lookupCost).slice(0, 20);
 
   const q = new URLSearchParams();
   for (const k of ["period", "customerId", "mpn"]) if (sp[k]) q.set(k, sp[k]!);
@@ -179,13 +245,15 @@ export default async function ScrapPage({
                 <th className="num">发料</th>
                 <th className="num">报废</th>
                 <th className="num">损耗率</th>
+                {/* N-12②③:按金额分析,单价取物料主数据的标准价(STD) */}
+                <th className="num">损耗金额</th>
                 <th className="num">记录数</th>
               </tr>
             </thead>
             <tbody>
               {groups.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={6} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     暂无损耗数据 —— 可在上方导入
                   </td>
                 </tr>
@@ -210,6 +278,22 @@ export default async function ScrapPage({
                         `${(Number(g.scrapRate) * 100).toFixed(2)}%`
                       )}
                     </td>
+                    <td className="num">
+                      {/*
+                        缺标准价时显示「未维护」而**不是 0** —— 按 0 算会让损耗金额
+                        凭空变小,而损耗最重的料往往正是没人维护主数据的那些。
+                      */}
+                      {g.scrapAmount === null ? (
+                        <span className="muted" title={g.mixedCurrency ? "组内混多种币种,系统无汇率源,不做换算合计" : "该组物料未维护标准价"}>
+                          {g.mixedCurrency ? "多币种" : "未维护"}
+                        </span>
+                      ) : (
+                        `${g.currency ?? ""} ${g.scrapAmount}`
+                      )}
+                      {g.rowsWithoutCost > 0 && g.scrapAmount !== null ? (
+                        <div className="small muted">{g.rowsWithoutCost} 行缺价未计入</div>
+                      ) : null}
+                    </td>
                     <td className="num">{g.rowCount}</td>
                   </tr>
                 ))
@@ -217,12 +301,99 @@ export default async function ScrapPage({
             </tbody>
           </table>
         </div>
+        {groups.some((g) => g.scrapAmount === null) ? (
+          <p className="small muted" style={{ padding: "0 16px" }}>
+            金额栏显示「未维护」= 该组物料在主数据里<b>没有标准价</b>。
+            这部分**不按 0 计入金额**,数量口径不受影响;标准价可在物料批量导入时用
+            「标准价(STD)」列一并维护。
+          </p>
+        ) : null}
         {groups.some((g) => g.key === UNKNOWN_KEY) ? (
           <p className="small muted" style={{ padding: "8px 16px" }}>
             「未填」是该维度<b>没有值</b>的记录,单列一档、固定排末尾 ——
             不并进任何一个具体分组,也不允许它凭量大挤掉真正可归因的项。
           </p>
         ) : null}
+      </Card>
+
+      {/* N-12①:多月比较分析 */}
+      <Card
+        title="多月比较"
+        sub={`最近 ${trendPeriods.length} 期 · 按${DIMENSIONS.find((d) => d.key === trendDim)?.label.replace("按", "")} · 取报废量前 20`}
+        flush
+      >
+        <p className="small muted" style={{ padding: "8px 16px 0" }}>
+          期间列是<b>固定生成的最近 {trendPeriods.length} 期</b>,不是从数据里推出来的 ——
+          某一期为空说明那一期<b>没有数据</b>,可能是真的零损耗,也可能是漏导。
+          两者必须能分辨,所以空期照样占一列。环比取最后两期的损耗率差(百分点);
+          任一期损耗率不可算时不给环比,**不拿 0 当基准**。
+        </p>
+        <div className="tbl-scroll">
+          <table className="tbl" data-testid="scrap-trend">
+            <thead>
+              <tr>
+                <th>{DIMENSIONS.find((d) => d.key === trendDim)?.label.replace("按", "")}</th>
+                {trendPeriods.map((p) => (
+                  <th key={p} className="num">
+                    {p}
+                  </th>
+                ))}
+                <th className="num">环比(百分点)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trend.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={trendPeriods.length + 2}
+                    className="muted small"
+                    style={{ textAlign: "center", padding: 24 }}
+                  >
+                    最近 {trendPeriods.length} 期没有损耗数据
+                  </td>
+                </tr>
+              ) : (
+                trend.map((t) => (
+                  <tr key={t.key}>
+                    <td className="small">
+                      {t.isUnknown ? (
+                        <Badge tone="gray">未填</Badge>
+                      ) : trendDim === "customerId" ? (
+                        (customerName.get(t.key) ?? t.key)
+                      ) : (
+                        t.key
+                      )}
+                    </td>
+                    {t.cells.map((c) => (
+                      <td key={c.period} className="num small">
+                        {c.scrapRate === null ? (
+                          <span className="muted">-</span>
+                        ) : (
+                          `${(Number(c.scrapRate) * 100).toFixed(2)}%`
+                        )}
+                        <div className="muted">{c.scrapQty}</div>
+                      </td>
+                    ))}
+                    <td className="num">
+                      {t.rateDeltaPoints === null ? (
+                        <span className="muted">不可算</span>
+                      ) : (
+                        <span
+                          style={{
+                            color: Number(t.rateDeltaPoints) > 0 ? "var(--red)" : undefined,
+                          }}
+                        >
+                          {Number(t.rateDeltaPoints) > 0 ? "+" : ""}
+                          {t.rateDeltaPoints}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
