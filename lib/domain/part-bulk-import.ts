@@ -17,7 +17,9 @@ import { normalizeInternalPn } from "./part-create";
 export type PartImportField =
   | "internalPn" | "mpn" | "manufacturer" | "description" | "descriptionEn"
   | "categoryL1" | "categoryL2" | "footprint" | "brand"
-  | "msl" | "packaging" | "reelQty" | "moq" | "spq" | "leadTimeDays" | "note";
+  | "msl" | "packaging" | "reelQty" | "moq" | "spq" | "leadTimeDays" | "note"
+  // N-12:标准成本(STD 价)。损耗报告按金额分析靠它,由客户在主数据里维护。
+  | "standardCost" | "standardCostCurrency";
 
 const SYNONYMS: Record<PartImportField, readonly string[]> = {
   internalPn: ["internalpn", "internal part number", "内部料号", "料号", "物料编码"],
@@ -29,6 +31,8 @@ const SYNONYMS: Record<PartImportField, readonly string[]> = {
   categoryL2: ["subcategory", "二级分类", "细分类"],
   footprint: ["footprint", "package", "封装"],
   brand: ["brand", "品牌"],
+  standardCost: ["standardcost", "std price", "stdprice", "标准价", "标准成本", "std 价格", "std价格"],
+  standardCostCurrency: ["standardcostcurrency", "标准价币种", "标准成本币种", "std 币种"],
   msl: ["msl", "湿敏等级"],
   packaging: ["packaging", "包装", "包装方式"],
   reelQty: ["reelqty", "盘装数量", "每盘数量"],
@@ -43,9 +47,22 @@ const FIELD_LABEL: Record<PartImportField, string> = {
   descriptionEn: "英文描述", categoryL1: "物料分类", categoryL2: "二级分类",
   footprint: "封装", brand: "品牌", msl: "MSL", packaging: "包装方式",
   reelQty: "盘装数量", moq: "MOQ", spq: "SPQ", leadTimeDays: "交期(天)", note: "备注",
+  standardCost: "标准价(STD)", standardCostCurrency: "标准价币种",
 };
 
 const REQUIRED: readonly PartImportField[] = ["internalPn", "mpn"];
+
+/**
+ * 金额类字段保留**原始字符串**交给 Decimal,不经 Number ——
+ * 走一遭 number 会在 0.1 这类值上引入误差,而标准价会乘进损耗金额。
+ * 非数字或负数返回 null(缺价),不静默变 0。
+ */
+function decimalStringOrNull(v: string): string | null {
+  const t = v.trim().replace(/,/g, "");
+  if (t === "") return null;
+  if (!/^\d+(\.\d+)?$/.test(t)) return null;
+  return t;
+}
 
 export interface ParsedImportRow {
   rowNo: number;
@@ -65,6 +82,9 @@ export interface ParsedImportRow {
   spq: number | null;
   leadTimeDays: number | null;
   note: string | null;
+  /** N-12 标准价(STD)。**保留原始字符串**,不转 number —— 金额要用 Decimal 算 */
+  standardCost: string | null;
+  standardCostCurrency: string | null;
 }
 
 export interface PartImportParseResult {
@@ -184,6 +204,8 @@ export function parsePartImportGrid(rawGrid: string[][]): PartImportParseResult 
       spq: intOrNull(get("spq")),
       leadTimeDays: intOrNull(get("leadTimeDays")),
       note: get("note").trim() || null,
+      standardCost: decimalStringOrNull(get("standardCost")),
+      standardCostCurrency: get("standardCostCurrency").trim().toUpperCase() || null,
     });
   }
 

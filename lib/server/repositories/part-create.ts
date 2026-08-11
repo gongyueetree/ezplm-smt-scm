@@ -424,6 +424,9 @@ export async function bulkCreateParts(
             categoryL1: r.categoryL1,
             categoryL2: r.categoryL2,
             footprint: r.footprint,
+            // N-12:标准价随主数据导入;没填就留空,损耗报告会显示「未维护」而不是按 0 算
+            standardCost: r.standardCost,
+            standardCostCurrency: r.standardCostCurrency,
             origin: "IMPORTED",
             status: "ACTIVE",
             sourcedFrom: "LOCAL",
