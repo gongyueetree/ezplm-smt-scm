@@ -1628,10 +1628,35 @@ model PurchaseRequest {
   mpn           String?
   /// 申请数量(GTB 确定性函数输出;核算过程存快照)
   qty           Decimal               @db.Decimal(18, 4)
-  /// GTB 核算快照(需求/损耗率/库存/在途/MOQ/SPQ 圆整过程)
+  /// GTB 核算快照(需求/损耗率/库存/Excess/在途/MOQ/SPQ 圆整过程)
   gtbSnapshot   Json?
   status        PurchaseRequestStatus @default(DRAFT)
   note          String?
+
+  /*
+   * PR2-PROC-05:客户点名要在申请单行上看到的字段。
+   * 全部**可空**:数据源缺失时页面显示「未知/未接入」,不回落成 0 或空串 ——
+   * 采购申请是下单依据,一个凭空的 0 会直接变成买错量。
+   */
+  /// 内部料号 / 制造商 —— 与 mpn 一起构成"买的到底是哪颗料"
+  internalPn        String?
+  manufacturer      String?
+  /// 需求量与需求日期(区别于经 GTB 圆整后的 qty)
+  demandQty         Decimal?  @db.Decimal(18, 4)
+  requiredDate      DateTime?
+  /// 归属客户与项目 —— 跨客户占用 Excess 是业务事故,必须能分辨
+  customerId        String?
+  projectCode       String?
+  /// 核算当时的快照量(**冻结值**,不随库存变动改写,否则事后无法复核)
+  internalInventory Decimal?  @db.Decimal(18, 4)
+  excessQty         Decimal?  @db.Decimal(18, 4)
+  openPoQty         Decimal?  @db.Decimal(18, 4)
+  eta               DateTime?
+  /// 选定供应商与最终采购决策(由采购在比价后回填)
+  supplierId        String?
+  selectedBuyQty    Decimal?  @db.Decimal(18, 4)
+  approvedUnitPrice Decimal?  @db.Decimal(18, 6)
+  currency          String?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
@@ -1837,6 +1862,59 @@ model QuoteBatchUpdateJob {
 ///
 /// 数据主权:真正的投料/报废数据在 MES/ERP,本系统没有工单投料。
 /// 一期做「导入 + 分析 + 按模板导出」,来源如实记为 IMPORTED,不假装是系统自己算出来的。
+/// Excess(呆滞/多余料)来源。PR2-PROC-05-D。
+/// **没有 NONE 之外的默认** —— 未配置时系统显示「数据源未配置」,绝不编数。
+enum ExcessSource {
+  EXCEL_IMPORT
+  ERP
+  MANUAL
+}
+
+/// Excess 快照:一次导入/同步 = 一个快照。
+/// 快照式而非可变表 —— 「上个月说有 500 可用」必须能复现,
+/// 否则事后无法解释当时为什么少买了。
+model ExcessSnapshot {
+  tenantId    String
+  id          String       @id @default(cuid())
+  source      ExcessSource
+  /// 快照对应的业务时点(不是导入时刻)
+  snapshotAt  DateTime
+  /// 来自导入作业时关联;ERP 同步或人工录入为空
+  importJobId String?
+  note        String?
+  createdById String
+  createdAt   DateTime     @default(now())
+
+  lines ExcessLine[]
+
+  @@index([tenantId, snapshotAt])
+}
+
+/// Excess 明细行。
+///
+/// customerId 可空 = 通用库存;非空 = **客供料或专属该客户**。
+/// 跨客户占用是业务事故,所以系统只提示可用量,占用与否由 PM 人工确认
+/// (见 lib/domain/gtb.ts:excessQty 的说明)。
+model ExcessLine {
+  tenantId     String
+  id           String         @id @default(cuid())
+  snapshotId   String
+  snapshot     ExcessSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  /// 归属客户;为空表示不限客户
+  customerId   String?
+  partId       String?
+  internalPn   String?
+  mpn          String?
+  /// 账面数量
+  qty          Decimal        @db.Decimal(18, 4)
+  /// 其中**可动用**的数量(可能小于账面:部分已被锁定/待报废)
+  availableQty Decimal        @db.Decimal(18, 4)
+  notes        String?
+
+  @@index([tenantId, mpn])
+  @@index([tenantId, customerId])
+}
+
 model ScrapRecord {
   id          String   @id @default(cuid())
   tenantId    String

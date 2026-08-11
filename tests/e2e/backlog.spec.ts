@@ -18,15 +18,21 @@ async function login(page: Page, email: string) {
   await page.waitForURL("**/");
 }
 
-test("B1 采购申请单:GTB 试算展示完整过程并标注损耗率待确认", async ({ page }) => {
-  await login(page, "procurement@demo.qianchuang.cn");
+test("B1 采购申请单:建议采购量试算展示完整过程并标注损耗率待确认", async ({ page }) => {
+  /*
+   * PR2-PROC-05-A 之后,**提交**采购申请是 PM 的动作(客户原话:申请单应由 PM 递交)。
+   * 本用例测的正是"试算 → 提交"这条链,所以改用 PM 账号 ——
+   * 这是随客户要求的归属变更而调整,不是为了让测试变绿。
+   * 「采购能试算但不能提交」由 tests/e2e/pr-a-purchase-request.spec.ts 单独覆盖。
+   */
+  await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/procurement/request");
 
   await page.getByLabel("需求数量").fill("1000");
   await page.getByLabel("损耗率(0.02 = 2%,待甲方确认)").fill("0.02");
   await page.getByLabel("MOQ(可空)").fill("500");
   await page.getByLabel("SPQ(可空)").fill("250");
-  await page.getByRole("button", { name: "试算 GTB" }).click();
+  await page.getByRole("button", { name: "试算建议采购量" }).click();
 
   // 1000 × 1.02 = 1020(向上取整)
   await expect(page.locator(".kpi", { hasText: "毛需求" })).toContainText("1020");
@@ -37,7 +43,11 @@ test("B1 采购申请单:GTB 试算展示完整过程并标注损耗率待确认
   await expect(page.getByText(/净需求 =/)).toBeVisible();
 
   await page.getByRole("button", { name: "提交采购申请" }).click();
-  await expect(page.locator("table.tbl tbody tr").first()).toContainText("PR-");
+  // 页面上现在有两张表(公式拆解 + 申请记录),裸 table.tbl 会命中拆解表。
+  // 断言内容不变,只把定位器收窄到「申请记录」卡片。
+  await expect(
+    page.locator(".card", { hasText: "申请记录" }).locator("table.tbl tbody tr").first(),
+  ).toContainText("PR-");
 });
 
 test("B3 采购策略:未确认口径标注为非正式风控,保存后生效", async ({ page }) => {
