@@ -6,6 +6,7 @@ import { getOpoDashboard } from "@/lib/server/repositories/opo";
 import { getSession } from "@/lib/server/session";
 import { OpoActions } from "./actions";
 import { MpnLink } from "@/components/ui/mpn-link";
+import { formatDate } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -78,31 +79,43 @@ export default async function OpoPage() {
         <div className="tbl-scroll">
           <table className="tbl">
             <thead>
+              {/*
+                S-6(客户 PR2 反馈 采购-8B:「要 show 出供应商,并显示 request date」)。
+                这张卡片标题就叫「未回复供应商」,表里却没有供应商列 ——
+                催谁都看不出来。request date(需求日期)同理:没有它就判断不了
+                这条未回复到底急不急。
+              */}
               <tr>
+                <th>供应商</th>
                 <th>PO</th>
                 <th className="num">行</th>
                 <th>MPN</th>
                 <th className="num">未交量</th>
+                <th>需求日期</th>
                 <th>ERP 承诺</th>
               </tr>
             </thead>
             <tbody>
               {noReply.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="muted small" style={{ textAlign: "center", padding: 20 }}>
+                  <td colSpan={7} className="muted small" style={{ textAlign: "center", padding: 20 }}>
                     全部已回复
                   </td>
                 </tr>
               ) : (
                 noReply.map((l) => (
                   <tr key={l.id}>
+                    <td className="small">
+                      {l.supplierName ?? <span className="muted">未知供应商</span>}
+                    </td>
                     <td className="mono small">{l.poNo}</td>
                     <td className="num">{l.lineNo}</td>
                     <td className="small">
                       <MpnLink mpn={l.mpn} />
                     </td>
                     <td className="num">{l.qtyOpen}</td>
-                    <td className="small">{l.promiseDate?.slice(0, 10) ?? "-"}</td>
+                    <td className="small">{formatDate(l.needDate)}</td>
+                    <td className="small">{formatDate(l.promiseDate)}</td>
                   </tr>
                 ))
               )}

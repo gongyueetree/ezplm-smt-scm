@@ -53,6 +53,16 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
   const [rfqId, setRfqId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * D-4:后端在列映射失败时**已经返回**缺哪列、认出了哪些列、前几行预览,
+   * 原先前端只显示 body.error 一句话,这些全丢了 —— 客户既不知道缺什么,
+   * 也不知道系统到底读懂了多少,只能猜是不是格式不兼容。
+   */
+  const [mappingHelp, setMappingHelp] = useState<{
+    missingFields: string[];
+    detectedFields: string[];
+    preview: string[][];
+  } | null>(null);
   const [result, setResult] = useState<ImportResponse | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [degraded, setDegraded] = useState<{ provider: string; kind: string; message: string }[]>([]);
@@ -65,6 +75,7 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
     }
     setBusy(true);
     setError(null);
+    setMappingHelp(null);
     setResult(null);
     setProgress(null);
     setDegraded([]);
@@ -76,6 +87,13 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         setError(body?.error ?? "导入失败");
+        if (Array.isArray(body?.missingFields) && body.missingFields.length > 0) {
+          setMappingHelp({
+            missingFields: body.missingFields as string[],
+            detectedFields: (body.detectedFields as string[]) ?? [],
+            preview: (body.preview as string[][]) ?? [],
+          });
+        }
         return;
       }
       setResult(body as ImportResponse);
@@ -131,6 +149,40 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
         {error ? (
           <div className="banner warn" style={{ marginTop: 12 }} role="alert">
             {error}
+          </div>
+        ) : null}
+
+        {mappingHelp ? (
+          <div style={{ marginTop: 10 }} data-testid="mapping-help">
+            <div className="small">
+              <b>没认出的列:</b>
+              {mappingHelp.missingFields.join("、")}
+            </div>
+            {mappingHelp.detectedFields.length > 0 ? (
+              <div className="small muted" style={{ marginTop: 2 }}>
+                已认出:{mappingHelp.detectedFields.join("、")} —— 文件本身能读,只差上面这些列。
+              </div>
+            ) : null}
+            {mappingHelp.preview.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <div className="small muted">文件前几行(用来对照表头写法):</div>
+                <div className="tbl-scroll">
+                  <table className="tbl">
+                    <tbody>
+                      {mappingHelp.preview.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j} className="small">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </Card>

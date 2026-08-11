@@ -10,6 +10,7 @@ import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { SaveCompareRun } from "./save-run";
+import { VersionPicker } from "./version-picker";
 import { formatDateTime } from "@/lib/format/datetime";
 
 export const dynamic = "force-dynamic";
@@ -50,12 +51,27 @@ export default async function BomComparePage({
   const { from, to } = await searchParams;
   const session = (await getSession())!;
 
-  const versions = await prisma.bOMVersion.findMany({
+  /*
+   * D-3:版本列表原来固定 take: 50 且**触顶时无人知晓** —— 版本超过 50 个,
+   * 旧版本就再也选不到,而页面看不出少了东西。多取一条判断是否触顶,
+   * 触顶就如实说,别让人以为"这个版本不存在"。
+   */
+  const VERSION_CAP = 50;
+  const versionRows = await prisma.bOMVersion.findMany({
     where: tenantWhere(session.tenantId),
     orderBy: { createdAt: "desc" },
     include: { bom: { select: { name: true } } },
-    take: 50,
+    take: VERSION_CAP + 1,
   });
+  const versionsTruncated = versionRows.length > VERSION_CAP;
+  const versions = versionsTruncated ? versionRows.slice(0, VERSION_CAP) : versionRows;
+  const versionTruncatedNotice = versionsTruncated
+    ? `版本数超过 ${VERSION_CAP} 个,这里只列出最近 ${VERSION_CAP} 个。更早的版本请从 BOM 台账进入比对。`
+    : null;
+  const versionOptions = versions.map((v) => ({
+    id: v.id,
+    label: `${v.bom.name} V${v.versionNo}(${formatDateTime(v.createdAt)})`,
+  }));
 
   const runs = await prisma.bomCompareRun.findMany({
     where: tenantWhere(session.tenantId),
@@ -137,8 +153,14 @@ export default async function BomComparePage({
             </span>
           )}
         </Banner>
+        <VersionPicker
+          versions={versionOptions}
+          from={from}
+          to={to}
+          truncatedNotice={versionTruncatedNotice}
+        />
         <Ledger />
-        <Card title="可选版本" sub={`${versions.length} 个`} flush>
+        <Card title="可选版本" sub={`${versions.length} 个 · 也可直接在上方下拉里选`} flush>
           <div className="tbl-scroll">
             <table className="tbl">
               <thead>
@@ -191,6 +213,13 @@ export default async function BomComparePage({
       <Card title="本次比对" sub="比对结果可存入台账留档">
         <SaveCompareRun from={from} to={to} />
       </Card>
+      {/* 看完一对之后往往要换一对 —— 不该逼人退回去重新走一遍 */}
+      <VersionPicker
+        versions={versionOptions}
+        from={from}
+        to={to}
+        truncatedNotice={versionTruncatedNotice}
+      />
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label">新增</div>
