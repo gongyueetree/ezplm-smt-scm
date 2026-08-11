@@ -87,6 +87,17 @@ export function PolicyForm({ policy, readOnly }: { policy: PolicyView; readOnly:
           />
           <span style={{ marginBottom: 0 }}>口径已业务确认(勾选后不再显示「非正式风控」提示)</span>
         </label>
+        {/*
+          N-9.A(客户 PR2 反馈 采购-6A:「是否应用到 PO 中?」)。
+          答案是**已经应用**了 —— 采购订单在价格复核与提交时就用这套阈值判异常
+          (lib/server/repositories/purchase-order.ts::loadPolicy)。
+          客户会这么问,是因为页面上从没说过。写清楚,省得靠猜。
+        */}
+        <div className="banner soft" data-testid="policy-scope-note">
+          这套阈值**已应用到采购订单**:新建/复核 PO 时按价格线、交期线与涨幅线逐行判异常,
+          未处理的异常会挡住提交复核。也用于线下报价导入时<b>固化原始异常集合</b>
+          (导入后调阈值不改写既有标记)。
+        </div>
         {error ? <div className="banner warn" role="alert">{error}</div> : null}
         {info ? <div className="banner info" role="status">{info}</div> : null}
         {!readOnly ? (
