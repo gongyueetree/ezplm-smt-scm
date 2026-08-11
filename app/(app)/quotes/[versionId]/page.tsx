@@ -18,6 +18,7 @@ import { tenantWhere } from "@/lib/server/tenant-scope";
 import { getSession } from "@/lib/server/session";
 import { QuoteEditor } from "./editor";
 import { formatDate } from "@/lib/format/datetime";
+import Decimal from "decimal.js";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,16 @@ export default async function QuoteVersionPage({
   const unconfirmed = version.lines.filter((l) => !l.categoryConfirmed).map((l) => l.lineNo);
   const transitions = availableQuoteTransitions(status, session.roles);
 
+  /*
+   * 人工合计 = LABOR + SMT + DIP + TEST。
+   * 用 Decimal 相加 —— 金额一律不走浮点(CLAUDE.md:价格由确定性函数计算)。
+   */
+  const LABOR_PARTS = ["LABOR", "SMT", "DIP", "TEST"] as const;
+  const laborTotal = LABOR_PARTS.reduce(
+    (sum, c) => sum.plus(new Decimal(live.byCategory[c] ?? "0")),
+    new Decimal(0),
+  ).toFixed(2);
+
   return (
     <div>
       <BackLink href="/quotes" label="报价管理" />
@@ -93,13 +104,28 @@ export default async function QuoteVersionPage({
         </Banner>
       ) : null}
 
+      {/*
+        S-1(客户 PR2 反馈 PM-7:「无需在抬头显示 DIP 或 SMT,在下拉菜单中显示即可」)。
+        SMT / DIP / 测试都是**人工的细分**,占着抬头位置反而把「材料 / 人工 / 管理费」
+        这三个真正要看的数字挤没了。抬头只留三项,细分挂在人工下面显示 ——
+        **不是把它们藏起来**:金额照旧参与合计,行明细里也仍按各自分类标注。
+      */}
       <div className="kpi-grid">
-        {(["MATERIAL", "LABOR", "SMT", "DIP", "TEST", "OVERHEAD"] as const).map((c) => (
-          <div className="kpi" key={c}>
-            <div className="kpi-label">{CATEGORY_LABELS[c]}</div>
-            <div className="kpi-value">{live.byCategory[c]}</div>
+        <div className="kpi">
+          <div className="kpi-label">{CATEGORY_LABELS.MATERIAL}</div>
+          <div className="kpi-value">{live.byCategory.MATERIAL}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">人工合计</div>
+          <div className="kpi-value">{laborTotal}</div>
+          <div className="kpi-foot">
+            {LABOR_PARTS.map((c) => `${CATEGORY_LABELS[c]} ${live.byCategory[c]}`).join(" · ")}
           </div>
-        ))}
+        </div>
+        <div className="kpi">
+          <div className="kpi-label">{CATEGORY_LABELS.OVERHEAD}</div>
+          <div className="kpi-value">{live.byCategory.OVERHEAD}</div>
+        </div>
         <div className="kpi">
           <div className="kpi-label">总价({version.currency})</div>
           <div className="kpi-value">{live.grandTotal}</div>
@@ -125,6 +151,26 @@ export default async function QuoteVersionPage({
             <Badge tone="gray">不可导出</Badge> {exportSource.message}
           </p>
         )}
+        {/*
+          S-2(客户 PR2 反馈 PM-8:「最后生成报价单不知在哪里生成」)。
+          这张卡片叫「正式导出」却只有文字,真正的按钮埋在页面最下方的
+          「状态与流转」按钮堆里 —— 找不到是必然的。把入口放回它该在的地方。
+        */}
+        {exportSource.ok ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            <a className="btn primary" href={`/api/quotes/${version.id}/export`}>
+              导出 XLSX(取快照)
+            </a>
+            <a
+              className="btn"
+              href={`/quotes/${version.id}/print`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              打印视图 / 另存为 PDF
+            </a>
+          </div>
+        ) : null}
       </Card>
 
       <QuoteEditor
@@ -150,7 +196,6 @@ export default async function QuoteVersionPage({
         }))}
         summaryLines={live.lines}
         bomVersions={bomVersions.map((b) => ({ id: b.id, label: `${b.bom.name} V${b.versionNo}` }))}
-        canExport={exportSource.ok}
       />
     </div>
   );

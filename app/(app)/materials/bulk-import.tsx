@@ -79,8 +79,9 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
 
   if (!open) {
     return (
+      // S-3:页头上和「新建物料」并排时,只写「批量导入」指代不清 —— 导入什么?
       <button className="btn" onClick={() => setOpen(true)}>
-        批量导入
+        批量导入物料
       </button>
     );
   }
