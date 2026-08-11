@@ -67,6 +67,8 @@ export const PURGE_MODELS = [
   "AlternateSelection",
 
   // ---- 客户报价 ----
+  // 分项任务随报价一起清:它挂在具体某张报价的某个版本上,留着就是孤儿
+  "QuoteComponentTask",
   "QuoteBatchUpdateJob",
   "QuoteApproval",
   "QuoteLine",
@@ -159,6 +161,8 @@ export const KEEP_MODELS = [
 
   // ---- 配置与模板 ----
   "QuoteTemplate",
+  // NRE 项目字典属**配置**(客户提供的标准清单),不是测试期单据 —— 清库保留
+  "NreItemDefinition",
   "ProcurementPolicy",
   "ScrapExportTemplate",
   "ErpConnection",

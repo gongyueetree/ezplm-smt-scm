@@ -16,8 +16,14 @@ export interface QuoteStats {
   byStatus: Record<QuoteStatRow["status"], number>;
   /** 已批准金额合计(仅统计同币种;异币种不合并) */
   approvedAmountByCurrency: Record<string, string>;
-  /** 转化率 = 已批准 / (已批准 + 已退回 + 已过期);无终局版本时为 null 而非 0 */
-  conversionRate: number | null;
+  /**
+   * **内部审批通过率** = 已批准 /(已批准 + 已退回 + 已过期);无终局版本时为 null 而非 0。
+   *
+   * 注意这**不是订单转化率**。以前它顶着「转化率」的名字挂在管理看板上,
+   * 会让人以为报出去的价大多成了单 —— 实际上它只说明我们内部审批通过了多少。
+   * 真正的订单转化率见 `lib/domain/quote-outcome.ts`(靠人工标记中标)。
+   */
+  approvalPassRate: number | null;
 }
 
 function addDecimalStrings(a: string, b: string): string {
@@ -51,8 +57,8 @@ export function deriveQuoteStats(rows: readonly QuoteStatRow[]): QuoteStats {
     total: rows.length,
     byStatus,
     approvedAmountByCurrency,
-    // 没有任何终局版本时转化率无定义 —— 返回 null,不显示成 0%
-    conversionRate: settled === 0 ? null : Number((byStatus.APPROVED / settled).toFixed(4)),
+    // 没有任何终局版本时无定义 —— 返回 null,不显示成 0%
+    approvalPassRate: settled === 0 ? null : Number((byStatus.APPROVED / settled).toFixed(4)),
   };
 }
 

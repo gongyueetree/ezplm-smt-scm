@@ -25,6 +25,7 @@ import {
   type QuoteSnapshot,
   type QuoteStatusValue,
 } from "@/lib/domain/quote-status";
+import { checkTasksBeforeSubmit, type TaskRow } from "@/lib/domain/quote-tasks";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import { pickQuoteTemplate } from "@/lib/domain/quote-template";
@@ -367,6 +368,21 @@ export async function submitQuoteForApproval(
       message: check.message,
       unconfirmedLines: check.code === "categories_unconfirmed" ? check.unconfirmedLines : undefined,
     };
+  }
+
+  /*
+   * PR-D:被 PM 勾成「必须完成」的分项任务没回来之前不许提交。
+   * 只拦勾了的 —— 什么算关键项由派工人决定,系统不替业务发明规则。
+   */
+  const tasks = await prisma.quoteComponentTask.findMany({
+    where: tenantWhere(session.tenantId, { quoteVersionId: versionId }),
+    select: { status: true, required: true },
+  });
+  const taskCheck = checkTasksBeforeSubmit(
+    tasks.map((t) => ({ status: t.status as TaskRow["status"], required: t.required })),
+  );
+  if (!taskCheck.ok) {
+    return { ok: false, code: taskCheck.code, message: taskCheck.message };
   }
 
   const summary = summarizeQuote(toCalcLines(version.lines), { currency: version.currency });

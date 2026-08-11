@@ -40,17 +40,21 @@ describe("报价统计(SPEC §16 管理层报价汇总 + 转化率)", () => {
     expect(s.approvedAmountByCurrency).toEqual({ CNY: "100.00", USD: "50.00" });
   });
 
-  it("转化率 = 已批准 /(已批准+已退回+已过期)", () => {
-    expect(deriveQuoteStats(rows).conversionRate).toBe(0.6667);
+  /*
+   * PR-D 改名:这个指标一直算的是**内部审批通过率**,却顶着「转化率」的名字
+   * 挂在管理看板上。真正的订单转化率靠人工标记中标,见 quote-outcome.ts。
+   */
+  it("审批通过率 = 已批准 /(已批准+已退回+已过期)", () => {
+    expect(deriveQuoteStats(rows).approvalPassRate).toBe(0.6667);
   });
 
-  it("无终局版本时转化率为 null,不显示成 0%", () => {
+  it("无终局版本时审批通过率为 null,不显示成 0%", () => {
     const s = deriveQuoteStats([{ status: "DRAFT", grandTotal: null, currency: "CNY" }]);
-    expect(s.conversionRate).toBeNull();
+    expect(s.approvalPassRate).toBeNull();
   });
 
   it("空集合安全", () => {
-    expect(deriveQuoteStats([])).toMatchObject({ total: 0, conversionRate: null });
+    expect(deriveQuoteStats([])).toMatchObject({ total: 0, approvalPassRate: null });
   });
 });
 

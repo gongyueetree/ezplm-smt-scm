@@ -147,9 +147,14 @@ test("管理工作台 KPI 由明细派生且可下钻", async ({ page }) => {
   await expect(page.locator(".banner")).toContainText("冻结快照");
   await expect(page.locator(".banner")).toContainText("不代表实时库存");
 
-  // 无终局报价版本时转化率显示 — 而不是 0%
-  const conv = page.locator(".kpi", { hasText: "报价转化率" });
-  await expect(conv).toBeVisible();
+  /*
+   * PR-D:原来只有一张「报价转化率」卡片,算的却是 已批准/终局版本 ——
+   * 那是内部审批通过率。现在拆成两张,含义各自写清楚。
+   */
+  await expect(page.locator(".kpi", { hasText: "订单转化率" })).toBeVisible();
+  await expect(page.locator(".kpi", { hasText: "审批通过率" })).toBeVisible();
+  // 无定局报价时显示 —,而不是 0%
+  await expect(page.locator(".kpi", { hasText: "订单转化率" })).not.toContainText("0.0%");
 
   // KPI 可点击下钻
   await page.locator(".kpi", { hasText: "OPO 异常行" }).click();
