@@ -163,7 +163,11 @@ test("库存页:DC 未知单列,不并入最新库龄区间", async ({ page }) =
   const agingTable = page.locator(".card", { hasText: "DC Aging 分布" }).locator("table.tbl");
   await expect(agingTable).toContainText("DC 未知");
   await expect(agingTable.locator(".badge", { hasText: "不并入任何区间" })).toBeVisible();
-  await expect(page.locator(".banner")).toContainText("不代表实时库存");
+  // N-11 之后页面可能同时有「物料数超上限」的截断横幅,裸 .banner 会命中两个。
+  // 断言内容不变,只把定位器收窄到那条口径说明本身。
+  await expect(
+    page.locator(".banner").filter({ hasText: "库存与呆滞数据来自 ezPLM" }),
+  ).toContainText("不代表实时库存");
 });
 
 /* ============================================================

@@ -6,7 +6,7 @@
  * 预览与执行分离:先看清楚会建多少、撞多少、疑似多少,再决定要不要写。
  * **疑似重复默认不建** —— 要建必须显式勾选,与手工建料同一套口径。
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -44,17 +44,40 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /*
+   * 预览回执。接口在 PREVIEW 时返回 note:「预览只计算计划,**未创建任何物料**」,
+   * 原先前端只在 EXECUTE 时用 note,预览的这句**从没显示过** ——
+   * 使用者只能靠"我按了哪个按钮"来判断有没有写库,这正是本项目要避免的诚实 UI 问题。
+   */
+  const [previewNote, setPreviewNote] = useState<string | null>(null);
+  /*
+   * N-3:客户要「以附件(比如 xls)选择进行,不以文本形式导入」。
+   * 文件优先;没选文件时仍可粘贴 —— 旧路径不删,有人已经习惯粘贴。
+   */
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   async function run(mode: "PREVIEW" | "EXECUTE") {
     setBusy(mode);
     setError(null);
     setDone(null);
+    setPreviewNote(null);
     try {
-      const res = await fetch("/api/materials/parts/bulk-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, mode, includeSuspected }),
-      });
+      const picked = fileRef.current?.files?.[0] ?? null;
+      let res: Response;
+      if (picked) {
+        const fd = new FormData();
+        fd.append("file", picked);
+        fd.append("mode", mode);
+        fd.append("includeSuspected", String(includeSuspected));
+        res = await fetch("/api/materials/parts/bulk-import", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/materials/parts/bulk-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, mode, includeSuspected }),
+        });
+      }
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         setError(body?.error ?? "导入失败");
@@ -66,6 +89,7 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
       setPlan(body.plan);
       setErrors(body.errors ?? []);
       setNotices(body.notices ?? []);
+      setPreviewNote(mode === "PREVIEW" ? (body.note ?? null) : null);
       if (mode === "EXECUTE") {
         setDone(`已创建 ${body.created} 条${body.note ? ` · ${body.note}` : ""}`);
         router.refresh();
@@ -87,9 +111,24 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
   }
 
   return (
-    <Card title="批量导入物料" sub="从自有系统导出的表格整块粘贴 · 预览后再执行">
+    <Card title="批量导入物料" sub="上传 xlsx/csv 附件,或整块粘贴 · 预览后再执行">
       <label className="fld">
-        <span>粘贴表格(必需列:内部料号、MPN)</span>
+        <span>选择文件(xlsx / csv,必需列:内部料号、MPN)</span>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xlsm,.xls,.csv,.txt"
+          onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+        />
+        <span className="small muted">
+          选了文件就以文件为准,下面的粘贴框会被忽略。
+        </span>
+      </label>
+
+      <label className="fld">
+        <span>
+          或粘贴表格{fileName ? "(已选文件,本框忽略)" : "(必需列:内部料号、MPN)"}
+        </span>
         <textarea
           rows={7}
           value={text}
@@ -102,7 +141,7 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
         <button className="btn xs" onClick={() => setText(IMPORT_TEMPLATE_HEADERS.join(","))}>
           填入表头模板
         </button>
-        <button className="btn" disabled={busy !== null || !text.trim()} onClick={() => void run("PREVIEW")}>
+        <button className="btn" disabled={busy !== null || (!text.trim() && !fileName)} onClick={() => void run("PREVIEW")}>
           {busy === "PREVIEW" ? "预览中…" : "预览"}
         </button>
         <label style={{ display: "flex", gap: 5, alignItems: "center" }}>
@@ -161,6 +200,11 @@ export function BulkImportParts({ canCreate }: { canCreate: boolean }) {
 
       {plan ? (
         <div style={{ marginTop: 10 }} data-testid="bulk-plan">
+          {previewNote ? (
+            <div className="banner soft" data-testid="preview-note">
+              {previewNote}
+            </div>
+          ) : null}
           <div className="banner soft">
             将创建 <b>{plan.willCreate}</b> · 阻断{" "}
             <b style={{ color: "var(--danger)" }}>{plan.blocked}</b> · 疑似重复{" "}

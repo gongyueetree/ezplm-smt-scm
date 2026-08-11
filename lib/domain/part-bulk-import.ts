@@ -97,6 +97,18 @@ export function parsePartImport(text: string): PartImportParseResult {
   const grid = parseCsv(trimmed, detectDelimiter(trimmed)).filter((r) =>
     r.some((c) => c.trim() !== ""),
   );
+  return parsePartImportGrid(grid);
+}
+
+/**
+ * N-3(客户 PR2 反馈 采购-1d:「批量导入物料以附件(比如 xls)选择进行,不以文本形式进行导入」)。
+ *
+ * 从**已经是二维网格**的数据继续解析 —— 粘贴文本与上传 xlsx/csv 走的是
+ * 同一条列映射 + 校验 + 人工确认链路,只是拿到网格的方式不同。
+ * 不为附件另写一套解析:两套逻辑迟早会在"同一份数据两种结论"上分叉。
+ */
+export function parsePartImportGrid(rawGrid: string[][]): PartImportParseResult {
+  const grid = rawGrid.filter((r) => r.some((c) => (c ?? "").trim() !== ""));
   if (grid.length === 0) {
     return { mapping: EMPTY, rows: [], errors: [{ row: 0, message: "未能解析出表格" }], notices: [] };
   }
