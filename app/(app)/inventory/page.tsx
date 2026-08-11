@@ -58,14 +58,22 @@ export default async function InventoryPage({
     partIdFilter = hit.map((h) => h.id);
   }
 
-  const parts = await prisma.part.findMany({
+  /*
+   * N-11:物料上限原为固定 take: 500 且**触顶无人知晓** —— 料超过 500 种时
+   * 后面的直接看不见,而页面显示得像是全部。多取一条探测,触顶如实告知。
+   * (与 A-3 追溯图边、D-3 BOM 版本同一类问题,这是第三处。)
+   */
+  const PART_CAP = 500;
+  const partRows = await prisma.part.findMany({
     where: tenantWhere(
       session.tenantId,
       partIdFilter ? { id: { in: partIdFilter } } : {},
     ),
     orderBy: { internalPn: "asc" },
-    take: 500,
+    take: PART_CAP + 1,
   });
+  const partsTruncated = partRows.length > PART_CAP;
+  const parts = partsTruncated ? partRows.slice(0, PART_CAP) : partRows;
   const snapshots = await prisma.inventorySnapshot.findMany({
     where: tenantWhere(session.tenantId, {
       partId: { in: parts.map((p) => p.id) },
@@ -77,10 +85,58 @@ export default async function InventoryPage({
   const latestByPart = new Map<string, (typeof snapshots)[number]>();
   for (const s of snapshots) if (!latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
 
-  const rows: InventoryAgingRow[] = parts.map((p) => {
+  /*
+   * N-11「显示需求」:**没有直接做成一列**。
+   *
+   * 「需求」在本系统里不是一个已定义的量 —— 要么按某张 BOM × 台数(哪张?几台?),
+   * 要么按 excess report(系统里还没有这份数据)。随便挑一个口径算出来摆上去,
+   * 使用者会当成权威数字用来下单。
+   * 这里先给**口径明确、算得出**的「在途」(已下单未到货 = OpenPOLine + OPOLine 未交量),
+   * 并在页面上写清「需求」待定义。
+   */
+  const partIds = parts.map((p) => p.id);
+  const mpnList = parts.map((p) => p.mpn).filter((m): m is string => !!m);
+  const [openPo, opoLines] = await Promise.all([
+    partIds.length
+      ? prisma.openPOLine.findMany({
+          where: tenantWhere(session.tenantId, { partId: { in: partIds } }),
+          select: { partId: true, qtyOpen: true },
+        })
+      : [],
+    mpnList.length
+      ? prisma.oPOLine.findMany({
+          where: tenantWhere(session.tenantId, { mpn: { in: mpnList } }),
+          select: { mpn: true, qtyOpen: true },
+        })
+      : [],
+  ]);
+  const inTransitByPart = new Map<string, number>();
+  for (const o of openPo) {
+    inTransitByPart.set(o.partId, (inTransitByPart.get(o.partId) ?? 0) + Number(o.qtyOpen));
+  }
+  const inTransitByMpn = new Map<string, number>();
+  for (const o of opoLines) {
+    if (!o.mpn) continue;
+    inTransitByMpn.set(o.mpn, (inTransitByMpn.get(o.mpn) ?? 0) + Number(o.qtyOpen));
+  }
+
+  /*
+   * N-11:客户要「PN」与「所有 MFG&MPN」。这里在既有行上挂三个展示用字段;
+   * InventoryAgingRow 是库龄/呆滞算法的输入类型,不往里加展示字段污染领域层。
+   */
+  type Row = InventoryAgingRow & {
+    internalPn: string;
+    manufacturer: string | null;
+    inTransitQty: number;
+  };
+  const rows: Row[] = parts.map((p) => {
     const snap = latestByPart.get(p.id);
     return {
       partId: p.id,
+      internalPn: p.internalPn,
+      manufacturer: p.manufacturer,
+      inTransitQty:
+        (inTransitByPart.get(p.id) ?? 0) + (p.mpn ? inTransitByMpn.get(p.mpn) ?? 0 : 0),
       mpn: p.mpn,
       qtyOnHand: snap ? Number(snap.qtyOnHand) : 0,
       qtySlowMoving:
@@ -198,14 +254,38 @@ export default async function InventoryPage({
         </div>
       </Card>
 
-      <Card title="物料库存明细" sub={`${rows.length} 条(缓存)`} flush>
+      {partsTruncated ? (
+        <div className="banner warn" role="alert" data-testid="inventory-truncated">
+          物料数超过 {PART_CAP} 种,本页只列出前 {PART_CAP} 种(按内部料号排序)。
+          请用上方的客户筛选缩小范围 —— 否则看到的不是全部。
+        </div>
+      ) : null}
+
+      <Card
+        title="物料库存明细"
+        sub={`${rows.length} 条(缓存)· 在途 = 已下单未到货(采购在途 + OPO 未交)`}
+        flush
+      >
+        <p className="small muted" style={{ padding: "0 16px" }}>
+          {/*
+            N-11 客户还要求「显示需求」。需求在本系统里**不是一个已定义的量**:
+            按哪张 BOM、几台、什么时间窗?excess report 也还没有这份数据。
+            随便挑一个口径算出来摆上去,会被当成权威数字拿去下单 —— 所以先不给,
+            如实说明缺什么。
+          */}
+          「需求」暂未提供:需先定义口径(按哪张 BOM × 几台?还是引入 excess report?)。
+          在此之前不以任何假设口径估算,避免被当成可直接下单的依据。
+        </p>
         <div className="tbl-scroll">
           <table className="tbl">
             <thead>
               <tr>
+                <th>PN</th>
                 <th>MPN</th>
+                <th>制造商</th>
                 <th>DC</th>
                 <th className="num">在库</th>
+                <th className="num">在途</th>
                 <th className="num">呆滞</th>
                 <th>缓存时间</th>
               </tr>
@@ -213,18 +293,21 @@ export default async function InventoryPage({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="muted small" style={{ textAlign: "center", padding: 24 }}>
+                  <td colSpan={8} className="muted small" style={{ textAlign: "center", padding: 24 }}>
                     暂无物料库存缓存
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => (
                   <tr key={r.partId}>
+                    <td className="small mono">{r.internalPn}</td>
                     <td className="small">
                       <MpnLink mpn={r.mpn} />
                     </td>
+                    <td className="small">{r.manufacturer ?? <span className="muted">未知</span>}</td>
                     <td className="small">{r.dateCode ?? <span className="muted">未知</span>}</td>
                     <td className="num">{r.qtyOnHand}</td>
+                    <td className="num">{r.inTransitQty}</td>
                     <td className="num">
                       {r.qtySlowMoving === null ? <span className="muted">未知</span> : r.qtySlowMoving}
                     </td>
