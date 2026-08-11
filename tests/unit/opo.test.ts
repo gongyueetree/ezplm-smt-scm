@@ -21,6 +21,8 @@ function line(patch: Partial<OpoLineView>): OpoLineView {
     poNo: "PO-001",
     lineNo: 1,
     supplierId: "sup-1",
+    supplierName: "示例供应商",
+    supplierCode: "SUP-1",
     mpn: "STM32F103C8T6",
     qtyOrdered: 1000,
     qtyOpen: 1000,
