@@ -8,6 +8,7 @@ import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { PolicyForm, SupplierOfferForm } from "./forms";
+import { BulkOfferImport } from "./bulk-offer-import";
 import { MpnLink } from "@/components/ui/mpn-link";
 
 export const dynamic = "force-dynamic";
@@ -78,9 +79,15 @@ export default async function SuppliersPage() {
       </Card>
 
       {canEdit ? (
-        <SupplierOfferForm
-          suppliers={suppliers.map((s) => ({ id: s.id, label: `${s.code} · ${s.name}` }))}
-        />
+        <>
+          {/* N-9:批量导入与逐条新增并排 —— 供应商预设动辄成百上千条,只有逐条录是不现实的 */}
+          <div style={{ margin: "10px 0" }}>
+            <BulkOfferImport />
+          </div>
+          <SupplierOfferForm
+            suppliers={suppliers.map((s) => ({ id: s.id, label: `${s.code} · ${s.name}` }))}
+          />
+        </>
       ) : null}
 
       <Card title="已维护的供应商预设" sub={`${offers.length} 条`} flush>
