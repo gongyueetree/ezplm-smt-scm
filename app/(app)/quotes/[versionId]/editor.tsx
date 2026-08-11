@@ -271,7 +271,7 @@ export function QuoteEditor({
       </div>
 
       {error ? (
-        <div className="banner warn" role="alert">
+        <div className="banner warn" role="alert" data-testid="quote-editor-error">
           {error}
         </div>
       ) : null}

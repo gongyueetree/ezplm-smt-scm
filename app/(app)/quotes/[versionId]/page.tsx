@@ -17,6 +17,8 @@ import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { getSession } from "@/lib/server/session";
 import { QuoteEditor } from "./editor";
+import { CollabPanel } from "./collab-panel";
+import type { QuoteOutcomeValue } from "@/lib/domain/quote-outcome";
 import { formatDate } from "@/lib/format/datetime";
 import Decimal from "decimal.js";
 
@@ -56,6 +58,25 @@ export default async function QuoteVersionPage({
     take: 20,
   });
   const unconfirmed = version.lines.filter((l) => !l.categoryConfirmed).map((l) => l.lineNo);
+
+  // PR-D:分项派工 / NRE 字典 / 订单结果
+  const [tasks, nreDefs, quote, approvedCount] = await Promise.all([
+    prisma.quoteComponentTask.findMany({
+      where: tenantWhere(session.tenantId, { quoteVersionId: versionId }),
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.nreItemDefinition.findMany({
+      where: tenantWhere(session.tenantId, { active: true }),
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    }),
+    prisma.quote.findFirst({
+      where: tenantWhere(session.tenantId, { id: version.quoteId }),
+      select: { outcome: true, customerOrderNo: true, outcomeNote: true },
+    }),
+    prisma.quoteVersion.count({
+      where: tenantWhere(session.tenantId, { quoteId: version.quoteId, status: "APPROVED" as const }),
+    }),
+  ]);
   const transitions = availableQuoteTransitions(status, session.roles);
 
   /*
@@ -171,6 +192,38 @@ export default async function QuoteVersionPage({
             </a>
           </div>
         ) : null}
+      </Card>
+
+      <Card
+        title="报价协作"
+        sub="分项派工(PM)· NRE 填报(工程,直接回报价)· 订单结果(人工标记)"
+      >
+        <CollabPanel
+          versionId={version.id}
+          frozen={isFrozen(status)}
+          canAssign={session.roles.some((r) => r === "PM" || r === "MANAGEMENT")}
+          canMarkOutcome={session.roles.some((r) => r === "PM" || r === "MANAGEMENT")}
+          tasks={tasks.map((t) => ({
+            id: t.id,
+            kind: t.kind,
+            title: t.title,
+            assignedRole: t.assignedRole,
+            required: t.required,
+            status: t.status,
+            note: t.note,
+          }))}
+          nreDefs={nreDefs.map((d) => ({
+            id: d.id,
+            code: d.code,
+            name: d.name,
+            // 字典没维护默认金额就传 null —— 填报处留空,不显示 0
+            defaultAmount: d.defaultAmount === null ? null : String(d.defaultAmount),
+          }))}
+          outcome={(quote?.outcome ?? "OPEN") as QuoteOutcomeValue}
+          customerOrderNo={quote?.customerOrderNo ?? null}
+          outcomeNote={quote?.outcomeNote ?? null}
+          hasApprovedVersion={approvedCount > 0}
+        />
       </Card>
 
       <QuoteEditor

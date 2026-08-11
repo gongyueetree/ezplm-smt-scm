@@ -1426,20 +1426,40 @@ model PriceBreak {
 
 /// 报价单标识。状态/参数在 QuoteVersion 上(每个修订各有生命周期,避免冗余镜像);
 /// 当前版 = revision 最大的 QuoteVersion,查询派生,不落冗余字段。
+/// 报价的**订单结果**(客户 Q7 答复:人工在报价单上标记「已中标」)。
+/// 与审批状态(QuoteStatus)是两回事:审批通过只说明我们报出去了,
+/// 中标与否要等客户下单 —— 原先把「审批通过率」当「订单转化率」是口径错误。
+enum QuoteOutcome {
+  OPEN
+  WON
+  LOST
+  EXPIRED
+}
+
 model Quote {
-  id          String   @id @default(cuid())
-  tenantId    String
-  code        String
-  rfqId       String
-  customerId  String
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String       @id @default(cuid())
+  tenantId        String
+  code            String
+  rfqId           String
+  customerId      String
+  /// 订单结果;**只能人工标记**,系统不从任何地方推断
+  outcome         QuoteOutcome @default(OPEN)
+  outcomeAt       DateTime?
+  outcomeById     String?
+  /// 中标时的客户订单号(可空:客户不一定当场给得出)
+  customerOrderNo String?
+  /// 标记原因/备注 —— 改判(WON→LOST)时强制填写
+  outcomeNote     String?
+  createdById     String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   versions QuoteVersion[]
+  tasks    QuoteComponentTask[]
 
   @@unique([tenantId, code])
   @@index([tenantId, rfqId])
+  @@index([tenantId, outcome])
 }
 
 /// 报价修订版。
@@ -3094,4 +3114,67 @@ model ApiUsageLog {
   createdAt          DateTime     @default(now())
 
   @@index([tenantId, provider, createdAt])
+}
+
+/// 报价责任拆分(客户 PR2-PM-06:报价由多方分头填,PM 派工)。
+enum QuoteTaskKind {
+  MATERIAL
+  NRE
+  LABOR
+  OTHER
+}
+
+enum QuoteTaskStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+}
+
+/// 报价分项任务:PM 派工 → 承接方填报 → **直接回报价,不走审批**(客户 Q6 答复)。
+model QuoteComponentTask {
+  id               String          @id @default(cuid())
+  tenantId         String
+  quoteId          String
+  quote            Quote           @relation(fields: [quoteId], references: [id])
+  /// 派工时锁定的报价版本 —— 版本换了要重新派,免得填到旧版上
+  quoteVersionId   String
+  kind             QuoteTaskKind
+  title            String
+  /// 派给哪个角色(PM/ENGINEERING/PROCUREMENT…);具体到人可空
+  assignedRole     String
+  assignedToUserId String?
+  /// 是否为**提交报价前必须完成**的关键项。默认 false ——
+  /// 阻塞规则由派工人显式勾选,系统不替业务发明"什么算关键"。
+  required         Boolean         @default(false)
+  status           QuoteTaskStatus @default(PENDING)
+  note             String?
+  createdById      String
+  createdAt        DateTime        @default(now())
+  submittedAt      DateTime?
+  submittedById    String?
+  updatedAt        DateTime        @updatedAt
+
+  @@index([tenantId, quoteId])
+  @@index([tenantId, status])
+}
+
+/// NRE 项目字典(客户 Q6:「NRE 项由客户提供标准清单、设为可选、要有备注项」)。
+/// **可配置而非硬编码** —— 客户的标准清单还没给(C4),先给维护入口,
+/// 空表时页面明说「尚未维护」,不塞几条我们自己编的项目冒充标准。
+model NreItemDefinition {
+  id            String   @id @default(cuid())
+  tenantId      String
+  code          String
+  name          String
+  /// 默认金额;**可空**,没给默认值时填报处留空而不是显示 0
+  defaultAmount Decimal? @db.Decimal(18, 4)
+  currency      String   @default("CNY")
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
 }

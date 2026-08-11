@@ -10,7 +10,8 @@ import type { ManagementSnapshot } from "@/lib/server/repositories/management";
  * 每个 KPI 都可点击下钻到明细页;所有数字由明细派生,无冗余汇总字段。
  */
 export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) {
-  const { quotes, opo, aging, slowMoving, inventoryFetchedAt } = snapshot;
+  const { quotes, conversion, conversionTruncated, opo, aging, slowMoving, inventoryFetchedAt } =
+    snapshot;
   const agedOver24 = aging.buckets.find((b) => b.minMonths >= 24);
 
   return (
@@ -23,6 +24,23 @@ export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) 
             ? `(缓存于 ${inventoryFetchedAt.slice(0, 16).replace("T", " ")})`
             : "(尚无缓存)"}
           ,不代表实时库存。点击卡片可下钻到明细。
+          <br />
+          <b>「订单转化率」与「审批通过率」是两个指标</b>:前者靠 PM 在报价单上
+          人工标记中标(系统没有 ERP 订单对接,不做任何自动判定),
+          后者只反映内部审批流程。
+          {conversion.wonWithoutAmount > 0 ? (
+            <>
+              {" "}
+              另有 <b>{conversion.wonWithoutAmount}</b> 张已中标报价没有冻结快照金额,
+              <b>未计入中标金额</b>(不按 0 计)。
+            </>
+          ) : null}
+          {conversionTruncated ? (
+            <>
+              {" "}
+              <b>报价数超过统计上限,订单转化率只覆盖了最近的一批</b>,不是全量口径。
+            </>
+          ) : null}
         </span>
       </Banner>
 
@@ -43,13 +61,36 @@ export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) 
           </div>
           <div className="kpi-foot">取审批快照;异币种不合并</div>
         </Link>
-        <Link className="kpi" href="/quotes">
-          <div className="kpi-label">报价转化率</div>
+        {/*
+          PR-D:把两个指标**拆开**。
+          原来只有一张卡片写着「报价转化率」,算的却是 已批准/终局版本 ——
+          那是内部审批通过率。管理层看着它做的是"我们成单率不错"的判断,
+          而它其实一次都没碰过客户下没下单。
+        */}
+        <Link className="kpi" href="/quotes?outcome=WON">
+          <div className="kpi-label">订单转化率</div>
           <div className="kpi-value">
-            {quotes.conversionRate === null ? "—" : `${(quotes.conversionRate * 100).toFixed(1)}%`}
+            {conversion.orderConversionRate === null
+              ? "—"
+              : `${(conversion.orderConversionRate * 100).toFixed(1)}%`}
           </div>
           <div className="kpi-foot">
-            {quotes.conversionRate === null ? "尚无终局版本,不显示为 0%" : "已批准 / 终局版本"}
+            {conversion.orderConversionRate === null
+              ? "尚无已定局的报价,不显示为 0%"
+              : `已中标 ${conversion.byOutcome.WON} / 已定局 ${
+                  conversion.byOutcome.WON + conversion.byOutcome.LOST + conversion.byOutcome.EXPIRED
+                } · 待定 ${conversion.pending} 张不进分母`}
+          </div>
+        </Link>
+        <Link className="kpi" href="/quotes">
+          <div className="kpi-label">审批通过率</div>
+          <div className="kpi-value">
+            {quotes.approvalPassRate === null ? "—" : `${(quotes.approvalPassRate * 100).toFixed(1)}%`}
+          </div>
+          <div className="kpi-foot">
+            {quotes.approvalPassRate === null
+              ? "尚无终局版本,不显示为 0%"
+              : "已批准 / 终局版本 —— 内部流程指标,不是成单率"}
           </div>
         </Link>
         <Link className={opo.errorLines > 0 ? "kpi danger" : "kpi"} href="/suppliers/opo">
