@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import {
   ROLE_LABELS,
   SEARCH_SCOPES,
   WORKBENCH_KPIS,
+  WORKBENCH_SHORTCUTS,
   WORKBENCH_TITLES,
   primaryRole,
 } from "@/lib/rbac";
@@ -61,6 +63,28 @@ export default async function WorkbenchPage() {
           </div>
         ))}
       </div>
+      {WORKBENCH_SHORTCUTS[role].length > 0 ? (
+        <Card
+          title="常用入口"
+          sub="客户反馈「找不到批量导入」—— 功能一直都在,这里直接给到入口"
+        >
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }} data-testid="workbench-shortcuts">
+            {WORKBENCH_SHORTCUTS[role].map((s) => (
+              <Link className="btn" href={s.href} key={s.href} title={s.hint}>
+                {s.label}
+              </Link>
+            ))}
+          </div>
+          <ul className="small muted" style={{ marginTop: 8, lineHeight: 1.8 }}>
+            {WORKBENCH_SHORTCUTS[role].map((s) => (
+              <li key={s.href}>
+                <b>{s.label}</b> —— {s.hint}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
       <Card title="工作台状态" sub="PR2 骨架">
         <p className="small muted" style={{ lineHeight: 1.8 }}>
           本工作台为 PR2 角色骨架:菜单、搜索范围与 KPI 卡片已按角色联动;KPI

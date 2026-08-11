@@ -50,6 +50,40 @@ export const WORKBENCH_TITLES: Record<RoleName, string> = {
   SUPPLIER: "供应商协同门户",
 };
 
+/**
+ * 工作台常用入口(PR2-ENG-04)。
+ *
+ * 客户反馈「找不到批量导入的入口」—— 功能一直都在(`/bom/import`、物料页的
+ * 「批量导入物料」),问题是工作台上没有任何指向它的按钮,只能靠翻菜单。
+ * 与其新造一套 backend,不如把已有的入口摆到人第一眼看得到的地方。
+ */
+export interface WorkbenchShortcut {
+  label: string;
+  href: string;
+  hint: string;
+}
+
+export const WORKBENCH_SHORTCUTS: Record<RoleName, WorkbenchShortcut[]> = {
+  ENGINEERING: [
+    { label: "批量导入 BOM", href: "/bom/import", hint: "xlsx / csv / pdf 均可,大 BOM 自动分批" },
+    { label: "BOM 台账", href: "/bom", hint: "预 BOM 与正式 BOM 分开筛选" },
+    { label: "批量导入物料", href: "/materials", hint: "物料页顶部「批量导入物料」" },
+    { label: "物料替代关系", href: "/materials/alternates", hint: "Pin-to-Pin 与替代料维护" },
+  ],
+  PM: [
+    { label: "新建 RFQ", href: "/rfq", hint: "客户询价从这里开始" },
+    { label: "批量导入 BOM", href: "/bom/import", hint: "预 BOM 用于报价" },
+    { label: "采购申请", href: "/procurement/request", hint: "PM 发起,采购接手询价" },
+  ],
+  PROCUREMENT: [
+    { label: "缺料分析", href: "/shortage", hint: "缺料单导入与 Call 料" },
+    { label: "采购比价", href: "/procurement/rfq", hint: "多源报价与选型" },
+    { label: "采购订单", href: "/procurement/orders", hint: "下单与审批" },
+  ],
+  MANAGEMENT: [],
+  SUPPLIER: [],
+};
+
 export interface WorkbenchKpi {
   label: string;
   /** 数据来源模块(诚实 UI:KPI 值待对应 PR 落地,先渲染占位) */

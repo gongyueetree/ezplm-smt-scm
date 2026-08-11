@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/shell/back-link";
 import { VersionActions } from "./version-actions";
+import { ConvertPanel } from "./convert-panel";
+import { prisma } from "@/lib/server/db";
+import { tenantWhere } from "@/lib/server/tenant-scope";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
@@ -22,6 +25,13 @@ export default async function BomVersionPage({
   const session = (await getSession())!;
   const detail = await getBomVersionDetail(session, versionId);
   if (!detail) notFound();
+
+  // PR-C:转正式 BOM 需要选客户(客户 Q4:「正式 BOM 必须关联客户编码」)
+  const customers = await prisma.customer.findMany({
+    where: tenantWhere(session.tenantId),
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 
   const lines: ReviewLine[] = detail.lines.map((l) => ({
     id: l.id,
@@ -81,6 +91,9 @@ export default async function BomVersionPage({
           </p>
         </div>
         <div className="page-actions">
+          <Badge tone={detail.version.bom.purpose === "PRODUCTION" ? "green" : "gray"}>
+            {detail.version.bom.purpose === "PRODUCTION" ? "正式 BOM" : "预 BOM"}
+          </Badge>
           <Badge tone={decided === lines.length ? "green" : "amber"}>
             {decided === lines.length ? "全部已确认" : "待人工确认"}
           </Badge>
@@ -98,6 +111,19 @@ export default async function BomVersionPage({
           价格与库存显示的是各数据源的<b>数据更新时间</b>,不代表实时行情。
         </span>
       </Banner>
+
+      <Card
+        title={detail.version.bom.purpose === "PRODUCTION" ? "正式 BOM" : "转为正式 BOM"}
+        sub="预 BOM 用于报价,正式 BOM 用于量产 —— 转换生成新文件,不改原件"
+      >
+        <ConvertPanel
+          bomId={detail.version.bom.id}
+          purpose={detail.version.bom.purpose}
+          customerId={detail.version.bom.customerId}
+          customers={customers}
+          convertedFromBomId={detail.version.bom.convertedFromBomId}
+        />
+      </Card>
 
       <Card title="匹配确认" sub="逐行采纳候选 / 标记无匹配" flush>
         <MatchReview lines={lines} />

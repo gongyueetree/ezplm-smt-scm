@@ -10,6 +10,13 @@ import type { SessionRef } from "@/lib/server/repositories/rfq";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 
 export interface BomLedgerItem extends BomLedgerRow {
+  /** 预 BOM / 正式 BOM(PR-C)。台账必须显示,否则两份同名的 BOM 分不清哪份能投产 */
+  purpose: "PRE_QUOTE" | "PRODUCTION";
+  /** 正式 BOM 的来源预 BOM;预 BOM 若已转出则记转出的正式 BOM 数 */
+  convertedFromBomId: string | null;
+  convertedToCount: number;
+  /** 正式 BOM 里还没匹配到内部料号的行数 —— 量产前必须清零 */
+  pendingInternalPnCount: number;
   rfqCode: string | null;
   rfqId: string | null;
   latestVersionId: string | null;
@@ -20,10 +27,16 @@ export interface BomLedgerItem extends BomLedgerRow {
 
 export async function loadBomLedger(
   session: SessionRef,
-  filter: { customerId?: string | null; from?: string | null; to?: string | null } = {},
+  filter: {
+    customerId?: string | null;
+    from?: string | null;
+    to?: string | null;
+    purpose?: "PRE_QUOTE" | "PRODUCTION" | null;
+  } = {},
 ): Promise<BomLedgerItem[]> {
   const where: Record<string, unknown> = {};
   if (filter.customerId) where.customerId = filter.customerId;
+  if (filter.purpose) where.purpose = filter.purpose;
   if (filter.from || filter.to) {
     where.createdAt = {
       ...(filter.from ? { gte: new Date(filter.from) } : {}),
@@ -36,12 +49,18 @@ export async function loadBomLedger(
     orderBy: { createdAt: "desc" },
     include: {
       rfq: { select: { id: true, code: true } },
+      _count: { select: { convertedTo: true } },
       versions: {
         orderBy: { versionNo: "desc" },
         take: 2,
         include: {
           lines: {
-            select: { id: true, mpn: true, decisions: { select: { decision: true } } },
+            select: {
+              id: true,
+              mpn: true,
+              internalPartId: true,
+              decisions: { select: { decision: true } },
+            },
           },
           _count: { select: { lines: true } },
         },
@@ -90,6 +109,12 @@ export async function loadBomLedger(
       unknownLifecycleLineCount: unknown,
       unconfirmedLineCount: unconfirmed,
       noCandidateLineCount: noCandidate,
+      purpose: b.purpose,
+      convertedFromBomId: b.convertedFromBomId,
+      convertedToCount: b._count.convertedTo,
+      // 只有正式 BOM 才谈"待补内部料号";预 BOM 本来就不要求
+      pendingInternalPnCount:
+        b.purpose === "PRODUCTION" ? lines.filter((l) => l.internalPartId === null).length : 0,
       rfqCode: b.rfq?.code ?? null,
       rfqId: b.rfq?.id ?? null,
       latestVersionId: latest?.id ?? null,

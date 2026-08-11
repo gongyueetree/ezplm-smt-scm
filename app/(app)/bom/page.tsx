@@ -31,6 +31,8 @@ export default async function BomListPage({
   const session = (await getSession())!;
   const sp = await searchParams;
   const focus = FOCUS_KEYS.includes(sp.focus as FocusKey) ? (sp.focus as FocusKey) : null;
+  const purpose =
+    sp.purpose === "PRE_QUOTE" || sp.purpose === "PRODUCTION" ? sp.purpose : null;
   const staleDays = Number.isFinite(Number(sp.staleDays))
     ? Math.max(1, Number(sp.staleDays))
     : DEFAULT_STALE_DAYS;
@@ -41,6 +43,7 @@ export default async function BomListPage({
       customerId: sp.customerId ?? null,
       from: sp.from ?? null,
       to: sp.to ?? null,
+      purpose,
     }),
     prisma.customer.findMany({
       where: tenantWhere(session.tenantId),
@@ -68,6 +71,7 @@ export default async function BomListPage({
 
   const q = new URLSearchParams();
   if (sp.customerId) q.set("customerId", sp.customerId);
+  if (purpose) q.set("purpose", purpose);
   if (sp.from) q.set("from", sp.from);
   if (sp.to) q.set("to", sp.to);
   if (sp.staleDays) q.set("staleDays", String(staleDays));
@@ -101,6 +105,10 @@ export default async function BomListPage({
           <b>生命周期未知不算 EOL</b> —— 本地库没有这颗料是「不知道」,既不是在产也不是停产;
           当前有 <b>{kpi.unknownLifecycleLines}</b> 行生命周期未知,EOL 指标不覆盖这部分。
           「超期未更新」按 <b>{staleDays} 天</b> 判定,该口径<b>未经业务确认</b>,可在下方调整。
+          <br />
+          <b>预 BOM(报价用)与正式 BOM(量产用)是两份文件</b>:正式 BOM 只能由预 BOM
+          <b>转换生成</b>,转换不会改动原预 BOM。拆分功能上线前导入的 BOM 一律显示为
+          <b>预 BOM</b> —— 那是默认值,不代表当时判定过它不能投产。
         </span>
       </Banner>
 
@@ -156,6 +164,14 @@ export default async function BomListPage({
             </select>
           </label>
           <label className="fld" style={{ marginBottom: 0 }}>
+            <span>用途</span>
+            <select name="purpose" defaultValue={purpose ?? ""}>
+              <option value="">全部</option>
+              <option value="PRE_QUOTE">预 BOM(报价用)</option>
+              <option value="PRODUCTION">正式 BOM(量产用)</option>
+            </select>
+          </label>
+          <label className="fld" style={{ marginBottom: 0 }}>
             <span>创建起</span>
             <input type="date" name="from" defaultValue={sp.from ?? ""} />
           </label>
@@ -198,6 +214,7 @@ export default async function BomListPage({
             <thead>
               <tr>
                 <th>BOM</th>
+                <th>用途</th>
                 <th>客户</th>
                 <th>关联 RFQ</th>
                 <th className="num">版本</th>
@@ -211,7 +228,7 @@ export default async function BomListPage({
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="muted small"
                     style={{ textAlign: "center", padding: 24 }}
                   >
@@ -225,6 +242,25 @@ export default async function BomListPage({
                   return (
                     <tr key={b.bomId}>
                       <td>{b.name}</td>
+                      <td className="small">
+                        {b.purpose === "PRODUCTION" ? (
+                          <>
+                            <Badge tone="green">正式 BOM</Badge>
+                            {b.pendingInternalPnCount > 0 ? (
+                              <div style={{ color: "var(--danger)" }}>
+                                待补内部料号 {b.pendingInternalPnCount} 行
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
+                            <Badge tone="gray">预 BOM</Badge>
+                            {b.convertedToCount > 0 ? (
+                              <div className="muted">已转出 {b.convertedToCount} 份正式 BOM</div>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
                       <td className="small">
                         {b.customerId ? (customerName.get(b.customerId) ?? b.customerId) : "-"}
                       </td>
