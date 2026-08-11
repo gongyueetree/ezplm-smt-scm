@@ -104,8 +104,12 @@ test("管理看板把「订单转化率」与「审批通过率」分成两个�
   const board = page.locator(".kpi-grid").first();
   await expect(board.locator(".kpi-label", { hasText: "订单转化率" })).toBeVisible();
   await expect(board.locator(".kpi-label", { hasText: "审批通过率" })).toBeVisible();
-  // 审批通过率必须自带"这不是成单率"的说明,否则又会被当成转化率读
-  await expect(page.getByText("内部流程指标,不是成单率")).toBeVisible();
-  // 转化率口径要写明待定不进分母
+  /*
+   * 澄清口径的话必须**与数据状态无关**地出现。
+   * 这条断言原先在本地绿、CI 红:本地开发库攒了终局版本走一个分支,
+   * CI 的全新种子库没有终局版本走另一个分支,而那个分支当时没带这句话。
+   */
+  await expect(page.getByTestId("approval-rate-foot")).toContainText("不是成单率");
+  // 转化率口径要写明待定不进分母(两种数据状态都要有说法)
   await expect(page.getByText(/待定 \d+ 张不进分母|尚无已定局的报价/)).toBeVisible();
 });
