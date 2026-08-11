@@ -1915,6 +1915,113 @@ model ExcessLine {
   @@index([tenantId, customerId])
 }
 
+/// 缺料单来源。PR2-PROC-10。
+enum ShortageSheetSource {
+  EXCEL_IMPORT
+  ERP
+  MANUAL
+}
+
+/// 缺料行状态机。客户明确要求「已经处理过的显示处理过」。
+///
+/// 只允许单向推进:OPEN → CALL_CREATED → SENT_TO_SUPPLIER → PARTIALLY_RESOLVED → RESOLVED。
+/// **不设回退** —— 缺料处理是对外承诺过的动作,悄悄退回上一状态
+/// 会让"已经催过供应商"这件事凭空消失。
+enum ShortageLineStatus {
+  OPEN
+  CALL_CREATED
+  SENT_TO_SUPPLIER
+  PARTIALLY_RESOLVED
+  RESOLVED
+}
+
+/// 缺料分析单。
+///
+/// PR2-PROC-10(客户原话:「缺料分析是根据**缺料分析单**来的,而非 BOM」)。
+/// 与 /shortage 既有的「按 BOM × 台数推算」是两回事:那是**核算工具**,
+/// 这是**业务单据** —— 有来源、有状态、有责任人、能被追踪到闭环。
+model ShortageSheet {
+  tenantId    String
+  id          String              @id @default(cuid())
+  code        String
+  source      ShortageSheetSource
+  /// 单据对应的业务时点(不是导入时刻)
+  sheetDate   DateTime
+  customerId  String?
+  note        String?
+  createdById String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  lines ShortageSheetLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, sheetDate])
+}
+
+/// 缺料行。
+///
+/// 客户点名**不要位号**(「位号不需要因为多行」)、**不要「建议采购」**
+/// (那是 GTB 的事;缺料单给的是单据认定的实际缺口)。
+model ShortageSheetLine {
+  tenantId           String
+  id                 String             @id @default(cuid())
+  sheetId            String
+  sheet              ShortageSheet      @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  customerId         String?
+  internalPn         String?
+  manufacturer       String?
+  mpn                String?
+  requiredQty        Decimal            @db.Decimal(18, 4)
+  /// 下面三项是**导入时点的快照**,不随库存变动改写 ——
+  /// 否则事后无法解释"当时为什么判定缺这么多"
+  availableInventory Decimal?           @db.Decimal(18, 4)
+  openPoQty          Decimal?           @db.Decimal(18, 4)
+  eta                DateTime?
+  supplierId         String?
+  /// 缺口数量:**由单据给定,不由系统推算** —— 单据才是真源
+  shortageQty        Decimal            @db.Decimal(18, 4)
+  /// 采购决定要 call 的数量;未填为 null(**不是 0**)
+  callQty            Decimal?           @db.Decimal(18, 4)
+  requiredDate       DateTime?
+  status             ShortageLineStatus @default(OPEN)
+  note               String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  callRecords CallMaterialRecord[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, mpn])
+}
+
+/// Call 料记录:采购填了 Call Qty 之后产生的**对外动作**。
+///
+/// 邮件通道未接通时 emailState 停在 DRAFT —— 界面只能显示
+/// 「待发送 / 邮件草稿已生成」,**绝不能显示「已发送」**(CLAUDE.md 诚实 UI)。
+model CallMaterialRecord {
+  tenantId          String
+  id                String            @id @default(cuid())
+  lineId            String
+  line              ShortageSheetLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  supplierId        String?
+  callQty           Decimal           @db.Decimal(18, 4)
+  /// DRAFT(草稿已生成)/ QUEUED / SENT / FAILED。
+  /// **没有 SMTP 时只会是 DRAFT**,不会凭空变 SENT。
+  emailState        String            @default("DRAFT")
+  emailSubject      String?
+  emailBody         String?
+  toEmails          String[]
+  /// 真实发信后才有值;未发送时全为空
+  sentAt            DateTime?
+  providerMessageId String?
+  failureReason     String?
+  createdById       String
+  createdAt         DateTime          @default(now())
+
+  @@index([tenantId, lineId])
+}
+
 model ScrapRecord {
   id          String   @id @default(cuid())
   tenantId    String

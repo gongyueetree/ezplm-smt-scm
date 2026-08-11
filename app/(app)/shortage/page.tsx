@@ -10,6 +10,8 @@ import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { formatDate } from "@/lib/format/datetime";
+import { ShortageSheetPanel } from "./sheet-panel";
+import { type ShortageStatus } from "@/lib/domain/shortage-sheet";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,42 @@ export default async function ShortagePage({
 }) {
   const { v, boards, scrap } = await searchParams;
   const session = (await getSession())!;
+
+  /*
+   * PR2-PROC-10:缺料单驱动。
+   * 客户原话「缺料分析是根据缺料分析单来的,而非 BOM」——
+   * 所以单据放在页面最前;下方按 BOM 推算那块保留但明确标注为**核算工具**。
+   */
+  const sheetLines = await prisma.shortageSheetLine.findMany({
+    where: tenantWhere(session.tenantId),
+    orderBy: [{ status: "asc" }, { requiredDate: "asc" }],
+    take: 300,
+    include: { _count: { select: { callRecords: true } } },
+  });
+  const [sheetCustomers, sheetSuppliers] = await Promise.all([
+    prisma.customer.findMany({ where: tenantWhere(session.tenantId), select: { id: true, name: true } }),
+    prisma.supplier.findMany({ where: tenantWhere(session.tenantId), select: { id: true, name: true } }),
+  ]);
+  const custName = new Map<string, string>(sheetCustomers.map((c) => [c.id, c.name]));
+  const supName = new Map<string, string>(sheetSuppliers.map((x) => [x.id, x.name]));
+  const sheetLineViews = sheetLines.map((l) => ({
+    id: l.id,
+    customerName: l.customerId ? custName.get(l.customerId) ?? null : null,
+    internalPn: l.internalPn,
+    manufacturer: l.manufacturer,
+    mpn: l.mpn,
+    requiredQty: l.requiredQty.toString(),
+    availableInventory: l.availableInventory === null ? null : l.availableInventory.toString(),
+    openPoQty: l.openPoQty === null ? null : l.openPoQty.toString(),
+    supplierName: l.supplierId ? supName.get(l.supplierId) ?? null : null,
+    eta: l.eta ? formatDate(l.eta, "—") : null,
+    shortageQty: l.shortageQty.toString(),
+    callQty: l.callQty === null ? null : l.callQty.toString(),
+    requiredDate: l.requiredDate ? formatDate(l.requiredDate, "—") : null,
+    status: l.status as ShortageStatus,
+    draftCount: l._count.callRecords,
+  }));
+  const canCall = session.roles.some((r) => r === "PROCUREMENT" || r === "MANAGEMENT");
 
   const versions = await prisma.bOMVersion.findMany({
     where: tenantWhere(session.tenantId),
@@ -40,7 +78,7 @@ export default async function ShortagePage({
     <div>
       <PageHeader path="/shortage" />
       <Banner tone="soft">
-        <span>
+        <span data-testid="shortage-calc-note">
           {/*
             S-5:齐料检查并入本页后,它原有的口径说明必须一并带过来 ——
             尤其是「损耗率默认 0,口径待甲方确认」:这是 CLAUDE.md 的硬要求,
@@ -52,6 +90,17 @@ export default async function ShortagePage({
           <b>数据缺失的行标为「数据未知」而不是按 0 当作有货</b>,并排在最前 ——
           连缺不缺都无法判定,风险高于已知缺料。
           齐料检查已并入本页(同一份计算)。
+        </span>
+      </Banner>
+
+      {/* PR2-PROC-10:缺料单驱动放最前 —— 它是业务单据 */}
+      <ShortageSheetPanel lines={sheetLineViews} canCall={canCall} />
+
+      <Banner tone="soft">
+        <span>
+          以下是<b>按 BOM × 台数推算</b>的齐料核算工具,与上方的<b>缺料分析单</b>不是一回事:
+          单据是业务已经认定的缺口(客户要求以它驱动),这里是给定 BOM 与投产数后的
+          理论测算,用于事前评估。两者口径不同,不要混看。
         </span>
       </Banner>
 

@@ -61,7 +61,9 @@ test("齐料检查已并入缺料分析:重定向保参数,且齐套率没有丢
   await expect(page.locator(".kpi .kpi-label", { hasText: /^数据未知行$/ })).toBeVisible();
 
   // 损耗率口径提示
-  await expect(page.locator(".banner")).toContainText("口径待甲方确认");
+  // 页面上有多条 banner(缺料单处理台也有说明),这里锁定 BOM 核算那一条,
+  // 避免因为多匹配而放宽断言内容。
+  await expect(page.getByTestId("shortage-calc-note")).toContainText("口径待甲方确认");
 });
 
 test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) => {
@@ -70,7 +72,7 @@ test("缺料分析:Call 料表把数据未知行排在最前", async ({ page }) 
 
   await page.goto(`/shortage?v=${versionId}&boards=100`);
   await expect(page.locator(".page-title")).toHaveText("缺料分析");
-  await expect(page.locator(".banner")).toContainText("排在最前");
+  await expect(page.getByTestId("shortage-calc-note")).toContainText("排在最前");
 
   const table = page.locator(".card", { hasText: "Call 料表" }).locator("table.tbl");
   await expect(table).toBeVisible();

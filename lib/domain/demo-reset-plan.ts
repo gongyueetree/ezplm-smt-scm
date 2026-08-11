@@ -94,6 +94,13 @@ export const PURGE_MODELS = [
   "ErpWebhookEvent",
   "IntegrationJob",
 
+  // ---- 缺料单与 Call 料(子 → 父)----
+  // 缺料单是业务导入的单据,Call 料记录与其邮件草稿都是测试期产物;
+  // 归 PURGE 后清库不会留下"上一轮客户的缺口还挂在处理台上"。
+  "CallMaterialRecord",
+  "ShortageSheetLine",
+  "ShortageSheet",
+
   // ---- Excess 快照(导入的业务数据,子表在前)----
   // 归 PURGE 而非 KEEP:它是"某次导入的呆滞清单",属测试期产生的单据;
   // 主数据侧(Part/Customer)不受影响。
