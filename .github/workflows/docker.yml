@@ -1,0 +1,59 @@
+name: Docker
+
+# 「一套代码两种交付」的第二条:standalone 镜像可构建(含 basePath 子路径形态)。
+#
+# ——— 为什么从 ci.yml 拆出来(2026-08-12)———
+# 原来它挂在 CI 里,**每个 PR 跑两遍、每遍 5.9 分钟**,而绝大多数 PR
+# 根本没碰 Dockerfile。这是当时把 2000 分钟月度额度烧光的主要来源之一。
+#
+# 拆出来之后:
+#  - main 上**每次都跑** —— 合并进主干的代码必须保证镜像能出;
+#  - PR 上**只在 Docker 相关文件变更时跑** —— 安全网仍在改动点上,
+#    而不是对着一堆只改了 React 组件的 PR 空转。
+#
+# 取舍写在明处:如果某个 PR 通过**间接方式**弄坏了镜像
+# (例如引入一个在 standalone 输出里缺失的依赖),会推迟到合并后才发现。
+# 代价是 main 上出现一次红灯并需要一个修复 PR;
+# 换来的是每个 PR 少烧 12 分钟(两次事件各 5.9)。
+# 本项目改 Dockerfile 的频率极低,这笔账是划算的。
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+    # 只有这些文件动了才在 PR 阶段验证镜像
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "next.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/docker.yml"
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # 构建命令与拆分前**逐字相同** —— 那是 CI 上跑通过的形态。
+      #
+      # 本来想顺手加 buildx + Actions Cache 做层缓存(可省约 3–4 分钟),
+      # 但本机没有 Docker、CI 又因额度用尽跑不起来 ——
+      # **在验证通道是黑的时候,不引入验证不了的改动**。
+      # 等 CI 恢复、这份配置先跑绿一次之后,再单独提层缓存那个 PR。
+      - name: build docker image
+        run: docker build -t ezplm-scm:ci .
+
+      - name: build with basePath (子路径反代形态)
+        run: docker build --build-arg NEXT_PUBLIC_BASE_PATH=/scm -t ezplm-scm:ci-scm .

@@ -1,11 +1,44 @@
 name: CI
 
 # SPEC §18:每个 PR 必须运行 lint / typecheck / test / test:e2e / build / prisma validate
+#
+# ——— 分钟数控制(2026-08-12)———
+# 私有仓库每月免费 2000 Actions 分钟。实测每次 CI 约 15 分钟
+# (quality-gates 9.3 + docker-build 5.9),而**每个 PR 会触发两次**
+# (pull_request 一次 + 合并后 push:main 一次),即一个 PR ≈ 30 分钟 ——
+# 66 个 PR 就把额度用光,实际也确实用光了。
+#
+# 做了四件事:
+#  1. `concurrency` 取消同分支的在跑任务 —— 连推两次不再白烧一整轮;
+#  2. 纯文档改动不触发(paths-ignore)—— 文档 PR 跑 230 个 E2E 毫无意义;
+#  3. docker-build 拆到单独 workflow,PR 上**只在 Docker 相关文件变更时**才跑;
+#  4. 缓存 Playwright 浏览器,省掉每次约 100MB 的下载。
+#
+# **没有削减任何一项质量门禁** —— lint / typecheck / test / build /
+# prisma validate / E2E 在每个 PR 上照跑不误。省下来的是重复与无关的开销。
+
 on:
   push:
-    branches: [main, "feature/**"]
+    # 只在 main 上跑 push 事件。分支上的验证由 pull_request 事件负责,
+    # 两边都开等于同一份代码跑两遍。
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+
+# 同一分支上新的推送会取消还在跑的旧任务。
+# main 上不取消:合并到 main 的每一次都要有完整结论,
+# 被后一次合并取消掉会留下"这次合并没验证过"的空洞。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   quality-gates:
@@ -68,8 +101,24 @@ jobs:
       - name: apply migrations
         run: pnpm exec prisma migrate deploy
 
-      - name: install playwright browser
+      # 浏览器二进制约 100MB,每次重新下载纯属浪费。
+      # 键里带 pnpm-lock 的哈希:Playwright 版本变了会自动失效,
+      # 不会拿旧浏览器去跑新版本(那种不一致极难查)。
+      - name: cache playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: install playwright browser + system deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      # 命中缓存时浏览器已在,但系统依赖(apt)不在缓存里,仍需装
+      - name: install playwright system deps only
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
 
       - name: e2e tests
         run: pnpm test:e2e
@@ -81,14 +130,3 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
-
-  docker-build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      # 验证"一套代码两种交付"的第二条:standalone 镜像可构建
-      - name: build docker image
-        run: docker build -t ezplm-scm:ci .
-      - name: build with basePath (子路径反代形态)
-        run: docker build --build-arg NEXT_PUBLIC_BASE_PATH=/scm -t ezplm-scm:ci-scm .
