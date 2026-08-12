@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { PreBomBulk } from "./pre-bom-bulk";
 import { DEFAULT_STALE_DAYS, daysSinceUpdate, deriveBomLedgerKpi } from "@/lib/domain/bom-ledger";
 import { prisma } from "@/lib/server/db";
 import { loadBomLedger } from "@/lib/server/repositories/bom-ledger";
@@ -145,6 +146,19 @@ export default async function BomListPage({
           <div className="kpi-foot">分布在 {kpi.noCandidate.count} 个 BOM</div>
         </Link>
       </div>
+
+      {/* E4:客户 Q9 点名的批量入口 —— 放在筛选之前,一眼看得见 */}
+      <Card
+        title="批量导入 / 导出预 BOM"
+        sub="一次多个文件,每个文件各自生成一份预 BOM;导出附导入状态与待人工行数"
+      >
+        <PreBomBulk
+          selectableBoms={items.slice(0, 200).map((b) => ({
+            id: b.bomId,
+            label: `${b.name}${b.purpose === "PRODUCTION" ? "(正式)" : ""} · ${b.lineCount} 行`,
+          }))}
+        />
+      </Card>
 
       <Card title="筛选" sub="客户 / 时间 / 指标下钻可组合">
         <form
