@@ -314,6 +314,16 @@ export const NAV_SECTIONS: NavSection[] = [
             roles: ["MANAGEMENT"],
           },
           {
+            path: "/settings/mail",
+            label: "邮件通道",
+            plannedPr: "PR-E7",
+            desc:
+              "公司 SMTP 配置与状态。参数未齐时状态为 WAITING_FOR_CREDENTIALS," +
+              "邮件一律停在「草稿 · 未发送」;已读回执依赖对方客户端,拿不到是常态。",
+            implemented: true,
+            roles: ["MANAGEMENT"],
+          },
+          {
             path: "/settings/quote-templates",
             label: "报价模板与客户分级",
             icon: "quote",

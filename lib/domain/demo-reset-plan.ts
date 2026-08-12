@@ -113,6 +113,12 @@ export const PURGE_MODELS = [
   "ExcessLine",
   "ExcessSnapshot",
 
+  // ---- 外发邮件(子 → 父)----
+  "MessageDeliveryEvent",
+  "MessageAttachment",
+  "MessageRecipient",
+  "OutboundMessage",
+
   // ---- 其它测试期产物 ----
   "EmailDraft",
   "SupplierOnboardInvite",
