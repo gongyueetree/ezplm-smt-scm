@@ -173,6 +173,8 @@ export const KEEP_MODELS = [
   "QuoteTemplate",
   // NRE 项目字典属**配置**(客户提供的标准清单),不是测试期单据 —— 清库保留
   "NreItemDefinition",
+  // 汇率属**配置/主数据性质**(来自 ERP 或人工维护),清库保留
+  "FxRate",
   "ProcurementPolicy",
   "ScrapExportTemplate",
   "ErpConnection",

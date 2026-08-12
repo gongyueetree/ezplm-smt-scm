@@ -158,6 +158,60 @@ export interface ErpPage<T> {
  * 未实现的能力**必须抛 `ErpNotImplementedError`**,不得返回空数组冒充"没数据" ——
  * 空数组会被上层当成"同步完成、0 条",从而掩盖"这个厂商压根没接"。
  */
+/**
+ * E8:ERP Excess Report(客户 Q1:「ERP 有 Excess report 可以引用,
+ * **但一定要引用到 AI 系统中**」)。
+ *
+ * 字段样例尚未拿到(O2),所以这里定的是**我们需要什么**,
+ * 而不是"金蝶一定长这样" —— 拿到样表后按实际字段调整映射,
+ * Zod 会在解析时直接把差异暴露出来,而不是悄悄少几列。
+ */
+export const ErpExcessLineSchema = z.object({
+  externalId: z.string(),
+  internalPn: z.string().nullable(),
+  mpn: z.string().nullable(),
+  /** 账面量 */
+  qty: z.string(),
+  /** 可动用量。**与账面量分开** —— 有些呆滞已锁定/待报废,不能拿去抵采购 */
+  usableQty: z.string().nullable(),
+  warehouse: z.string().nullable(),
+  /** 归属客户;为空表示公共库存。跨客户占用是**业务规则**,不由系统默认 */
+  customerCode: z.string().nullable(),
+  lotNo: z.string().nullable(),
+  /** ERP 侧的报表/单据号 —— 追溯"这批数据出自哪一次导出" */
+  sourceDocumentId: z.string().nullable(),
+  /** ERP 侧的数据更新时间(不是我们导入的时间) */
+  sourceUpdatedAt: z.string().nullable(),
+});
+export type ErpExcessLine = z.infer<typeof ErpExcessLineSchema>;
+
+/**
+ * E8:ERP 汇率(客户 Q8:「ERP 系统有汇率显示,请引用」)。
+ *
+ * 「有效日期」口径未定(O3):即期 / 月度锁定 / 集团内部价,
+ * 一天多条时以哪条为准也没说。所以 `rateType` 与 `effectiveDate` 都留字段,
+ * **不在代码里替客户选一种**。
+ */
+export const ErpFxRateSchema = z.object({
+  sourceCurrency: z.string(),
+  targetCurrency: z.string(),
+  /** 汇率值,字符串保精度 —— 汇率参与金额换算,不能走浮点 */
+  rate: z.string(),
+  /** 汇率类型(即期/月度/内部价…),ERP 原文 */
+  rateType: z.string().nullable(),
+  effectiveDate: z.string(),
+  sourceUpdatedAt: z.string().nullable(),
+});
+export type ErpFxRate = z.infer<typeof ErpFxRateSchema>;
+
+/** 组织/账套 —— 金蝶多组织时必须先选对,否则拉回来的是别家的数据 */
+export const ErpOrganizationSchema = z.object({
+  externalId: z.string(),
+  code: z.string(),
+  name: z.string(),
+});
+export type ErpOrganization = z.infer<typeof ErpOrganizationSchema>;
+
 export interface ErpProvider {
   readonly vendor: string;
   testConnection(config: ErpConnectionConfig): Promise<ConnectionTestResult>;
@@ -177,6 +231,13 @@ export interface ErpProvider {
   ): Promise<ErpPushResult>;
 
   getJobStatus(config: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus>;
+
+  /** E8:组织/账套列表。多组织 ERP 必须先选对账套 */
+  getOrganizations(config: ErpConnectionConfig): Promise<ErpOrganization[]>;
+  /** E8:Excess Report(客户 Q1) */
+  pullExcessReport(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpExcessLine>>;
+  /** E8:汇率(客户 Q8) */
+  pullExchangeRates(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpFxRate>>;
 }
 
 /** 未实现:与"没有数据"必须区分开 */

@@ -4,6 +4,7 @@
  * 诚实纪律:Mock 返回的数据在 UI 上必须标注「示例数据」,
  * 连接状态也不得因为 Mock 通了就显示成"已连接真实 ERP"。
  */
+import { ErpNotImplementedError } from "../types";
 import type {
   ConnectionTestResult,
   ErpConnectionConfig,
@@ -93,6 +94,30 @@ export class MockErpProvider implements ErpProvider {
       suggestion: "这是 Mock Provider —— 连接成功不代表任何真实 ERP 已接通",
       testedAt: new Date().toISOString(),
     };
+  }
+
+  /*
+   * E8:Mock 也**不编造** Excess 与汇率数据。
+   *
+   * 客户已确认这两样都在 ERP 里(Q1/Q8),但字段样例与汇率口径都还没给。
+   * Mock 若返回几行看起来合理的数字,页面就会显示出"可用呆滞 500 个"、
+   * "USD 汇率 7.2" —— 采购据此少买、报价据此换算,而它们是我编的。
+   * 这正是 CLAUDE.md 禁止的"用 Mock 假数据证明已联调"。
+   */
+  async getOrganizations(): Promise<never> {
+    throw new ErpNotImplementedError("MOCK", "getOrganizations(Mock 不编造组织列表)");
+  }
+  async pullExcessReport(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "MOCK",
+      "pullExcessReport(Mock **不编造呆滞数据** —— 编出来的可用量会让采购少买)",
+    );
+  }
+  async pullExchangeRates(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "MOCK",
+      "pullExchangeRates(Mock **不编造汇率** —— 编出来的汇率会直接错到报价上)",
+    );
   }
 
   async getMetadata(): Promise<ErpMetadata> {

@@ -22,6 +22,9 @@ import {
   type ErpProvider,
   type ErpPushResult,
   type ErpWorkOrder,
+  type ErpExcessLine,
+  type ErpFxRate,
+  type ErpOrganization,
 } from "../types";
 
 const REQUIRED_CONFIG = ["baseUrl", "dbId", "appId"] as const;
@@ -169,6 +172,31 @@ export class KingdeeErpProvider implements ErpProvider {
     this.guard(config);
     throw new ErpNotImplementedError("KINGDEE", "pushEtaUpdates");
   }
+  /*
+   * E8:客户已确认 ERP = 金蝶 K3 云星空,且 Excess 与汇率都在 ERP 里(Q1/Q8)。
+   * 但**文档与测试账号尚未到位**(O1),Excess 字段样例(O2)与汇率有效日期口径(O3)
+   * 也还没定。所以这三个方法与其它一样:骨架就位,调用即抛"待联调",
+   * **绝不返回空数组冒充"查过了没有数据"** —— 那会让 PM 以为真的没有呆滞可用。
+   */
+  async getOrganizations(config: ErpConnectionConfig): Promise<ErpOrganization[]> {
+    this.guard(config);
+    throw new ErpNotImplementedError("KINGDEE", "getOrganizations(多组织账套列表,待真实账套联调)");
+  }
+  async pullExcessReport(config: ErpConnectionConfig): Promise<ErpPage<ErpExcessLine>> {
+    this.guard(config);
+    throw new ErpNotImplementedError(
+      "KINGDEE",
+      "pullExcessReport(客户 Q1 已确认走 ERP;待提供 Excess Report 字段样例 —— 见 OPEN-QUESTIONS O2)",
+    );
+  }
+  async pullExchangeRates(config: ErpConnectionConfig): Promise<ErpPage<ErpFxRate>> {
+    this.guard(config);
+    throw new ErpNotImplementedError(
+      "KINGDEE",
+      "pullExchangeRates(客户 Q8 已确认走 ERP;待明确汇率类型与有效日期口径 —— 见 OPEN-QUESTIONS O3)",
+    );
+  }
+
   async getJobStatus(config: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
     this.guard(config);
     return { externalJobId, state: "UNKNOWN", message: "金蝶作业状态查询待联调" };

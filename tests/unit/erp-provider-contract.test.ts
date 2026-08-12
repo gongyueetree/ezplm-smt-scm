@@ -102,3 +102,29 @@ describe("Excel 通道:一期真实可用", () => {
     expect(r.suggestion).toContain("不连接任何 ERP");
   });
 });
+
+/**
+ * E8:Excess / 汇率 / 组织三个新方法的**契约**。
+ *
+ * 客户已确认 Excess 与汇率都在 ERP 里(Q1/Q8),但文档与账号尚未到位(O1)。
+ * 所以这三个方法在**每一种 Provider 上都必须抛错**,
+ * **绝不返回空数组** —— 空数组会被读成「查过了,ERP 里没有呆滞/没有汇率」,
+ * 采购据此少买、报价据此不换算,而那是我们编的结论。
+ */
+describe("E8:Excess / 汇率 / 组织的契约", () => {
+  it.each(VENDORS)("%s:pullExcessReport 抛错而不是返回空数组", async (v) => {
+    await expect(
+      getErpProvider(v).pullExcessReport(cfg(v), { cursor: null, limit: 10 }),
+    ).rejects.toBeTruthy();
+  });
+
+  it.each(VENDORS)("%s:pullExchangeRates 抛错而不是返回空数组", async (v) => {
+    await expect(
+      getErpProvider(v).pullExchangeRates(cfg(v), { cursor: null, limit: 10 }),
+    ).rejects.toBeTruthy();
+  });
+
+  it.each(VENDORS)("%s:getOrganizations 抛错而不是返回空数组", async (v) => {
+    await expect(getErpProvider(v).getOrganizations(cfg(v))).rejects.toBeTruthy();
+  });
+});
