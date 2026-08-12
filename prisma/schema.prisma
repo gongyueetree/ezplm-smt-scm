@@ -3318,3 +3318,94 @@ model FinishedGoodsSerial {
   @@index([tenantId, finishedLotId])
   @@index([tenantId, workOrderId])
 }
+
+
+/// E7:外发邮件(客户 Q3:发送 = 公司 SMTP;回执 = 已读回执)。
+///
+/// **发送与已读是两件事,必须分开存。** 客户选了「已读回执」,
+/// 而已读回执依赖收件方客户端配合,Outlook / Gmail 默认会询问或直接拒绝 ——
+/// 拿不到是常态。把 SENT 当成 READ 会让采购以为供应商看过了,
+/// 而实际上对方可能根本没打开。
+enum OutboundMessageState {
+  DRAFT
+  QUEUED
+  SENT
+  DELIVERY_FAILED
+}
+
+model OutboundMessage {
+  id           String               @id @default(cuid())
+  tenantId     String
+  /// 业务场景:SUPPLIER_RFQ / PO / CALL_MATERIAL / OPO_REMINDER
+  kind         String
+  /// 关联单据,便于回查
+  refType      String?
+  refId        String?
+  subject      String
+  body         String
+  state        OutboundMessageState @default(DRAFT)
+  /// 是否请求已读回执(Disposition-Notification-To)
+  readReceiptRequested Boolean      @default(false)
+  /// **收到**已读回执的时间。为空**不等于**对方没看 —— 多数客户端不回
+  readReceiptReceivedAt DateTime?
+  /// 追踪像素被加载的时间(如启用)。同样只是弱证据
+  openTrackedAt DateTime?
+  queuedAt     DateTime?
+  sentAt       DateTime?
+  /// 发送失败原因原文,直接显示给用户
+  failureReason String?
+  /// SMTP 侧消息 id,排查时要对得上
+  providerMessageId String?
+  createdById  String
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  recipients MessageRecipient[]
+  attachments MessageAttachment[]
+  events     MessageDeliveryEvent[]
+
+  @@index([tenantId, kind, state])
+}
+
+model MessageRecipient {
+  id        String          @id @default(cuid())
+  tenantId  String
+  messageId String
+  message   OutboundMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  /// TO / CC / BCC
+  field     String          @default("TO")
+  email     String
+  name      String?
+  createdAt DateTime        @default(now())
+
+  @@index([tenantId, messageId])
+}
+
+model MessageAttachment {
+  id        String          @id @default(cuid())
+  tenantId  String
+  messageId String
+  message   OutboundMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName  String
+  /// 走 FileStorageProvider 的存储键
+  fileKey   String
+  sizeBytes Int?
+  createdAt DateTime        @default(now())
+
+  @@index([tenantId, messageId])
+}
+
+/// 投递事件流水。**append-only**:状态怎么变的要能复盘,
+/// 只留最终状态的话,"什么时候失败的、重试过几次"就查不出来了。
+model MessageDeliveryEvent {
+  id        String          @id @default(cuid())
+  tenantId  String
+  messageId String
+  message   OutboundMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  /// QUEUED / SENT / DELIVERY_FAILED / READ_RECEIPT_RECEIVED / OPEN_TRACKED
+  event     String
+  detail    String?
+  createdAt DateTime        @default(now())
+
+  @@index([tenantId, messageId])
+}
