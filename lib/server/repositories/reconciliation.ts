@@ -402,6 +402,8 @@ export async function listStatements(session: SessionRef, kind: ReconciliationKi
       currency: st.currency,
       status: st.status,
       baselineSource: st.baselineSource,
+      // E5:示例数据要在台账上标出来,并且**不计入 KPI**
+      isExample: st.isExample,
       lineCount: st.lines.length,
       diffLines: needAttention.length,
       unresolved: needAttention.filter((l) => !l.resolution).length,

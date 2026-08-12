@@ -61,11 +61,16 @@ test("AR/AP 按角色区分:采购只见应付,PM 只见应收", async ({ page }
   await page.goto("/reconciliation");
   await expect(page.getByText(/当前角色可见:.*应收/)).toBeVisible();
 
-  // 管理层两侧都能看,且有 Tab 可切
+  /*
+   * 管理层两侧都能看,且有 Tab 可切。
+   * 定位收窄到 Tab 区:E5 之后页面上还有「下载应收/应付对账单样例」按钮,
+   * 同样含「应收」「应付」字样,裸 getByRole 会撞上它们。
+   */
   await login(page, "management@demo.qianchuang.cn");
   await page.goto("/reconciliation");
-  await expect(page.getByRole("link", { name: /应收/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /应付/ })).toBeVisible();
+  const tabs = page.getByTestId("recon-kind-tabs");
+  await expect(tabs.getByRole("link", { name: /应收/ })).toBeVisible();
+  await expect(tabs.getByRole("link", { name: /应付/ })).toBeVisible();
 });
 
 test("差异识别:金额差异 / 仅一方有 / 异币种,逐类判定并高亮", async ({ page }) => {

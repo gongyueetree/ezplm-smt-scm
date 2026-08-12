@@ -1889,6 +1889,10 @@ model ReconciliationStatement {
   matchedAt       DateTime?
   /// 对账单发送记录:**只到预览/模拟**,不代表已发送
   lastPreviewAt   DateTime?
+  /// E5:示例数据。客户说「不知如何实现,需要举例」,所以提供一键加载的样例;
+  /// **必须与正式数据区分**,否则演示用的数字会混进对账结论里。
+  /// 台账上打标、KPI 里排除、可一键清除。
+  isExample       Boolean              @default(false)
   createdById     String
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
