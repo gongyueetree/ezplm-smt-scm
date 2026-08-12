@@ -8,6 +8,7 @@ import { allowedKinds } from "@/lib/server/recon-access";
 import { listStatements } from "@/lib/server/repositories/reconciliation";
 import { getSession } from "@/lib/server/session";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { ReconHowTo } from "./how-to";
 import { CreateStatementForm } from "./create-form";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +64,14 @@ export default async function ReconciliationPage({
     return suppliers.find((x) => x.id === s.supplierId)?.name ?? "未指定供应商";
   };
 
-  const unresolvedTotal = statements.reduce((a, s) => a + s.unresolved, 0);
+  /*
+   * E5:示例数据**不进 KPI**。
+   * 演示用的差异行混进"未处理差异"里,会让人以为真有事要处理 ——
+   * 那比没有示例更糟。台账里仍然显示,但带「示例」标记。
+   */
+  const realStatements = statements.filter((s) => !s.isExample);
+  const exampleCount = statements.length - realStatements.length;
+  const unresolvedTotal = realStatements.reduce((a, s) => a + s.unresolved, 0);
 
   return (
     <div>
@@ -82,7 +90,7 @@ export default async function ReconciliationPage({
       </Banner>
 
       {kinds.length > 1 ? (
-        <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+        <div style={{ display: "flex", gap: 8, margin: "12px 0" }} data-testid="recon-kind-tabs">
           {kinds.map((k) => (
             <Link
               key={k}
@@ -102,8 +110,11 @@ export default async function ReconciliationPage({
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label">对账单</div>
-          <div className="kpi-value">{statements.length}</div>
-          <div className="kpi-foot">{KIND_LABEL[kind]}</div>
+          <div className="kpi-value">{realStatements.length}</div>
+          <div className="kpi-foot">
+            {KIND_LABEL[kind]}
+            {exampleCount > 0 ? ` · 另有 ${exampleCount} 张示例(不计入)` : ""}
+          </div>
         </div>
         <div className={unresolvedTotal > 0 ? "kpi danger" : "kpi"}>
           <div className="kpi-label">未处理差异行</div>
@@ -113,11 +124,21 @@ export default async function ReconciliationPage({
         <div className="kpi">
           <div className="kpi-label">已匹配</div>
           <div className="kpi-value">
-            {statements.filter((s) => s.status !== "DRAFT").length}
+            {realStatements.filter((s) => s.status !== "DRAFT").length}
           </div>
-          <div className="kpi-foot">草稿 {statements.filter((s) => s.status === "DRAFT").length}</div>
+          <div className="kpi-foot">
+            草稿 {realStatements.filter((s) => s.status === "DRAFT").length}
+          </div>
         </div>
       </div>
+
+      {/* E5:客户 Q11「不知如何实现,需要举例」—— 引导与示例放在建单之前 */}
+      <Card
+        title="怎么用(五步)"
+        sub="客户反馈「不知如何实现,需要举例」—— 这里给样例文件与一键示例"
+      >
+        <ReconHowTo kind={kind} />
+      </Card>
 
       <CreateStatementForm
         kind={kind}
@@ -144,7 +165,8 @@ export default async function ReconciliationPage({
               {statements.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="muted small" style={{ textAlign: "center", padding: 24 }}>
-                    暂无对账单
+                    暂无对账单 —— 可点上方<b>「加载示例数据」</b>先看看差异长什么样,
+                    或用<b>「下载样例」</b>照格式整理后上传
                   </td>
                 </tr>
               ) : (
@@ -154,6 +176,11 @@ export default async function ReconciliationPage({
                       <Link className="mono" href={`/reconciliation/${s.id}`}>
                         {s.code}
                       </Link>
+                      {s.isExample ? (
+                        <div>
+                          <Badge tone="gray">示例 · 不计入正式结论</Badge>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="small">{nameOf(s)}</td>
                     <td>
