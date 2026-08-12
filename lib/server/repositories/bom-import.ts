@@ -8,7 +8,12 @@
  */
 import type { Prisma } from "@prisma/client";
 import { matchBomLines, type MatchContext, type MatchResult } from "@/lib/domain/bom-match";
-import { countUniqueMpns, type ParsedBomLine } from "@/lib/domain/bom-parse";
+import {
+  countUniqueMpns,
+  reconcileImport,
+  type ParsedBomLine,
+  type RowTrace,
+} from "@/lib/domain/bom-parse";
 import { computeProgress, nextBatchSlice, shouldUseImportJob } from "@/lib/domain/import-batching";
 import { validateBomLines, type ValidationReport } from "@/lib/domain/bom-validate";
 import { getEzplmPartsProvider } from "@/lib/providers/ezplm";
@@ -30,6 +35,11 @@ export interface CreateImportJobInput {
   /** 幂等键:同一文件重复提交不产生第二个作业 */
   idempotencyKey: string;
   columnMapping?: unknown;
+  /**
+   * E1a:每一行原始数据的去向。**必须覆盖表头之后的每一行**。
+   * 缺省为空数组只为兼容旧调用点;新链路一律传。
+   */
+  trace?: RowTrace[];
 }
 
 /**
@@ -148,6 +158,8 @@ export async function createImportJob(
         }),
       ),
     });
+    const trace = input.trace ?? [];
+    const recon = reconcileImport(trace, input.lines);
     const job = await tx.bOMImportJob.create({
       data: tenantData(session.tenantId, {
         bomId: bom.id,
@@ -159,9 +171,32 @@ export async function createImportJob(
         totalLines: input.lines.length,
         processedLines: 0,
         columnMapping: (input.columnMapping ?? null) as Prisma.InputJsonValue,
+        reconciliation: recon as unknown as Prisma.InputJsonValue,
+        rawRowCount: trace.length,
         createdById: session.userId,
       }),
     });
+
+    /*
+     * E1a:原始行**与作业同一个事务落库**。
+     * 分开写的话,一旦第二步失败,库里就会留下一个"没有行去向"的导入作业 ——
+     * 那正是我们要消灭的状态:说不清行去哪了。
+     */
+    if (trace.length > 0) {
+      await tx.rawBomRow.createMany({
+        data: trace.map((t) =>
+          tenantData(session.tenantId, {
+            importJobId: job.id,
+            sourceRow: t.sourceRow,
+            cells: t.cells as unknown as Prisma.InputJsonValue,
+            disposition: t.disposition,
+            reason: t.reason,
+            lineNo: t.lineNo,
+            mergedIntoSourceRow: t.mergedIntoSourceRow,
+          }),
+        ),
+      });
+    }
     await writeAudit(tx, {
       tenantId: session.tenantId,
       userId: session.userId,
@@ -171,6 +206,9 @@ export async function createImportJob(
       after: {
         bomId: bom.id,
         lines: input.lines.length,
+        // 行去向进审计:事后要能解释"当时这份文件是怎么被拆的"
+        rawRowCount: trace.length,
+        reconciliation: recon,
         uniqueMpns,
         usesBatching: shouldUseImportJob(uniqueMpns),
         errorCount: validation.errorCount,

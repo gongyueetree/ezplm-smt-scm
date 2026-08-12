@@ -21,6 +21,17 @@ interface ImportResponse {
   sourceNote?: string;
   missingRecommended: string[];
   inferredMpnCount: number;
+  /** E1a:行去向对账 */
+  reconciliation?: {
+    totalRows: number;
+    recognized: number;
+    mergedIntoPrevious: number;
+    nonBusiness: number;
+    needsReview: number;
+    withIssues: number;
+    balanced: boolean;
+    byDisposition: Record<string, number>;
+  };
   idempotentHit: { createdAt: string } | null;
 }
 
@@ -207,8 +218,72 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
             </div>
           </Card>
 
+          {/*
+            E1a(客户 Q13:「AI 无法全部识别,数据会丢失」)。
+            这张卡片回答的就是那句话:**原始多少行、每一行去了哪里**。
+            它排在校验之前 —— 先说清没丢东西,再谈数据对不对。
+          */}
+          {result.reconciliation ? (
+            <Card
+              title="③ 行去向对账"
+              sub="原始文件的每一行都必须有去向 —— 系统不会悄悄丢行"
+            >
+              <div className="kpi-grid" data-testid="import-reconciliation">
+                <div className="kpi">
+                  <div className="kpi-label">原始行数</div>
+                  <div className="kpi-value">{result.reconciliation.totalRows}</div>
+                  <div className="kpi-foot">表头之后的全部行(含空行)</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-label">已识别为物料</div>
+                  <div className="kpi-value">{result.reconciliation.recognized}</div>
+                  <div className="kpi-foot">其中 {result.reconciliation.withIssues} 行带解析问题</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-label">并入上一行</div>
+                  <div className="kpi-value">{result.reconciliation.mergedIntoPrevious}</div>
+                  <div className="kpi-foot">位号/描述折行</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-label">非业务行</div>
+                  <div className="kpi-value">{result.reconciliation.nonBusiness}</div>
+                  <div className="kpi-foot">空行 / 重复表头 / 页脚</div>
+                </div>
+                <div
+                  className={result.reconciliation.needsReview > 0 ? "kpi warn" : "kpi"}
+                  data-testid="recon-needs-review"
+                >
+                  <div className="kpi-label">待人工判断</div>
+                  <div className="kpi-value">{result.reconciliation.needsReview}</div>
+                  <div className="kpi-foot">没能判定是不是物料行</div>
+                </div>
+              </div>
+              {result.reconciliation.balanced ? (
+                <p className="small muted" style={{ marginTop: 8 }} data-testid="recon-balanced">
+                  账已平:<b>{result.reconciliation.totalRows}</b> ={" "}
+                  {result.reconciliation.recognized} 识别 + {result.reconciliation.mergedIntoPrevious} 并入 +{" "}
+                  {result.reconciliation.nonBusiness} 非业务 + {result.reconciliation.needsReview} 待人工。
+                  逐行明细见 <Link href={`/bom/imports/${result.job.id}`}>行去向明细</Link>。
+                </p>
+              ) : (
+                <div className="banner warn" style={{ marginTop: 8 }} data-testid="recon-unbalanced">
+                  <b>行去向对不上账</b> —— 这是系统缺陷,不是文件问题。请把本次导入编号
+                  {result.job.id} 反馈给我们,在查清之前<b>不要以这份 BOM 为准</b>。
+                </div>
+              )}
+              {result.reconciliation.needsReview > 0 ? (
+                <div className="banner soft" style={{ marginTop: 8 }}>
+                  有 <b>{result.reconciliation.needsReview}</b> 行没能判定是不是物料行。
+                  它们<b>没有被丢掉</b>,在
+                  <Link href={`/bom/imports/${result.job.id}`}>行去向明细</Link>里逐行可查 ——
+                  确认是物料的话,请在原文件补上料号或位号后重传。
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
           <Card
-            title="③ 导入校验"
+            title="④ 导入校验"
             sub={`${result.job.totalLines} 行 · ${result.uniqueMpns} 个唯一 MPN · ${result.validation.errorCount} 错误 / ${result.validation.warningCount} 提示`}
           >
             {result.source ? (
@@ -273,7 +348,7 @@ export function ImportWizard({ rfqs }: { rfqs: { id: string; code: string; title
           </Card>
 
           <Card
-            title="④ 智能匹配进度"
+            title="⑤ 智能匹配进度"
             sub={result.usesBatching ? `分批处理,每批 ${result.job.batchSize} 行` : "行数较少,单批完成"}
           >
             {progress ? (

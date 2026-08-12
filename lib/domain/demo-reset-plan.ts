@@ -76,6 +76,8 @@ export const PURGE_MODELS = [
   "Quote",
 
   // ---- BOM ----
+  // 原始行去向随导入作业一起清(它是某次导入的逐行记录,不是主数据)
+  "RawBomRow",
   "BomCompareRun",
   "BomLineDecision",
   "BomMatchCandidate",

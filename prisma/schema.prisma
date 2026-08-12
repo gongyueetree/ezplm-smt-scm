@@ -787,10 +787,17 @@ model BOMImportJob {
   batchSize      Int       @default(20)
   /// 列映射配置(非标准 BOM → 标准结构)
   columnMapping  Json?
+  /// E1a:行去向对账汇总(ImportReconciliation)。**与 RawBomRow 同事务写入**,
+  /// 页面直接读它,不在展示时重算 —— 重算会因为解析器升级而与当时的结论对不上。
+  reconciliation Json?
+  /// 表头之后的原始行数。与 RawBomRow 条数必须相等,不等即为缺陷。
+  rawRowCount    Int?
   error          String?
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  rawRows RawBomRow[]
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status])
@@ -3177,4 +3184,37 @@ model NreItemDefinition {
 
   @@unique([tenantId, code])
   @@index([tenantId, active])
+}
+
+/**
+ * E1a(客户 Q13:「正常 BOM 导入,AI 无法全部识别,数据会丢失」)。
+ * 每一条 = 上传文件里表头之后的**一行原始数据**,连同它的去向。
+ * 在此之前解析器用 5 个 `continue` 悄悄丢行,100 行进去 92 行出来,
+ * 没人说得清另外 8 行去哪了。
+ * 这张表的意义不是"把丢掉的行捡回来"—— 空行确实不该变成物料 ——
+ * 而是**让每一行都有一个可以复核的去向**。AI 与启发式规则可以判断,
+ * 但**不能决定某一行不存在**。
+ */
+model RawBomRow {
+  id                  String       @id @default(cuid())
+  tenantId            String
+  importJobId         String
+  importJob           BOMImportJob @relation(fields: [importJobId], references: [id])
+  /// 源文件行号(1 基,与 ParsedBomLine.sourceRow 同口径)
+  sourceRow           Int
+  /// 原始单元格原文 —— 人要能在界面上核对"这一行长什么样"
+  cells               Json
+  /// RowDisposition:RECOGNIZED / MERGED_INTO_PREVIOUS / BLANK /
+  /// REPEATED_HEADER / PAGE_FOOTER / NO_IDENTIFIER / INSUFFICIENT
+  disposition         String
+  /// 人话原因,直接显示给用户
+  reason              String
+  /// 成为第几条 BOM 行(仅 RECOGNIZED)
+  lineNo              Int?
+  /// 并进了哪一行(仅 MERGED_INTO_PREVIOUS)
+  mergedIntoSourceRow Int?
+  createdAt           DateTime     @default(now())
+
+  @@unique([tenantId, importJobId, sourceRow])
+  @@index([tenantId, importJobId, disposition])
 }

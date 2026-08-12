@@ -8,11 +8,21 @@
  * 否则 "制造商料号" 会被 "制造商" 的子串匹配抢走,导致 MPN 列丢失。
  */
 
-/** 归一化列名:去空格/标点、小写 */
+/**
+ * 归一化列名:去空格/标点、小写。
+ *
+ * E1a:撇号与斜杠原先**没有**被去掉,于是 `Q'ty` 归一化后仍是 `q'ty`,
+ * 匹配不上 `qty` —— 而 `Q'ty` 是 Altium 与国内 EMS 模板里极常见的写法。
+ * 后果不是"少认一列",而是**整份文件被 422 拒收**:数量是必需列。
+ * 客户说的「正常 BOM 导入,AI 无法全部识别」,这就是其中一种。
+ *
+ * 同义词也走同一个函数(见 `scoreFieldForCell`)—— 两边口径必须对称,
+ * 否则改了这里就会让 `qty/pcs` 这类含斜杠的同义词失效。
+ */
 export function normalizeHeader(raw: string): string {
   return raw
     .toLowerCase()
-    .replace(/[\s_\-.()（）【】\[\]:：#*]/g, "")
+    .replace(/[\s_\-.()（）【】\[\]:：#*'’`／/、,,]/g, "")
     .trim();
 }
 
@@ -21,11 +31,13 @@ export function normalizeHeader(raw: string): string {
  * 精确相等 10000-rank;包含匹配 1000+同义词长度。
  */
 export function scoreFieldForCell(cell: string, synonyms: readonly string[]): number {
-  const exact = synonyms.findIndex((s) => s === cell);
+  // 同义词与列名走同一套归一化 —— 否则 `qty/pcs` 这类含标点的同义词会永远匹配不上
+  const norm = synonyms.map((s) => normalizeHeader(s));
+  const exact = norm.findIndex((s) => s === cell);
   if (exact >= 0) return 10_000 - exact;
   let best = 0;
-  for (const s of synonyms) {
-    if (cell.includes(s)) best = Math.max(best, 1_000 + s.length);
+  for (const s of norm) {
+    if (s && cell.includes(s)) best = Math.max(best, 1_000 + s.length);
   }
   return best;
 }

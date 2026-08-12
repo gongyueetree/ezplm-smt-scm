@@ -175,6 +175,10 @@ export default async function BomImportLedgerPage({
                       <td className="small muted">{j.error ?? "—"}</td>
                       <td>
                         <div style={{ display: "flex", gap: 6 }}>
+                          {/* E1a:行去向明细 —— 客户问「数据去哪了」时的落点 */}
+                          <Link className="btn xs" href={`/bom/imports/${j.id}`}>
+                            行去向
+                          </Link>
                           {latest ? (
                             <Link className="btn xs" href={`/bom/version/${latest.id}`}>
                               匹配确认
