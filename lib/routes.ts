@@ -265,6 +265,18 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "平台",
     routes: [
       {
+        path: "/quality",
+        label: "质量事件",
+        icon: "box",
+        plannedPr: "PR-E6",
+        desc:
+          "最小品质模块:来料 / 过程 / 客诉 / 供应商问题的登记与跟进,可与追溯挂接。" +
+          "**不是完整 QMS**(8D/CAPA/SPC 未实现)。访问由 quality.* 权限控制,不新增角色。",
+        implemented: true,
+        // 角色不限,真正的门是 quality.view 权限(默认给 MANAGEMENT,按人授予)
+        roles: ["ENGINEERING", "PROCUREMENT", "PM", "MANAGEMENT"],
+      },
+      {
         path: "/traceability",
         label: "批次级追溯",
         icon: "box",

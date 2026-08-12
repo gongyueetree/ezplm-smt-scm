@@ -2843,6 +2843,16 @@ model TraceAnalysisRun {
 }
 
 /// 质量事件(客诉 / 来料异常 / 制程异常的登记入口)
+/// E6:质量事件类型(客户 Q12 明确质量事件由品质维护)
+enum QualityEventType {
+  INCOMING
+  PROCESS
+  CUSTOMER_COMPLAINT
+  SUPPLIER
+  TRACE_INCIDENT
+  OTHER
+}
+
 model QualityIncident {
   id             String         @id @default(cuid())
   tenantId       String
@@ -2853,6 +2863,21 @@ model QualityIncident {
   description    String?
   severity       String?
   status         IncidentStatus @default(OPEN)
+  /// E6:事件类型。默认 OTHER —— 旧数据没有分类过,不替它猜一个。
+  eventType      QualityEventType @default(OTHER)
+  /// 客诉挂客户、来料/供应商问题挂供应商;都可空(过程异常两个都没有)
+  customerId     String?
+  supplierId     String?
+  partId         String?
+  mpn            String?
+  lotId          String?
+  /// SN 级留空是**常态**:没有 MES 就没有 SN,不编一个
+  sn             String?
+  detectedAt     DateTime?
+  ownerId        String?
+  resolution     String?
+  /// 关联的追溯分析(从追溯页发起时带上)
+  traceAnalysisId String?
   /// 影响范围分析快照(算出来即固化,便于事后复盘)
   impactSnapshot Json?
   reportedById   String
@@ -3266,4 +3291,30 @@ model RawBomRow {
 
   @@unique([tenantId, importJobId, sourceRow])
   @@index([tenantId, importJobId, disposition])
+}
+
+
+/// E6:SN 级追溯的**数据模型准备**(客户 Q12:「最好 SN 级别,但 SN 需要和 MES 关联」)。
+///
+/// 明确不声称已完成:本系统没有 MES,也**不产生 SN**。
+/// 这张表只在客户导入 SN ↔ 工单/批次 对应关系时才有数据;
+/// 没有 MES 时它就是空的,界面显示「当前粒度:批次级」。
+/// **绝不自动生成虚构 SN。**
+model FinishedGoodsSerial {
+  id             String   @id @default(cuid())
+  tenantId       String
+  sn             String
+  /// 该 SN 属于哪一批成品(批次级追溯的锚点)
+  finishedLotId  String?
+  workOrderId    String?
+  productId      String?
+  /// MES 侧主键 —— 回查时要能对回去
+  mesExternalId  String?
+  /// 数据来自哪里:MES_IMPORT / MANUAL。没有第三种 —— 系统不生成 SN
+  source         String   @default("MES_IMPORT")
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, sn])
+  @@index([tenantId, finishedLotId])
+  @@index([tenantId, workOrderId])
 }
