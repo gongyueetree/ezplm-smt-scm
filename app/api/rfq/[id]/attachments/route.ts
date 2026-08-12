@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { badRequest, notFound, requireSession } from "@/lib/server/api";
+import { checkContentLength, resolveMaxBytes } from "@/lib/domain/attachment-limits";
 import { addRfqAttachment } from "@/lib/server/repositories/rfq";
 import { getStorageProvider } from "@/lib/server/storage";
 
@@ -8,14 +9,41 @@ export const runtime = "nodejs";
 const ATTACHMENT_TYPES = ["BOM", "GERBER", "PDF", "IMAGE", "PROCESS_DOC", "OTHER"] as const;
 type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
 
-/** 单文件上限 20MB(原始客户文件需保留,过大文件走线下交换) */
-const MAX_BYTES = 20 * 1024 * 1024;
+/*
+ * E1b:上限改为**可配置**(ATTACHMENT_MAX_MB,默认 100MB)。
+ * 20MB 对 Gerber 包不够 —— 客户原话「gerber 无固定大小」。
+ *
+ * 更要紧的是**校验时机**:下面在 `req.formData()` 之前先看 Content-Length。
+ * 旧实现是先 formData 把所有文件缓冲进内存、之后才比大小 ——
+ * 传 200MB 就是先吃下 200MB 再说"超限",容器内存扛不住就是客户说的"死机"。
+ *
+ * 大文件(尤其 Gerber)建议走 `POST .../attachments/upload` 流式单文件入口。
+ */
 
 /** 多文件上传:保留原始客户文件并标记附件类型(SPEC §5) */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
   const { id } = await params;
+
+  const limit = resolveMaxBytes(process.env.ATTACHMENT_MAX_MB);
+  // ——— 必须在 formData() 之前 ———
+  const sizeCheck = checkContentLength(
+    req.headers.get("content-length"),
+    limit.maxBytes,
+    limit.maxMb,
+  );
+  if (!sizeCheck.ok) {
+    return NextResponse.json(
+      {
+        error: sizeCheck.message,
+        code: sizeCheck.code,
+        maxMb: limit.maxMb,
+        hint: "大文件请用「逐个流式上传」入口,它不会把整包读进内存",
+      },
+      { status: 413 },
+    );
+  }
 
   const form = await req.formData().catch(() => null);
   if (!form) return badRequest("需要 multipart/form-data");
@@ -31,8 +59,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const storage = getStorageProvider();
   const saved = [];
   for (const file of files) {
-    if (file.size > MAX_BYTES) {
-      return badRequest(`文件 ${file.name} 超过 20MB 上限`);
+    if (file.size > limit.maxBytes) {
+      return badRequest(`文件 ${file.name} 超过 ${limit.maxMb}MB 上限`);
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const stored = await storage.put(file.name, buffer, {

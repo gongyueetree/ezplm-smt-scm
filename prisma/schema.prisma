@@ -655,6 +655,12 @@ model RFQAttachment {
   fileKey      String
   sizeBytes    Int?
   contentType  String?
+  /// E1b:**保存**与**解析**是两件事。
+  /// UPLOADED_NOT_PARSED = 存下来了但我们没读它 —— 比假装解析成功诚实,
+  /// 也比因为解析不了就让上传失败有用(客户明确要求附件仍要保存成功)。
+  processState String         @default("UPLOADED_NOT_PARSED")
+  /// 未解析/解析失败的原因原文,直接显示给用户
+  processNote  String?
   uploadedById String
   createdAt    DateTime       @default(now())
 

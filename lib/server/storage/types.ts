@@ -18,6 +18,18 @@ export interface PutOptions {
 export interface FileStorageProvider {
   readonly kind: "local" | "vercel-blob";
   put(fileName: string, body: Buffer | Uint8Array, opts: PutOptions): Promise<StoredFile>;
+  /**
+   * E1b:**流式写入**,不把整个文件读进内存。
+   *
+   * Gerber 压缩包没有固定大小,几十上百 MB 很常见。走 `put()` 的话
+   * 一个 200MB 的包会在 Node 进程里完整驻留一份 —— 容器内存有限,
+   * 表现就是客户说的"死机"。
+   */
+  putStream(
+    fileName: string,
+    body: ReadableStream<Uint8Array>,
+    opts: PutOptions & { contentLength?: number },
+  ): Promise<StoredFile>;
   get(key: string): Promise<Buffer | null>;
   delete(key: string): Promise<void>;
 }

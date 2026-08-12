@@ -37,6 +37,47 @@ export class LocalStorageProvider implements FileStorageProvider {
     };
   }
 
+  /**
+   * 流式落盘:边收边写,内存里只留一个缓冲块。
+   *
+   * 与 `put()` 的一处差别:键里的 hash 是**写完之后**才算得出来的,
+   * 所以这里用随机键 + 写完回填大小,而不是先算 hash 再定键 ——
+   * 为了拿 hash 去把整个文件读进内存,等于白做流式。
+   */
+  async putStream(
+    fileName: string,
+    body: ReadableStream<Uint8Array>,
+    opts: PutOptions & { contentLength?: number },
+  ): Promise<StoredFile> {
+    const ext = path.extname(fileName).slice(0, 12).replace(/[^a-zA-Z0-9.]/g, "");
+    const key = `${opts.prefix}/${randomUUID()}${ext}`;
+    const abs = resolveSafe(key);
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+
+    const handle = await fs.open(abs, "w");
+    let written = 0;
+    try {
+      const reader = body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          await handle.write(value);
+          written += value.byteLength;
+        }
+      }
+    } finally {
+      await handle.close();
+    }
+
+    return {
+      key,
+      url: `/api/files/${key}`,
+      sizeBytes: written,
+      contentType: opts.contentType,
+    };
+  }
+
   async get(key: string): Promise<Buffer | null> {
     try {
       return await fs.readFile(resolveSafe(key));

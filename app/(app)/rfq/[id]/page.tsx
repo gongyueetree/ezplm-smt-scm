@@ -5,6 +5,10 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { BackLink } from "@/components/shell/back-link";
 import {
+  PROCESS_STATE_LABEL,
+  type AttachmentProcessState,
+} from "@/lib/domain/attachment-limits";
+import {
   RFQ_STATUS_LABELS,
   availableTransitionsFor,
   type RfqStatusValue,
@@ -74,6 +78,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
                 <th>文件名</th>
                 <th>类型</th>
                 <th className="num">大小</th>
+                <th>处理状态</th>
                 <th>上传时间</th>
                 <th>操作</th>
               </tr>
@@ -81,7 +86,7 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
             <tbody>
               {rfq.attachments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="muted small" style={{ textAlign: "center", padding: 20 }}>
+                  <td colSpan={6} className="muted small" style={{ textAlign: "center", padding: 20 }}>
                     暂无附件
                   </td>
                 </tr>
@@ -93,7 +98,28 @@ export default async function RfqDetailPage({ params }: { params: Promise<{ id: 
                       <Badge tone="gray">{a.type}</Badge>
                     </td>
                     <td className="num small">
-                      {a.sizeBytes ? `${(a.sizeBytes / 1024).toFixed(1)} KB` : "-"}
+                      {a.sizeBytes
+                        ? a.sizeBytes >= 1024 * 1024
+                          ? `${(a.sizeBytes / 1024 / 1024).toFixed(1)} MB`
+                          : `${(a.sizeBytes / 1024).toFixed(1)} KB`
+                        : "-"}
+                    </td>
+                    {/*
+                      E1b:**保存**与**解析**分开显示。
+                      Gerber 在 RFQ 阶段只留档不解析 —— 不写清楚的话,
+                      用户会以为传上去就等于系统读懂了。
+                    */}
+                    <td className="small">
+                      <Badge tone={a.processState === "PARSED" ? "green" : "gray"}>
+                        {PROCESS_STATE_LABEL[
+                          (a.processState ?? "UPLOADED_NOT_PARSED") as AttachmentProcessState
+                        ] ?? a.processState}
+                      </Badge>
+                      {a.processNote ? (
+                        <div className="muted" style={{ maxWidth: 320 }}>
+                          {a.processNote}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="small">
                       {formatDateTime(a.createdAt)}
