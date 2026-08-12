@@ -60,13 +60,18 @@ test("S-7 Pin-to-Pin 与封装兼容必须说清区别,而不是看起来重复"
   // 页面上要明说二者不是一回事(客户原话:「是否和封装重复了?」)
   await expect(page.getByText(/不是同一件事/)).toBeVisible();
 
-  // 两个模式都还在 —— 澄清的结论是不合并(同封装不同引脚定义会烧板)
-  await expect(page.getByRole("button", { name: /Pin-to-Pin/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /封装兼容/ })).toBeVisible();
+  /*
+   * 两个模式都还在 —— 澄清的结论是不合并(同封装不同引脚定义会烧板)。
+   * 定位收窄到「替代模式」按钮区:E2 之后页面上还有一组三维兼容筛选按钮,
+   * 里面同样含「Pin-to-Pin」字样,裸 getByRole 会撞上它们。
+   */
+  const modeButtons = page.getByTestId("mode-buttons");
+  await expect(modeButtons.getByRole("button", { name: /Pin-to-Pin/ })).toBeVisible();
+  await expect(modeButtons.getByRole("button", { name: /封装兼容/ })).toBeVisible();
 
   // 选中封装兼容时,模式说明必须点出"只保证贴得上去、引脚不保证"。
   // 用模式说明区定位:页面顶部的纪律说明里也含同样措辞,裸 getByText 会撞两个元素。
-  await page.getByRole("button", { name: /封装兼容/ }).click();
+  await modeButtons.getByRole("button", { name: /封装兼容/ }).click();
   await expect(page.getByTestId("mode-desc")).toContainText("贴得上去");
   await expect(page.getByTestId("mode-desc")).toContainText("引脚功能是否一致不保证");
 });
