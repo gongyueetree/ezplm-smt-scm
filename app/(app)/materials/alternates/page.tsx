@@ -1,6 +1,8 @@
 import { BackLink } from "@/components/shell/back-link";
 import { Banner } from "@/components/ui/banner";
 import { AlternateFinder } from "./finder";
+import { Card } from "@/components/ui/card";
+import { CompatPanel } from "./compat-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,16 @@ export default async function AlternatesPage({
           系统不会自动替换任何料。
         </span>
       </Banner>
+
+      <Card
+        title="已维护的替代关系"
+        sub="客户 Q10:功能一致是首要条件 —— 这里是已核过的结论,不是系统猜的候选"
+        flush
+      >
+        <div style={{ padding: "0 16px 12px" }}>
+          <CompatPanel />
+        </div>
+      </Card>
 
       <AlternateFinder initialMpn={mpn ?? ""} />
     </div>

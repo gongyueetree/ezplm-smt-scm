@@ -265,7 +265,10 @@ export function AlternateFinder({ initialMpn }: { initialMpn: string }) {
 
         <div className="card" style={{ padding: 14 }}>
           <b className="small">替代模式</b>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+          <div
+            style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}
+            data-testid="mode-buttons"
+          >
             {MODES.map((m) => (
               <button
                 key={m}

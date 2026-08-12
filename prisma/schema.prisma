@@ -1245,6 +1245,29 @@ model CustomerPartMapping {
 }
 
 /// 替代关系(ezPLM 同步 + 本地补充)
+/// E2:三维兼容性(客户 Q10:「功能一致是最重要的」)。
+/// 三者**正交、不可互推**:同封装可以引脚定义完全不同(SOT-23-5 是经典例子)。
+enum FunctionalEquivalence {
+  EXACT
+  EQUIVALENT
+  PARTIAL
+  UNKNOWN
+}
+
+enum PackageCompatibility {
+  EXACT
+  MINOR_VARIATION
+  DIFFERENT
+  UNKNOWN
+}
+
+enum PinCompatibility {
+  PIN_TO_PIN
+  REQUIRES_REVIEW
+  NOT_COMPATIBLE
+  UNKNOWN
+}
+
 model PartAlternate {
   id              String   @id @default(cuid())
   tenantId        String
@@ -1252,12 +1275,28 @@ model PartAlternate {
   part            Part     @relation("PartToAlternates", fields: [partId], references: [id])
   alternatePartId String
   alternatePart   Part     @relation("AlternateToParts", fields: [alternatePartId], references: [id])
-  /// 替代等级/说明(如 完全替代/条件替代)
+  /// 替代等级/说明(如 完全替代/条件替代)。保留:历史数据都挂在它上面
   grade           String?
+  /// E2 三维兼容性。默认 UNKNOWN —— **旧数据没核过就是没核过**,
+  /// 迁移时不替它猜一个"看起来合理"的值。
+  functionalEquivalence FunctionalEquivalence @default(UNKNOWN)
+  packageCompatibility  PackageCompatibility  @default(UNKNOWN)
+  pinCompatibility      PinCompatibility      @default(UNKNOWN)
+  /// 判定依据(datasheet 章节、对比结论等)—— 没有依据的兼容级别不可信
+  reason          String?
+  /// 依据来源:EZPLM / DIGIKEY / MOUSER / WEB / MANUAL
+  evidenceSource  String?
+  /// 谁拍的板。工程确认过的替代关系才敢直接用
+  approvedById    String?
+  approvedAt      DateTime?
   note            String?
   createdAt       DateTime @default(now())
+  /// **必须带默认值**:PartAlternate 在生产库里已经有数据,
+  /// 加一个没有默认值的 NOT NULL 列会让迁移直接失败(项目的迁移安全守卫会拦)。
+  updatedAt       DateTime @default(now()) @updatedAt
 
   @@unique([tenantId, partId, alternatePartId])
+  @@index([tenantId, functionalEquivalence])
 }
 
 /// 库存快照(来源 ezPLM,只读缓存;呆滞数量为候选展示项)
