@@ -3,6 +3,7 @@
  * EZPLM_API_BASE_URL + EZPLM_API_KEY 齐备 → Http;否则 Mock。
  * providerMode() 供 UI 诚实展示当前数据源形态(禁止暗示已联调)。
  */
+import { forceMockProviders } from "@/lib/providers/common/force-mock";
 import { HttpEzplmProvider } from "./http";
 import { MockEzplmProvider } from "./mock";
 import type { EzplmPartsProvider } from "./provider";
@@ -11,6 +12,8 @@ let cached: EzplmPartsProvider | undefined;
 let cachedMode: "mock" | "http" | undefined;
 
 export function ezplmProviderMode(): "mock" | "http" {
+  // E2E 用 PROVIDERS_FORCE_MOCK=1 钉住 Mock —— 见 lib/providers/common/force-mock.ts
+  if (forceMockProviders()) return "mock";
   return process.env.EZPLM_API_BASE_URL && process.env.EZPLM_API_KEY ? "http" : "mock";
 }
 
