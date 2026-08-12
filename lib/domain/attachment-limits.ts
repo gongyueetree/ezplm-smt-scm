@@ -18,6 +18,20 @@ export const DEFAULT_ATTACHMENT_MAX_MB = 100;
 export const ATTACHMENT_MAX_MB_CEILING = 2048;
 
 /**
+ * **走 middleware 的路由**能安全接收的上限。
+ *
+ * Next 为了让中间件读请求体会克隆一份 body,上限
+ * `middlewareClientMaxBodySize = 10MB`,**超出部分静默丢弃**。
+ * 服务端日志会打印:
+ *   `Request body exceeded 10MB for /api/... Only the first 10MB will be available`
+ *
+ * 流式入口 `/api/upload/` 已在 matcher 里排除,不受这条约束;
+ * 旧的 multipart 入口仍在 middleware 路径下,所以它**必须按这个数封顶** ——
+ * 允许 100MB 却在 10MB 处截断,等于给用户一个能"成功"的残档。
+ */
+export const MIDDLEWARE_BODY_LIMIT_MB = 10;
+
+/**
  * 从环境变量读上限(MB)。**可配置**是客户明确要求的一条。
  * 非法值一律回落默认值,并且不静默 —— 调用方会把实际生效值显示在界面上。
  */
@@ -43,6 +57,11 @@ export function resolveMaxBytes(raw: string | undefined): {
     return { ...fallback, reason: `ATTACHMENT_MAX_MB=${raw} 超过上限 ${ATTACHMENT_MAX_MB_CEILING}MB,已回落默认值` };
   }
   return { maxBytes: Math.floor(n * 1024 * 1024), maxMb: n, usedDefault: false, reason: null };
+}
+
+/** 走 middleware 的路由的有效上限:取配置值与 10MB 的较小者 */
+export function effectiveLimitBehindMiddleware(maxMb: number): number {
+  return Math.min(maxMb, MIDDLEWARE_BODY_LIMIT_MB);
 }
 
 export type SizeCheck =

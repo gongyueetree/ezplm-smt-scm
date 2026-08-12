@@ -3,6 +3,7 @@ import {
   ATTACHMENT_MAX_MB_CEILING,
   DEFAULT_ATTACHMENT_MAX_MB,
   checkContentLength,
+  effectiveLimitBehindMiddleware,
   guessGerberKind,
   resolveMaxBytes,
   shouldParseAtUpload,
@@ -99,5 +100,13 @@ describe("Gerber 扩展名识别", () => {
 
   it("**认出扩展名不等于会解析** —— 上传阶段一律不解析", () => {
     expect(shouldParseAtUpload()).toBe(false);
+  });
+});
+
+describe("middleware 路径下的有效上限", () => {
+  it("**取配置值与 10MB 的较小者** —— 超过的部分会被 Next 静默丢弃", () => {
+    expect(effectiveLimitBehindMiddleware(100)).toBe(10);
+    expect(effectiveLimitBehindMiddleware(5)).toBe(5);
+    expect(effectiveLimitBehindMiddleware(10)).toBe(10);
   });
 });

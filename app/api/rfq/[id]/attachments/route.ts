@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { badRequest, notFound, requireSession } from "@/lib/server/api";
-import { checkContentLength, resolveMaxBytes } from "@/lib/domain/attachment-limits";
+import {
+  checkContentLength,
+  effectiveLimitBehindMiddleware,
+  resolveMaxBytes,
+} from "@/lib/domain/attachment-limits";
 import { addRfqAttachment } from "@/lib/server/repositories/rfq";
 import { getStorageProvider } from "@/lib/server/storage";
 
@@ -26,7 +30,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const limit = resolveMaxBytes(process.env.ATTACHMENT_MAX_MB);
+  const configured = resolveMaxBytes(process.env.ATTACHMENT_MAX_MB);
+  /*
+   * 这个入口**在 middleware 路径下**,Next 克隆 body 的上限是 10MB,
+   * 超出部分静默丢弃(服务端日志会打印 "Only the first 10MB will be available")。
+   * 所以这里按 10MB 封顶 —— 放行 100MB 却在 10MB 处截断,
+   * 等于给用户一个能"成功"的残档,比拒绝糟得多。
+   * 大文件走 `/api/upload/rfq-attachment`,那条路已从 matcher 排除。
+   */
+  const maxMb = effectiveLimitBehindMiddleware(configured.maxMb);
+  const limit = { maxMb, maxBytes: maxMb * 1024 * 1024 };
   // ——— 必须在 formData() 之前 ———
   const sizeCheck = checkContentLength(
     req.headers.get("content-length"),
@@ -39,7 +52,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         error: sizeCheck.message,
         code: sizeCheck.code,
         maxMb: limit.maxMb,
-        hint: "大文件请用「逐个流式上传」入口,它不会把整包读进内存",
+        hint:
+          "大文件请用「逐个流式上传」入口(页面上的「上传附件」按钮已经走它)—— " +
+          "本入口在中间件路径下,超过 10MB 的部分会被框架静默丢弃,所以按 10MB 封顶。",
       },
       { status: 413 },
     );

@@ -124,20 +124,34 @@ test("多文件逐个上传:界面给出进度与取消入口,不是点了没反
   await expect(table).toContainText("b.GBL");
 });
 
-test("旧的 multipart 入口同样在读 body 之前拒绝超限请求", async ({ page }) => {
+test("**旧的 multipart 入口按 10MB 封顶** —— 它在中间件路径下,更大的会被框架截断", async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, "pm@demo.qianchuang.cn");
   const rfqId = await createRfq(page, `E2E multipart 超限 ${Date.now()}`);
 
+  /*
+   * 12MB:低于 ATTACHMENT_MAX_MB 的 100MB,但高于中间件的 10MB。
+   * 必须被拒 —— 放行的话 Next 会静默只保留前 10MB,
+   * 用户拿到一个"上传成功"的残档。
+   */
   const res = await page.request.post(`/api/rfq/${rfqId}/attachments`, {
     multipart: {
       type: "GERBER",
-      files: { name: "big.zip", mimeType: "application/zip", buffer: fakeBytes(120) },
+      files: { name: "big.zip", mimeType: "application/zip", buffer: fakeBytes(12) },
     },
   });
-  expect(res.status()).toBe(413);
+  expect(res.status(), "12MB 走 multipart 入口应被 413 拒绝").toBe(413);
   const body = await res.json();
   expect(body.code).toBe("too_large");
+  expect(body.error).toContain("10MB");
   // 并指路到流式入口
   expect(body.hint).toContain("流式");
+
+  // 而同样 12MB 走流式入口是可以的 —— 两条路的能力差别要能验证出来
+  const ok = await page.request.post(
+    `/api/upload/rfq-attachment?rfqId=${rfqId}&name=ok12.zip&type=GERBER`,
+    { headers: { "content-type": "application/zip" }, data: fakeBytes(12) },
+  );
+  expect(ok.status(), await ok.text()).toBe(201);
+  expect((await ok.json()).attachment.sizeBytes).toBe(12 * 1024 * 1024);
 });
