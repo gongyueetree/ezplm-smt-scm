@@ -184,6 +184,9 @@ export interface AddAttachmentInput {
   fileKey: string;
   sizeBytes: number;
   contentType: string;
+  /** E1b:处理状态。缺省 UPLOADED_NOT_PARSED —— 保存 ≠ 解析 */
+  processState?: string;
+  processNote?: string | null;
 }
 
 /** 附件登记(原始客户文件已由 FileStorageProvider 落盘,此处只记账 + 审计) */
@@ -203,6 +206,9 @@ export async function addRfqAttachment(session: SessionRef, input: AddAttachment
         fileKey: input.fileKey,
         sizeBytes: input.sizeBytes,
         contentType: input.contentType,
+        // E1b:上传阶段一律不解析 —— 存下来是一回事,读懂是另一回事
+        processState: input.processState ?? "UPLOADED_NOT_PARSED",
+        processNote: input.processNote ?? null,
         uploadedById: session.userId,
       }),
     });
@@ -212,7 +218,13 @@ export async function addRfqAttachment(session: SessionRef, input: AddAttachment
       action: "RFQ_ATTACHMENT_ADD",
       entityType: "RFQAttachment",
       entityId: att.id,
-      after: { rfqId: input.rfqId, fileName: input.fileName, type: input.type },
+      after: {
+        rfqId: input.rfqId,
+        fileName: input.fileName,
+        type: input.type,
+        sizeBytes: input.sizeBytes,
+        processState: input.processState ?? "UPLOADED_NOT_PARSED",
+      },
     });
     return att;
   });

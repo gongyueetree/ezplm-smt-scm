@@ -32,6 +32,26 @@ export class VercelBlobStorageProvider implements FileStorageProvider {
     };
   }
 
+  /** Blob SDK 直接接受 ReadableStream,不必先落成 Buffer */
+  async putStream(
+    fileName: string,
+    body: ReadableStream<Uint8Array>,
+    opts: PutOptions & { contentLength?: number },
+  ): Promise<StoredFile> {
+    const result = await put(`${opts.prefix}/${fileName}`, body, {
+      access: "public",
+      contentType: opts.contentType,
+      addRandomSuffix: true,
+    });
+    return {
+      key: result.pathname,
+      url: result.url,
+      // 流式写入时长度以 Content-Length 为准;没有就记 0 并由调用方回填
+      sizeBytes: opts.contentLength ?? 0,
+      contentType: opts.contentType,
+    };
+  }
+
   async get(key: string): Promise<Buffer | null> {
     const meta = await head(key).catch(() => null);
     if (!meta) return null;
