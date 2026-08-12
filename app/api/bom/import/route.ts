@@ -6,9 +6,9 @@ import {
   isMappingUsable,
   missingRecommendedFields,
   missingRequiredFields,
-  toStandardLines,
+  toStandardLinesTraced,
 } from "@/lib/domain/bom-parse";
-import { countUniqueMpns } from "@/lib/domain/bom-parse";
+import { countUniqueMpns, reconcileImport } from "@/lib/domain/bom-parse";
 import { shouldUseImportJob } from "@/lib/domain/import-batching";
 import { badRequest, requireSession } from "@/lib/server/api";
 import { extractRows } from "@/lib/server/file-parse";
@@ -125,8 +125,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const lines = toStandardLines(rows, mapping);
-  if (lines.length === 0) return badRequest("文件中没有可导入的 BOM 行");
+  // E1a:解析时**一并拿到每一行的去向**,后面与作业同事务落库
+  const { lines, trace } = toStandardLinesTraced(rows, mapping);
+  if (lines.length === 0) {
+    /*
+     * 一行都没识别出来时,也要把行去向带回去 ——
+     * 「文件里没有可导入的行」和「100 行全被判成待人工」是两回事,
+     * 只给一句错误提示,用户没法判断是自己文件的问题还是系统的问题。
+     */
+    return NextResponse.json(
+      {
+        error: "文件中没有可导入的 BOM 行",
+        reconciliation: reconcileImport(trace, lines),
+        unresolvedRows: trace
+          .filter((t) => t.disposition === "NO_IDENTIFIER" || t.disposition === "INSUFFICIENT")
+          .slice(0, 50),
+      },
+      { status: 422 },
+    );
+  }
 
   /*
    * 幂等键 = 文件内容 + **解析结果**。
@@ -151,6 +168,7 @@ export async function POST(req: Request) {
     lines,
     idempotencyKey,
     columnMapping: mapping,
+    trace,
   });
 
   const uniqueMpns = countUniqueMpns(lines);
@@ -161,6 +179,11 @@ export async function POST(req: Request) {
       validation,
       mapping,
       uniqueMpns,
+      /**
+       * E1a:行去向对账。客户 Q13 的验收口径 ——
+       * 「100 行进去只剩 92 行,另外 8 行去哪了」必须当场答得上来。
+       */
+      reconciliation: reconcileImport(trace, lines),
       usesBatching: shouldUseImportJob(uniqueMpns),
       /** 未识别到的建议字段(不阻断导入,但要让人看见) */
       missingRecommended: missingRecommendedFields(mapping).map((f) => BOM_FIELD_LABELS[f]),

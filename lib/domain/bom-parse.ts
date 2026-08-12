@@ -47,9 +47,14 @@ const SYNONYMS: Record<BomField, string[]> = {
     "designator", "designators", "部位号", "位置号", "元件位号",
   ],
   // KiCad 的 Qnty 是拼写省略,不是错别字;别把它漏了
-  qty: ["数量", "用量", "qty", "qnty", "quantity", "qty/pcs", "单板用量", "使用数量", "个数", "pcs"],
+  // E1a:`Q'ty` / `Q’ty`(Altium、国内 EMS 模板常用)原先认不出来,
+  // 而数量是必需列 —— 认不出的后果是**整份文件被拒收**,不是少认一列。
+  qty: [
+    "数量", "用量", "qty", "q'ty", "q’ty", "qnty", "quantity", "qty/pcs",
+    "单板用量", "使用数量", "个数", "pcs", "用量/pcs", "数量qty",
+  ],
   mpn: [
-    "mpn", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "part#", "partnum",
+    "mpn", "mfrp/n", "mfgp/n", "manufacturerp/n", "p/n", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "part#", "partnum",
     "mfgpn", "mfrpn", "mfgpartnumber", "manufacturerpartnumber", "manufacturerpart", "mfrpart#",
     "规格型号", "厂家型号", "原厂料号", "supplierpartnumber",
   ],
@@ -206,14 +211,89 @@ export function parseQty(raw: string | null): {
   return { qty: n };
 }
 
+/**
+ * 一行原始数据的**去向**(E1a / 客户 Q13:「AI 无法全部识别,数据会丢失」)。
+ *
+ * 在此之前,解析器用 5 个 `continue` 悄悄丢行:空行、翻页表头、续行、
+ * 没有料号的行、只有位号的行 —— 每一条都有它的道理,但**没有一条留下痕迹**。
+ * 于是 100 行进去、92 行出来,没人说得清另外 8 行去哪了。
+ *
+ * 现在每一行都必须落到下面某一个取值上,一行不许没有去向。
+ * 这不是把丢弃改成不丢弃 —— 空行确实不该变成物料 ——
+ * 而是**把"我丢了它、以及为什么"写下来**,让人能复核。
+ */
+export type RowDisposition =
+  /** 成为一条 BOM 行 */
+  | "RECOGNIZED"
+  /** 续行/折行,内容并入上一行(位号、描述、封装) */
+  | "MERGED_INTO_PREVIOUS"
+  /** 整行为空 */
+  | "BLANK"
+  /** 翻页重复表头 */
+  | "REPEATED_HEADER"
+  /** 页脚(Page 1 of 3 这类) */
+  | "PAGE_FOOTER"
+  /** 既没有任何料号也没有位号 —— 不能当物料,但**需要人看一眼** */
+  | "NO_IDENTIFIER"
+  /** 只有位号、其它列全空 —— 多半是附注,但**需要人看一眼** */
+  | "INSUFFICIENT";
+
+export const DISPOSITION_LABEL: Record<RowDisposition, string> = {
+  RECOGNIZED: "已识别为物料行",
+  MERGED_INTO_PREVIOUS: "并入上一行(折行)",
+  BLANK: "空行",
+  REPEATED_HEADER: "重复表头",
+  PAGE_FOOTER: "页脚",
+  NO_IDENTIFIER: "无料号也无位号 —— 待人工判断",
+  INSUFFICIENT: "仅有位号 —— 待人工判断",
+};
+
+/** 需要人工看一眼的去向:这些行**没有**变成物料,但也不能当成理所当然的垃圾 */
+export const NEEDS_REVIEW_DISPOSITIONS: RowDisposition[] = ["NO_IDENTIFIER", "INSUFFICIENT"];
+
+/** 确定为非业务内容的去向:可以安全略过,但仍然计数 */
+export const NON_BUSINESS_DISPOSITIONS: RowDisposition[] = ["BLANK", "REPEATED_HEADER", "PAGE_FOOTER"];
+
+/** 一行原始数据的去向记录 —— 与 RawBomRow 表一一对应 */
+export interface RowTrace {
+  /** 源文件行号(1 基,与 ParsedBomLine.sourceRow 同一口径) */
+  sourceRow: number;
+  disposition: RowDisposition;
+  /** 人话原因,直接显示给用户 */
+  reason: string;
+  /** 成为了第几条 BOM 行(仅 RECOGNIZED) */
+  lineNo: number | null;
+  /** 并进了哪一行(仅 MERGED_INTO_PREVIOUS) */
+  mergedIntoSourceRow: number | null;
+  /** 原始单元格,便于人在界面上核对"这一行长什么样" */
+  cells: string[];
+}
+
 /** 按映射把原始行转为标准 BOM 行(非标准 BOM → 标准结构) */
 function buildLines(
   rows: string[][],
   mapping: ColumnMapping,
   mergeContinuations: boolean,
-): ParsedBomLine[] {
+): { lines: ParsedBomLine[]; trace: RowTrace[] } {
   const out: ParsedBomLine[] = [];
+  const trace: RowTrace[] = [];
   let lineNo = 0;
+
+  const mark = (
+    r: number,
+    disposition: RowDisposition,
+    reason: string,
+    extra?: { lineNo?: number; mergedIntoSourceRow?: number },
+  ) => {
+    trace.push({
+      sourceRow: r + 1,
+      disposition,
+      reason,
+      lineNo: extra?.lineNo ?? null,
+      mergedIntoSourceRow: extra?.mergedIntoSourceRow ?? null,
+      cells: (rows[r] ?? []).map((c) => (c ?? "").trim()),
+    });
+  };
 
   const headerKey = (rows[mapping.headerRowIndex] ?? [])
     .map((c) => (c ?? "").trim().toUpperCase())
@@ -221,13 +301,17 @@ function buildLines(
 
   for (let r = mapping.headerRowIndex + 1; r < rows.length; r++) {
     const row = rows[r] ?? [];
-    if (row.every((c) => (c ?? "").trim() === "")) continue;
+    if (row.every((c) => (c ?? "").trim() === "")) {
+      mark(r, "BLANK", "整行没有任何内容");
+      continue;
+    }
     // 翻页重复表头:多页 PDF 每页都会重复一次表头,它不是数据行。
     // (buildPdfTable 只能与"第一行"比对,而表格上方常有标题块,
     //  真正的表头并不在第一行 —— 所以这里按识别出来的表头再挡一次。)
     if (
       row.map((c) => (c ?? "").trim().toUpperCase()).join("\u0001") === headerKey
     ) {
+      mark(r, "REPEATED_HEADER", "与表头完全一致 —— 多页文件每页都会重复一次表头");
       continue;
     }
 
@@ -289,6 +373,12 @@ function buildLines(
       // 描述/封装也可能跟着折行,补进上一行的空位(不覆盖已有内容)
       if (description && !prev.description) prev.description = description;
       if (footprint && !prev.footprint) prev.footprint = footprint;
+      mark(
+        r,
+        "MERGED_INTO_PREVIOUS",
+        `位号折行,已并入第 ${prev.sourceRow} 行(该行数量 ${prev.qty},位号尚未列全)`,
+        { mergedIntoSourceRow: prev.sourceRow },
+      );
       continue;
     }
 
@@ -299,13 +389,23 @@ function buildLines(
      */
     const hasKey = Boolean(mpn || customerPn || internalPn || refDes);
     if (!hasKey) {
-      if (description && !isPageFooter(description) && out.length > 0) {
+      if (description && isPageFooter(description)) {
+        mark(r, "PAGE_FOOTER", "识别为页脚(如 Page 1 of 3)");
+      } else if (description && out.length > 0) {
         const last = out[out.length - 1];
         last.description = [last.description, description].filter(Boolean).join(" ");
+        mark(r, "MERGED_INTO_PREVIOUS", `描述折行,已并入第 ${last.sourceRow} 行的描述`, {
+          mergedIntoSourceRow: last.sourceRow,
+        });
+      } else {
+        mark(r, "NO_IDENTIFIER", "既无 MPN / 客户料号 / 内部料号,也无位号 —— 无法判定是不是物料行");
       }
       continue;
     }
-    if (!hasIdentifier && !(refDes && otherFilled > 0)) continue;
+    if (!hasIdentifier && !(refDes && otherFilled > 0)) {
+      mark(r, "INSUFFICIENT", "只有位号一列有值,其余全空 —— 更像附注而不是物料行");
+      continue;
+    }
 
     const issues: string[] = [];
     const notices: string[] = [];
@@ -335,6 +435,7 @@ function buildLines(
     }
 
     lineNo += 1;
+    mark(r, "RECOGNIZED", "已识别为物料行", { lineNo });
     out.push({
       sourceRow: r + 1,
       lineNo,
@@ -353,7 +454,7 @@ function buildLines(
     });
   }
 
-  return out;
+  return { lines: out, trace };
 }
 
 /** 唯一 MPN 数量(决定是否走 ImportJob 分批,SPEC §15) */
@@ -386,7 +487,80 @@ function refDesAgreement(lines: ParsedBomLine[]): number {
  * 打平时不合并 —— 不确定就别动原始数据。
  */
 export function toStandardLines(rows: string[][], mapping: ColumnMapping): ParsedBomLine[] {
+  return toStandardLinesTraced(rows, mapping).lines;
+}
+
+/**
+ * 同上,但**连同每一行的去向一起返回**。
+ *
+ * 两种解析各自带自己的 trace:选了哪一种,就用哪一种的 trace ——
+ * 否则界面上说"第 7 行并入了第 6 行",实际采用的却是不合并的那一版,
+ * 对不上账比不给账更糟。
+ */
+export function toStandardLinesTraced(
+  rows: string[][],
+  mapping: ColumnMapping,
+): { lines: ParsedBomLine[]; trace: RowTrace[] } {
   const plain = buildLines(rows, mapping, false);
   const merged = buildLines(rows, mapping, true);
-  return refDesAgreement(merged) > refDesAgreement(plain) ? merged : plain;
+  return refDesAgreement(merged.lines) > refDesAgreement(plain.lines) ? merged : plain;
+}
+
+export interface ImportReconciliation {
+  /** 表头之后的原始行数 —— 对账的分母 */
+  totalRows: number;
+  recognized: number;
+  mergedIntoPrevious: number;
+  /** 空行 / 重复表头 / 页脚 */
+  nonBusiness: number;
+  /** 需要人工看一眼的行(**这就是以前被悄悄丢掉的那部分**) */
+  needsReview: number;
+  /** 已识别但带解析问题的行(数量非法等)—— 它们仍算 recognized */
+  withIssues: number;
+  byDisposition: Record<RowDisposition, number>;
+  /**
+   * 账平不平:`totalRows === recognized + merged + nonBusiness + needsReview`。
+   * 为 false 说明解析器里有一条路径没有登记去向 —— 这是**代码缺陷**,
+   * 界面必须报出来,不能当没看见。
+   */
+  balanced: boolean;
+}
+
+/**
+ * 导入行去向对账(客户 Q13 的验收口径)。
+ *
+ * 空行与重复表头**计入 totalRows**,单列一类。
+ * 先偷偷减掉空行再对账,对账本身就成了新的黑洞 ——
+ * 客户要的恰恰是"每一行都有去向"。
+ */
+export function reconcileImport(
+  trace: readonly RowTrace[],
+  lines: readonly ParsedBomLine[],
+): ImportReconciliation {
+  const byDisposition = {
+    RECOGNIZED: 0,
+    MERGED_INTO_PREVIOUS: 0,
+    BLANK: 0,
+    REPEATED_HEADER: 0,
+    PAGE_FOOTER: 0,
+    NO_IDENTIFIER: 0,
+    INSUFFICIENT: 0,
+  } as Record<RowDisposition, number>;
+  for (const t of trace) byDisposition[t.disposition] += 1;
+
+  const nonBusiness = NON_BUSINESS_DISPOSITIONS.reduce((n, d) => n + byDisposition[d], 0);
+  const needsReview = NEEDS_REVIEW_DISPOSITIONS.reduce((n, d) => n + byDisposition[d], 0);
+  const recognized = byDisposition.RECOGNIZED;
+  const mergedIntoPrevious = byDisposition.MERGED_INTO_PREVIOUS;
+
+  return {
+    totalRows: trace.length,
+    recognized,
+    mergedIntoPrevious,
+    nonBusiness,
+    needsReview,
+    withIssues: lines.filter((l) => l.issues.length > 0).length,
+    byDisposition,
+    balanced: trace.length === recognized + mergedIntoPrevious + nonBusiness + needsReview,
+  };
 }
