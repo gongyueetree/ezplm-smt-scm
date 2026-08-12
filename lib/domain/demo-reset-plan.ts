@@ -28,6 +28,8 @@ export const PURGE_MODELS = [
   // ---- 追溯与质量事件(子 → 父)----
   "ContainmentAction",
   "QualityIncident",
+  // SN 记录来自 MES/离线导入,属业务数据;主数据侧不受影响
+  "FinishedGoodsSerial",
   "TraceAnalysisRun",
   "TraceSubstitution",
   "TraceShipmentLine",

@@ -34,6 +34,20 @@ export const PERMISSIONS = [
   "trace.containment.propose",
   "trace.containment.approve",
   "trace.export",
+  /*
+   * 品质(E6 / 客户 Q12:「质量事件由**品质**录入」)。
+   *
+   * 客户说质量事件归品质,而系统里没有 QUALITY 角色。
+   * **不为这一个功能去动 RoleName 枚举** —— 角色枚举牵连菜单、工作台、
+   * 数据范围与一大批既有测试,为一个模块改它得不偿失,
+   * 而且本项目从一开始就是"角色少、权限细"的路子。
+   *
+   * 所以品质用权限表达:默认给 MANAGEMENT,
+   * 具体到人由 UserPermission 单独授予(品质专员不必是管理层)。
+   */
+  "quality.view",
+  "quality.create",
+  "quality.manage",
   // 权限本身的管理权 —— 默认只给 MANAGEMENT
   "settings.permissions.manage",
 ] as const;
@@ -64,6 +78,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, readonly Permission[]> =
     "trace.analyze",
     "trace.containment.propose",
     "erp.connection.view",
+    // 工程默认可**看**质量事件(追溯分析常要看它),但不默认可建
+    "quality.view",
   ],
   PROCUREMENT: [
     "material.view",
