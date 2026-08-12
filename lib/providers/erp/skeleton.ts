@@ -72,6 +72,16 @@ export function createSkeletonProvider(
     async pushEtaUpdates(): Promise<ErpPushResult> {
       return nope("pushEtaUpdates");
     },
+    // E8:Excess / 汇率 / 组织 —— 同样只有骨架,调用即"待联调"
+    async getOrganizations() {
+      return nope("getOrganizations");
+    },
+    async pullExcessReport() {
+      return nope("pullExcessReport");
+    },
+    async pullExchangeRates() {
+      return nope("pullExchangeRates");
+    },
     async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
       return { externalJobId, state: "UNKNOWN", message: `${vendor} 待联调` };
     },

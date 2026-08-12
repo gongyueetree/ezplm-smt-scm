@@ -102,6 +102,24 @@ export class ExcelErpProvider implements ErpProvider {
       note: "已产出 ETA 回写模板;**回写待人工导入 ERP**",
     };
   }
+  /*
+   * E8:Excel 通道拿不到 Excess / 汇率 / 组织。
+   * 这条通道的定位是"把数据导出成 ERP 能吃的模板",不是从 ERP 读数据 ——
+   * 返回空数组会被读成"ERP 里没有呆滞",所以一律抛"该通道不支持"。
+   */
+  async getOrganizations(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "getOrganizations(Excel 通道不读 ERP 数据)");
+  }
+  async pullExcessReport(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "EXCEL",
+      "pullExcessReport(Excel 通道不读 ERP;请改用 API 通道或人工导入 Excess 表)",
+    );
+  }
+  async pullExchangeRates(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "pullExchangeRates(Excel 通道不读 ERP)");
+  }
+
   async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
     return { externalJobId, state: "UNKNOWN", message: "Excel 通道无外部作业" };
   }

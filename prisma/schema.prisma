@@ -1983,6 +1983,19 @@ model ExcessSnapshot {
   snapshotAt  DateTime
   /// 来自导入作业时关联;ERP 同步或人工录入为空
   importJobId String?
+  /*
+   * E8:来源可追溯(客户 Q1:「ERP 有 Excess report 可以引用」)。
+   * PM 在采购申请里看到的 Excess 必须能回答"这数出自哪一次、什么时候的 ERP 报表" ——
+   * 否则少买了料谁也说不清依据。
+   */
+  /// ERP 侧的报表/单据号
+  sourceDocumentId String?
+  /// ERP 侧该数据的更新时间(**不是**我们导入的时间)
+  sourceUpdatedAt  DateTime?
+  /// 我们导入/同步的时间
+  importedAt       DateTime?
+  /// ERP 连接 id(经 API 同步时)
+  erpConnectionId  String?
   note        String?
   createdById String
   createdAt   DateTime     @default(now())
@@ -3408,4 +3421,31 @@ model MessageDeliveryEvent {
   createdAt DateTime        @default(now())
 
   @@index([tenantId, messageId])
+}
+
+
+/// E8:汇率(客户 Q8:「ERP 系统有汇率显示,请引用」)。
+///
+/// **不再找外部汇率 API** —— 客户已明确来源是 ERP。
+/// 在拿到金蝶接口与口径之前(O1/O3),这张表只会由人工导入填充,
+/// 且换算结果一律标注为「换算参考价」,不冒充供应商正式报价。
+model FxRate {
+  id             String   @id @default(cuid())
+  tenantId       String
+  sourceCurrency String
+  targetCurrency String
+  /// 汇率值。字符串保精度 —— 汇率参与金额换算,绝不走浮点
+  rate           Decimal  @db.Decimal(18, 8)
+  /// 汇率类型(即期/月度锁定/集团内部价…),ERP 原文;口径待客户明确
+  rateType       String?
+  effectiveDate  DateTime
+  /// KINGDEE / MANUAL。**没有第三种** —— 系统不自行推算汇率
+  source         String   @default("MANUAL")
+  sourceUpdatedAt DateTime?
+  fetchedAt      DateTime @default(now())
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, sourceCurrency, targetCurrency, effectiveDate, rateType])
+  @@index([tenantId, sourceCurrency, targetCurrency])
 }
