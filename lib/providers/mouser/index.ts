@@ -1,12 +1,14 @@
 /**
  * Mouser Provider 工厂:有 Key 走真实 API,否则 Mock。
  */
+import { forceMockProviders } from "@/lib/providers/common/force-mock";
 import type { ApiUsageRecorder } from "../common/api-usage";
 import type { DistributorProvider } from "../common/distributor";
 import { MockMouserProvider } from "./mock";
 import { MouserProvider } from "./provider";
 
 export function mouserMode(): "mock" | "http" {
+  if (forceMockProviders()) return "mock";
   return process.env.MOUSER_API_KEY ? "http" : "mock";
 }
 

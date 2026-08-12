@@ -2,12 +2,14 @@
  * DigiKey Provider 工厂:凭据齐备走真实 API,否则 Mock。
  * 业务代码不感知差异;providerMode 供 UI 诚实展示数据源形态。
  */
+import { forceMockProviders } from "@/lib/providers/common/force-mock";
 import type { ApiUsageRecorder } from "../common/api-usage";
 import type { DistributorProvider } from "../common/distributor";
 import { DigiKeyProvider } from "./provider";
 import { MockDigiKeyProvider } from "./mock";
 
 export function digiKeyMode(): "mock" | "http" {
+  if (forceMockProviders()) return "mock";
   return process.env.DIGIKEY_CLIENT_ID && process.env.DIGIKEY_CLIENT_SECRET ? "http" : "mock";
 }
 

@@ -36,6 +36,17 @@ export default defineConfig({
       CRON_SECRET: process.env.CRON_SECRET ?? "e2e-cron-secret",
       // 自助注册默认关闭;E2E 必须显式打开才测得到注册流程
       ALLOW_SELF_REGISTRATION: "true",
+      /*
+       * **把外部 Provider 钉在 Mock 上。**
+       *
+       * E2E 断言的是 Mock 的确定性数据。开发者本地 `.env.local` 若配了真实
+       * ezPLM / DigiKey 凭据,同一套用例就会去打真实接口 —— 数据对不上、用例变红,
+       * 而没有这些变量的环境却是绿的。「本地红、别处绿」最耗人。
+       *
+       * 用过空字符串覆盖,不行:Next 把空串当未设置,`.env.local` 的真值会填回来。
+       * 所以走显式开关(默认关闭,生产与真实联调不受影响)。
+       */
+      PROVIDERS_FORCE_MOCK: "1",
     },
     timeout: 300_000,
   },
