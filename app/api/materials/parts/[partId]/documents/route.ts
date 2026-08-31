@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { badRequest, notFound, requireSession } from "@/lib/server/api";
+import { badRequest, guardMultipartSize, notFound, requireSession } from "@/lib/server/api";
 import { DOC_KIND_LABEL } from "@/lib/domain/doc-expiry";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
@@ -52,6 +52,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ partId:
   });
   if (!part) return notFound();
 
+  // E9:读 body 之前先按中间件 10MB 上限拒 —— 截断后的报错会误导人(见 guardMultipartSize)
+  const oversize = guardMultipartSize(req);
+  if (oversize) return oversize;
   const form = await req.formData().catch(() => null);
   if (!form) return badRequest("需要 multipart/form-data");
 

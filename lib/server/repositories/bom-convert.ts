@@ -168,6 +168,7 @@ export async function executeConvert(input: ExecuteConvertInput) {
   const { tenantId, userId, source, customerId, summary } = input;
   const byLineNo = new Map(summary.results.map((r) => [r.lineNo, r]));
 
+  // E9:同导入事务 —— 大 BOM 的整表 createMany 会超出 Prisma 默认 5s 事务超时
   return prisma.$transaction(async (tx) => {
     const bom = await tx.bOM.create({
       data: tenantData(tenantId, {
@@ -231,5 +232,5 @@ export async function executeConvert(input: ExecuteConvertInput) {
       },
     });
     return { bom, version };
-  });
+  }, { timeout: 120_000, maxWait: 10_000 });
 }

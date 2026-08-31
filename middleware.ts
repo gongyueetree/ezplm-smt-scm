@@ -43,16 +43,20 @@ export const config = {
    * 排除静态资源(含 public/vendor 下自发的 WASM —— 走鉴权会被 307 到登录页,
    * 3D 内核就永远加载不出来);页面与 API 其余部分全部经过会话检查。
    *
-   * **`api/upload/` 必须排除**(E1b):
+   * **`api/upload/` 与 `api/bom/import` 必须排除**(E1b / E9):
    * Next 为了让中间件能读请求体会克隆一份 body,上限 10MB
    * (`middlewareClientMaxBodySize`),**超出部分静默丢弃**。
    * 实测传 30MB 的 Gerber 包,路由只收到 10485760 字节却仍返回 201 ——
    * 客户拿到的是被截断的残档,而且没人会发现。
    *
+   * `api/bom/import` 是 E9 加的:客户在回复清单里写明 **BOM 文件约 15MB**,
+   * 而它原本在中间件路径下 —— 实测 12.4MB 的 CSV 被截断后 multipart 边界损坏,
+   * 客户看到的错误竟是「需要 multipart/form-data」,完全无从下手。
+   *
    * 本中间件只读 cookie、不碰 body,排除它没有任何损失;
-   * 上传路由自己调 `requireSession()`,鉴权一点没少。
+   * 被豁免的路由全部自己调 `requireSession()`,鉴权一点没少。
    */
   matcher: [
-    "/((?!_next/static|_next/image|vendor/|favicon.ico|api/upload/|.*\\.(?:svg|png|jpg|ico|wasm)$).*)",
+    "/((?!_next/static|_next/image|vendor/|favicon.ico|api/upload/|api/bom/import|.*\\.(?:svg|png|jpg|ico|wasm)$).*)",
   ],
 };

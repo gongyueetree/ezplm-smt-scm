@@ -38,6 +38,14 @@ export const FUNCTIONAL_LABEL: Record<FunctionalEquivalence, string> = {
   UNKNOWN: "功能一致性未知",
 };
 
+/*
+ * MINOR_VARIATION 的判定口径(客户第三轮答复,2026-08 回复清单第 8 项):
+ * 「Pitch 不同和修改 PCB 条不考虑,其余允许」「都需要确认」。
+ * 即:高度不同 / body size 略有不同 / thermal pad 不同 → 算细微差别;
+ * **pitch 不同 → 不算**(应标 DIFFERENT,客户不接受);
+ * 需要改 PCB 才能用 → 不在替代范围内;
+ * 且**一切细微差别都必须工程确认**(needsReview 对非 EXACT 封装恒为 true,正合此意)。
+ */
 export const PACKAGE_LABEL: Record<PackageCompatibility, string> = {
   EXACT: "封装完全一致",
   MINOR_VARIATION: "封装有细微差别",
@@ -118,7 +126,9 @@ export const FILTER_PRESETS: Record<
   },
   FUNC_SAME_PKG_MINOR: {
     title: "功能一致 + 封装细微差别",
-    desc: "客户点名要的一档:功能对得上,封装差一档(如 0603 vs 0805),需确认焊盘",
+    desc:
+      "「细微差别」按客户 2026-08 确认的口径:高度不同 / 尺寸略有不同 / thermal pad 不同算;" +
+      "**pitch 不同不算**(客户明确不接受),需要改 PCB 的也不算。所有细微差别均需工程确认",
   },
   FUNC_SAME_NOT_PIN: {
     title: "功能一致 + 非 Pin-to-Pin",

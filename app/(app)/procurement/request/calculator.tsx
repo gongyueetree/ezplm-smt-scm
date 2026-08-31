@@ -201,8 +201,9 @@ export function GtbCalculator() {
                 <b>系统只提示,是否占用需 PM 人工确认</b>。
                 {preview.excess.otherCustomerQty ? (
                   <>
-                    {" "}另有 <b>{preview.excess.otherCustomerQty}</b> 属于其它客户,
-                    <b>不可自动占用</b>。
+                    {" "}另有 <b>{preview.excess.otherCustomerQty}</b> 属于其它客户 ——
+                    按贵司口径(2026-08 确认)<b>可申请跨客户占用,但须 PM / 品质 / 工程确认</b>;
+                    系统<b>不会自动占用</b>,确认后请人工调整。
                   </>
                 ) : null}
               </span>

@@ -61,9 +61,14 @@ export function getMesTraceProvider(): MesTraceProvider {
 /** 界面文案:粒度说明。**不允许在无 MES 时说 SN 级可用** */
 export function traceGranularityNote(state: MesProviderState, snCount: number): string {
   if (state === "NOT_CONFIGURED") {
+    /*
+     * 客户第三轮答复(2026-08 回复清单第 7 项):MES「暂时不用」。
+     * 措辞随之从「待接入」改为「暂不接入」—— 前者暗示在等一个日期,
+     * 后者如实说明这是客户的决定;SN 级追溯相应暂缓,不是逾期。
+     */
     return snCount > 0
-      ? `当前粒度:**批次级**;已导入 ${snCount} 条 SN 记录(人工/离线导入),可由 SN 反查工单与物料批次。MES 接口**待接入**。`
-      : "当前粒度:**批次级**。SN 级追溯需要 MES 提供 SN↔批次绑定记录 —— 接口**待接入**,系统不会自行生成 SN。";
+      ? `当前粒度:**批次级**;已导入 ${snCount} 条 SN 记录(人工/离线导入),可由 SN 反查工单与物料批次。MES 接口按客户决定**暂不接入**(2026-08 确认)。`
+      : "当前粒度:**批次级**。客户已确认**暂不接入 MES**(2026-08),SN 级追溯暂缓 —— 系统不会自行生成 SN。";
   }
   return `当前粒度:**SN 级**(MES 已接入),共 ${snCount} 条 SN 记录。`;
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { badRequest, forbidden, requireSession } from "@/lib/server/api";
+import { badRequest, forbidden, guardMultipartSize, requireSession } from "@/lib/server/api";
 import {
   normalizePn,
   parseAlternateImportGrid,
@@ -37,6 +37,9 @@ export async function POST(req: Request) {
     return forbidden("替代关系由工程维护", "alternate_role");
   }
 
+  // E9:读 body 之前先按中间件 10MB 上限拒 —— 截断后的报错会误导人(见 guardMultipartSize)
+  const oversize = guardMultipartSize(req);
+  if (oversize) return oversize;
   const form = await req.formData().catch(() => null);
   if (!form) return badRequest("需要 multipart/form-data");
   const file = form.get("file");
