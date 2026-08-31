@@ -90,6 +90,10 @@ export async function GET(req: Request) {
   help.addRow(["列", "可用取值"]);
   help.addRow(["功能等效", FUNCTIONAL_VALUES.join(" / ")]);
   help.addRow(["封装兼容", PACKAGE_VALUES.join(" / ")]);
+  help.addRow([
+    "",
+    "MINOR_VARIATION 口径(客户 2026-08 确认):高度/尺寸略有不同、thermal pad 不同算;pitch 不同不算(填 DIFFERENT);需要改 PCB 的不在替代范围。所有细微差别均需工程确认。",
+  ]);
   help.addRow(["引脚兼容", PIN_VALUES.join(" / ")]);
   help.addRow([]);
   help.addRow(["说明", "三个维度均为必填。不确定请显式填 UNKNOWN —— 留空会被拒绝,系统不替你猜。"]);

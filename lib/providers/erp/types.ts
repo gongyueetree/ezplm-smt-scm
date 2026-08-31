@@ -169,6 +169,11 @@ export interface ErpPage<T> {
 export const ErpExcessLineSchema = z.object({
   externalId: z.string(),
   internalPn: z.string().nullable(),
+  /**
+   * MPN。客户备注(2026-08 回复清单第 2 项):Excess Report 本身**没有** MPN,
+   * 需要额外抓取 —— 从采购订单带出,或多 MPN 时走金蝶二开接口。
+   * 所以联调时这个字段可能来自**另一次查询**,为空是常态,不算数据缺陷。
+   */
   mpn: z.string().nullable(),
   /** 账面量 */
   qty: z.string(),
@@ -178,6 +183,12 @@ export const ErpExcessLineSchema = z.object({
   /** 归属客户;为空表示公共库存。跨客户占用是**业务规则**,不由系统默认 */
   customerCode: z.string().nullable(),
   lotNo: z.string().nullable(),
+  /**
+   * 最早入库时间(客户 2026-08 要求):Excess Report 只有「最后变动时间」,
+   * 库龄要按**最早入库**算 —— 用最后变动时间算库龄会把老库存算年轻。
+   * 客户说报表可以增加此列;拿不到时为空,库龄显示「未知」而不是猜。
+   */
+  earliestInboundAt: z.string().nullable(),
   /** ERP 侧的报表/单据号 —— 追溯"这批数据出自哪一次导出" */
   sourceDocumentId: z.string().nullable(),
   /** ERP 侧的数据更新时间(不是我们导入的时间) */

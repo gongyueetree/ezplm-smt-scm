@@ -30,6 +30,19 @@
 | `AI_PROVIDER` | — | 强制指定厂商:`gemini` / `anthropic` / `none` | 按 Gemini → Anthropic 顺序自动选;`none` 可强制关闭 AI |
 | `CRON_SECRET` | — | 催办 Cron 鉴权 | **催办接口返回 503 拒绝运行**(不在无鉴权下开放) |
 | `SEED_DEMO_PASSWORD` | — | 演示种子口令 | `demo1234`。**种子在 `NODE_ENV=production` 下拒绝执行** |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_SECURE` | — | 公司 SMTP(E7) | 未齐时状态 `WAITING_FOR_CREDENTIALS`,邮件一律停在「草稿 · 未发送」 |
+| `ATTACHMENT_MAX_MB` | — | 流式上传单文件上限(MB) | 默认 100 |
+
+#### SMTP:客户已提供的参数(2026-08 回复清单第 3 项)
+
+按客户填写,部署时配置如下 —— **密码/授权码尚未提供,配齐之前发信保持草稿态**:
+
+| 变量 | 客户提供的值 | 备注 |
+|---|---|---|
+| `SMTP_HOST` | `smtp.qiye.aliyun.com` | 阿里企业邮箱 |
+| `SMTP_PORT` | **待确认** | 客户同时写了 `25` 与 `SSL/TLS: 465`,互相矛盾 —— 已列入待澄清;建议 465 + `SMTP_SECURE=true` |
+| `SMTP_USER` / `SMTP_FROM` | `buyer1@primatronics.com.cn` 等 **3 个采购账号** | ⚠ 当前实现为**单账号**;按采购员分账号发信是新需求,已列入待澄清(先用哪个账号起步 / 是否要多账号) |
+| `SMTP_PASSWORD` | **待提供** | 授权码;**只进环境变量,不进版本库与文档** |
 
 ### 初始化物料库(BOM 匹配的第一顺位)
 

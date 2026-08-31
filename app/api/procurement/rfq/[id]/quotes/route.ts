@@ -6,7 +6,7 @@ import {
   SUPPLIER_QUOTE_FIELD_LABELS,
   toSupplierQuoteLines,
 } from "@/lib/domain/supplier-quote-parse";
-import { badRequest, forbidden, notFound, requireSession } from "@/lib/server/api";
+import { badRequest, forbidden, guardMultipartSize, notFound, requireSession } from "@/lib/server/api";
 import { extractRows } from "@/lib/server/file-parse";
 import { importOfflineQuote } from "@/lib/server/repositories/procurement";
 import { getStorageProvider } from "@/lib/server/storage";
@@ -29,6 +29,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const { id } = await params;
 
+  // E9:读 body 之前先按中间件 10MB 上限拒 —— 截断后的报错会误导人(见 guardMultipartSize)
+  const oversize = guardMultipartSize(req);
+  if (oversize) return oversize;
   const form = await req.formData().catch(() => null);
   if (!form) return badRequest("需要 multipart/form-data");
   const file = form.get("file");

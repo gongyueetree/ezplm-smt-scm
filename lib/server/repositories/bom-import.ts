@@ -117,6 +117,14 @@ export async function createImportJob(
   const validation = await validateWithMasterData(session.tenantId, input.lines);
   const uniqueMpns = countUniqueMpns(input.lines);
 
+  /*
+   * E9:事务超时显式放宽到 120s。
+   *
+   * Prisma 交互式事务默认 5000ms —— 客户在回复清单里写明 BOM 文件约 15MB,
+   * 实测 17000 行的导入(BOMLine + RawBomRow 两次 createMany)要 ~6s,
+   * 默认值直接把大 BOM 打成 500。原始行与作业必须同事务(E1a 的纪律),
+   * 拆事务不可取,放宽超时才是对的。
+   */
   const result = await prisma.$transaction(async (tx) => {
     const bom = await tx.bOM.create({
       data: tenantData(session.tenantId, {
@@ -215,7 +223,7 @@ export async function createImportJob(
       },
     });
     return { job, versionId: version.id };
-  });
+  }, { timeout: 120_000, maxWait: 10_000 });
 
   return {
     job: { ...toView(result.job), usesBatching: shouldUseImportJob(uniqueMpns) },

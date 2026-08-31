@@ -32,10 +32,16 @@ describe("MES Provider", () => {
     expect(msg).toContain("MES");
   });
 
-  it("**没有 MES 时,粒度文案一律是批次级**", () => {
+  it("**没有 MES 时,粒度文案一律是批次级**,且如实说明是客户决定暂不接入", () => {
+    /*
+     * 客户第三轮答复(2026-08):MES「暂时不用」。
+     * 措辞从「待接入」改为「暂不接入」—— 前者暗示在等日期,后者如实说明
+     * 这是客户的决定。断言随口径更新,守的仍是同一条:不夸大追溯能力。
+     */
     const note = traceGranularityNote("NOT_CONFIGURED", 0);
     expect(note).toContain("批次级");
-    expect(note).toContain("待接入");
+    expect(note).toContain("暂不接入");
+    expect(note).toContain("2026-08");
     expect(note).not.toContain("SN 级追溯已");
   });
 
@@ -43,7 +49,7 @@ describe("MES Provider", () => {
     const note = traceGranularityNote("NOT_CONFIGURED", 120);
     expect(note).toContain("批次级");
     expect(note).toContain("120 条 SN");
-    expect(note).toContain("待接入");
+    expect(note).toContain("暂不接入");
   });
 
   it("只有真的接上 MES 才说 SN 级", () => {

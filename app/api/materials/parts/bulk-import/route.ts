@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { badRequest, requireSession } from "@/lib/server/api";
+import { badRequest, guardMultipartSize, requireSession } from "@/lib/server/api";
 import {
   parsePartImport,
   parsePartImportGrid,
@@ -43,6 +43,9 @@ export async function POST(req: Request) {
   let sourceNote: string | null = null;
 
   if (contentType.includes("multipart/form-data")) {
+    // E9:读 body 之前先按中间件 10MB 上限拒 —— 截断后的报错会误导人(见 guardMultipartSize)
+    const oversize = guardMultipartSize(req);
+    if (oversize) return oversize;
     const form = await req.formData().catch(() => null);
     if (!form) return badRequest("需要 multipart/form-data");
     const upload = form.get("file");

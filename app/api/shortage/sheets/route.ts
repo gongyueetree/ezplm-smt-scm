@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { badRequest, forbidden, requireSession } from "@/lib/server/api";
+import { badRequest, forbidden, guardMultipartSize, requireSession } from "@/lib/server/api";
 import { parseShortageSheet } from "@/lib/domain/shortage-sheet";
 import { extractRows } from "@/lib/server/file-parse";
 import { writeAudit } from "@/lib/server/audit";
@@ -35,6 +35,9 @@ export async function POST(req: Request) {
     return forbidden("仅 PM / 采购 / 管理层可导入缺料单");
   }
 
+  // E9:读 body 之前先按中间件 10MB 上限拒 —— 截断后的报错会误导人(见 guardMultipartSize)
+  const oversize = guardMultipartSize(req);
+  if (oversize) return oversize;
   const form = await req.formData().catch(() => null);
   if (!form) return badRequest("需要 multipart/form-data");
   const upload = form.get("file");
