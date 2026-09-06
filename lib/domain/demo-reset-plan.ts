@@ -170,6 +170,8 @@ export const KEEP_MODELS = [
   "OpenPOLine",
 
   // ---- 配置与模板 ----
+  // 租户配置/feature flag 属配置,清库保留
+  "TenantSettings",
   "QuoteTemplate",
   // NRE 项目字典属**配置**(客户提供的标准清单),不是测试期单据 —— 清库保留
   "NreItemDefinition",

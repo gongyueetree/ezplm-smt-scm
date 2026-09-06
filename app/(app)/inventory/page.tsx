@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ customerId?: string; asOf?: string }>;
+  searchParams: Promise<{ customerId?: string; asOf?: string; warehouse?: string }>;
 }) {
   const session = (await getSession())!;
   const sp = await searchParams;
@@ -74,11 +74,27 @@ export default async function InventoryPage({
   });
   const partsTruncated = partRows.length > PART_CAP;
   const parts = partsTruncated ? partRows.slice(0, PART_CAP) : partRows;
+  /*
+   * F1:仓库维度组合筛选。仓库是 InventorySnapshot 的真实字段(可空);
+   * 下拉选项取自数据本身 —— 快照没带仓库时选项自然为空,
+   * 页面明说"仓库信息随 ERP 快照提供",不造选项。
+   * 「状态」维度快照**没有字段**,不做假筛选(KICKOFF:数据源没有就明说)。
+   */
+  const warehouses = (
+    await prisma.inventorySnapshot.findMany({
+      where: tenantWhere(session.tenantId, { warehouse: { not: null } }),
+      select: { warehouse: true },
+      distinct: ["warehouse"],
+      orderBy: { warehouse: "asc" },
+    })
+  ).map((w) => w.warehouse!) as string[];
+
   const snapshots = await prisma.inventorySnapshot.findMany({
     where: tenantWhere(session.tenantId, {
       partId: { in: parts.map((p) => p.id) },
       // 按日期看:取该时点**之前**最新的一份快照,而不是把之后的也算进来
       fetchedAt: { lte: new Date(asOf) },
+      ...(sp.warehouse ? { warehouse: sp.warehouse } : {}),
     }),
     orderBy: { fetchedAt: "desc" },
   });
@@ -177,6 +193,17 @@ export default async function InventoryPage({
           <label className="fld" style={{ marginBottom: 0 }}>
             <span>截至日期</span>
             <input type="date" name="asOf" defaultValue={sp.asOf ?? ""} />
+          </label>
+          <label className="fld" style={{ marginBottom: 0 }}>
+            <span>仓库</span>
+            <select name="warehouse" defaultValue={sp.warehouse ?? ""} disabled={warehouses.length === 0}>
+              <option value="">{warehouses.length === 0 ? "快照未带仓库信息(随 ERP 提供)" : "全部仓库"}</option>
+              {warehouses.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
           </label>
           <button className="btn" type="submit">
             查看

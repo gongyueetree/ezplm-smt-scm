@@ -25,6 +25,8 @@ export type RoleName = "PM" | "PROCUREMENT" | "ENGINEERING" | "MANAGEMENT" | "SU
 export interface AppRoute {
   /** 以 / 开头的完整路径 */
   path: string;
+  /** F1:除角色外还需要的权限(如 quality.view)。缺省 = 仅按角色 */
+  permission?: string;
   label: string;
   icon?: IconName;
   /** AI 增强模块(紫色标识,人工确认闭环) */
@@ -267,6 +269,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         path: "/quality",
         label: "质量事件",
+        permission: "quality.view",
         icon: "box",
         plannedPr: "PR-E6",
         desc:

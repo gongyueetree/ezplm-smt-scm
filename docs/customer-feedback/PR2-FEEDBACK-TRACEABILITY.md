@@ -373,3 +373,17 @@
 `PR-E1a`(BOM 丢行)→ `PR-E1b`(Gerber)→ `PR-E2` → `PR-E3` → `PR-E4` → `PR-E5` → `PR-E6` → `PR-E7`(等 SMTP)→ `PR-E8`(等金蝶凭据)。
 
 **先做 E1a**:丢行是数据正确性问题,下游是报价、采购、追溯全部。
+
+---
+
+## 五、Round2 落地追踪(F 批次)
+
+依据 `docs/KICKOFF_ROUND2.md`。每个 PR 合并后在此登记,验收对照直接用本表。
+
+| PR | KICKOFF 条目 | 状态 | 落点 |
+|---|---|---|---|
+| **F5**(#60) | 金样回归基座 | `DONE` | `tests/golden/**` 7 套金样(BOM 6 fixture / Gerber / 供应商报价 / 缺料 / 对账 / Excess / ERP 契约镜像);`pnpm test:golden` 进 CI 必过门;顺带修了 3 个真缺陷(多 sheet 选表、CSV 内部空行、数量像日期) |
+| **F1** | 角色化工作台 + 全局搜索 + 管理 KPI 补全 + 租户配置 | `DONE`(本 PR) | ① `TenantSettings` 表 + `/api/settings/tenant`(仅 MANAGEMENT,feature flag 保守默认全关);② 全局搜索:`lib/domain/search-scopes.ts` 角色→实体范围**服务端强制**,10 类实体分组下拉,ECN 范围如实注明"F2 上线后可搜";③ 管理看板新增 5 KPI(毛利/呆滞/缺料/损耗/质量)全部可下钻,Excess 未接入显示「待接入」不按 0 充数,毛利成本取冻结 QuoteLine 行、任一行缺成本整单剔除并明示;④ 菜单按 `permission` 门控(quality.view),**权限门先于 MANAGEMENT 旁路**;⑤ 库存页仓库筛选(快照无仓库字段时如实说明) |
+
+**F1 如实交代**:搜索不含 ECN(F2 未做);Excess/金蝶 KPI 依赖 O1/O2,未接入前只显示状态;
+库存"状态"维度因快照无此字段**未提供**(不做假下拉)。

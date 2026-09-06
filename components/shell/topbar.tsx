@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/auth/session";
 import { SEARCH_SCOPES, primaryRole } from "@/lib/rbac";
 import { breadcrumbFor } from "@/lib/routes";
+import { GlobalSearch } from "./global-search";
 
 /** 顶栏:面包屑由统一 route config 派生;搜索框按角色标注搜索范围(SPEC §3) */
 export function Topbar({ session }: { session: SessionPayload }) {
@@ -30,13 +31,8 @@ export function Topbar({ session }: { session: SessionPayload }) {
         )}
       </nav>
       <div className="topbar-spacer" />
-      <input
-        className="topbar-search"
-        type="search"
-        placeholder={`搜索:${scopes.join(" / ")}(PR5+ 实现)`}
-        disabled
-        title="搜索随各功能 PR 落地;范围按角色限定"
-      />
+      {/* F1:搜索落地 —— 范围由服务端按角色决定,占位符只做展示 */}
+      <GlobalSearch placeholder={`搜索:${scopes.join(" / ")}`} />
       <span className="badge purple">α 开发版 · PR2</span>
     </header>
   );

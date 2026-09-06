@@ -15,20 +15,33 @@ export const ROLE_LABELS: Record<RoleName, string> = {
   SUPPLIER: "供应商",
 };
 
-/** 路由对给定角色集是否可见:未声明 roles = 全员可见;MANAGEMENT 全局可见 */
-export function isRouteVisible(route: AppRoute, roles: RoleName[]): boolean {
+/**
+ * 路由对给定角色集是否可见:未声明 roles = 全员可见;MANAGEMENT 角色全局可见。
+ *
+ * F1:路由可以额外声明 `permission`(如 quality.view)——
+ * 声明了就必须持有,**角色满足也不放行**(权限是比角色更细的门)。
+ * `permissions` 为 undefined 表示调用方没有权限上下文(如纯配置渲染),
+ * 此时按旧行为只看角色,避免把既有调用点全部改成 async。
+ */
+export function isRouteVisible(
+  route: AppRoute,
+  roles: RoleName[],
+  permissions?: ReadonlySet<string>,
+): boolean {
+  if (route.permission && permissions && !permissions.has(route.permission)) return false;
   if (roles.includes("MANAGEMENT")) return true;
   if (!route.roles || route.roles.length === 0) return true;
   return route.roles.some((r) => roles.includes(r));
 }
 
-/** 按角色过滤菜单 section(子路由跟随父路由可见性;空 section 整体隐藏) */
+/** 按角色(+权限)过滤菜单 section(子路由跟随父路由可见性;空 section 整体隐藏) */
 export function filterSectionsForRoles(
   roles: RoleName[],
   sections: NavSection[] = NAV_SECTIONS,
+  permissions?: ReadonlySet<string>,
 ): NavSection[] {
   return sections
-    .map((s) => ({ ...s, routes: s.routes.filter((r) => isRouteVisible(r, roles)) }))
+    .map((s) => ({ ...s, routes: s.routes.filter((r) => isRouteVisible(r, roles, permissions)) }))
     .filter((s) => s.routes.length > 0);
 }
 
