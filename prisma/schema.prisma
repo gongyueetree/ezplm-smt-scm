@@ -3449,3 +3449,19 @@ model FxRate {
   @@unique([tenantId, sourceCurrency, targetCurrency, effectiveDate, rateType])
   @@index([tenantId, sourceCurrency, targetCurrency])
 }
+
+
+/// F1:租户级配置与 feature flag(产品化基座,KICKOFF Round2)。
+///
+/// 单表 + JSON,而不是每个开关一列:开关会随 F2/F6/F7 持续增加,
+/// 每加一个开关跑一次 migration 不值得。结构与默认值由
+/// lib/domain/tenant-settings.ts 的 zod schema 把关 —— **读取时合并默认值**,
+/// 未知键忽略,坏值回落默认并在读取结果里标注,不让一条脏配置搞垮整租户。
+model TenantSettings {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique
+  settings    Json
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

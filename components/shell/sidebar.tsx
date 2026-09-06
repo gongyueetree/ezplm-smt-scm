@@ -31,9 +31,15 @@ function NavItem({ route, child = false }: { route: AppRoute; child?: boolean })
 /**
  * 左侧菜单:由统一 route config 生成(SPEC §2),按会话角色过滤(SPEC §3)。
  */
-export function Sidebar({ session }: { session: SessionPayload }) {
+export function Sidebar({
+  session,
+  permissions,
+}: {
+  session: SessionPayload;
+  permissions: string[];
+}) {
   const router = useRouter();
-  const sections = filterSectionsForRoles(session.roles);
+  const sections = filterSectionsForRoles(session.roles, undefined, new Set(permissions));
   const role = primaryRole(session.roles);
 
   async function logout() {

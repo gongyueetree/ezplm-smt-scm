@@ -10,8 +10,20 @@ import type { ManagementSnapshot } from "@/lib/server/repositories/management";
  * 每个 KPI 都可点击下钻到明细页;所有数字由明细派生,无冗余汇总字段。
  */
 export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) {
-  const { quotes, conversion, conversionTruncated, opo, aging, slowMoving, inventoryFetchedAt } =
-    snapshot;
+  const {
+    quotes,
+    conversion,
+    conversionTruncated,
+    margin,
+    opo,
+    aging,
+    slowMoving,
+    inventoryFetchedAt,
+    excess,
+    shortage,
+    scrap,
+    quality,
+  } = snapshot;
   const agedOver24 = aging.buckets.find((b) => b.minMonths >= 24);
 
   return (
@@ -111,6 +123,74 @@ export function ManagementBoard({ snapshot }: { snapshot: ManagementSnapshot }) 
           <div className="kpi-value">{slowMoving.slowMovingParts}</div>
           <div className="kpi-foot">
             呆滞量 {slowMoving.slowMovingQty} · 未知 {slowMoving.unknownParts}
+          </div>
+        </Link>
+        {/*
+          F1 新增五卡。风险语义统一:kpi danger = critical、kpi warn = warning、
+          kpi = normal —— 复用既有样式,不另起一套 class。
+          每卡可下钻且**带过滤参数**;数据源没接入就明说,不显示 0 充数。
+        */}
+        <Link className="kpi" href="/quotes">
+          <div className="kpi-label">毛利(已批准报价)</div>
+          <div className="kpi-value" data-testid="kpi-margin">
+            {margin.byCurrency.length === 0
+              ? "—"
+              : margin.byCurrency
+                  .map((c) => `${c.currency} ${(Number(c.marginPct ?? 0) * 100).toFixed(1)}%`)
+                  .join(" / ")}
+          </div>
+          <div className="kpi-foot">
+            {margin.byCurrency.length === 0
+              ? margin.excluded.length > 0
+                ? `${margin.excluded.length} 张已批准报价因行级缺成本无法计算 —— 不显示估算值`
+                : "尚无可计算的已批准报价"
+              : `可算 ${margin.computableQuotes} 张${margin.excluded.length > 0 ? ` · ${margin.excluded.length} 张缺成本被排除` : ""} · 成本取冻结行,快照缺成本会虚高`}
+          </div>
+        </Link>
+        <Link
+          className="kpi"
+          href="/procurement/request"
+          data-testid="kpi-excess"
+        >
+          <div className="kpi-label">Excess 呆滞可用</div>
+          <div className="kpi-value">
+            {excess.state === "NOT_CONFIGURED" ? "待接入" : excess.totalQty}
+          </div>
+          <div className="kpi-foot">
+            {excess.state === "NOT_CONFIGURED"
+              ? "数据源待接入(ERP Excess Report,凭据未到)—— 不按 0 显示"
+              : `${excess.lineCount} 行 · 快照 ${excess.snapshotAt?.slice(0, 10) ?? ""}`}
+          </div>
+        </Link>
+        <Link
+          className={shortage.openLines > 0 ? "kpi danger" : "kpi"}
+          href="/shortage"
+          data-testid="kpi-shortage"
+        >
+          <div className="kpi-label">未解决缺料行</div>
+          <div className="kpi-value">{shortage.openLines}</div>
+          <div className="kpi-foot">已解决 {shortage.resolvedLines} · 共 {shortage.totalLines}(缺料单口径)</div>
+        </Link>
+        <Link className="kpi warn" href={`/scrap?period=${scrap.period}`} data-testid="kpi-scrap">
+          <div className="kpi-label">当月损耗</div>
+          <div className="kpi-value">{scrap.recordCount === 0 ? "—" : scrap.scrapQty}</div>
+          <div className="kpi-foot">
+            {scrap.recordCount === 0
+              ? `${scrap.period} 暂无损耗记录`
+              : scrap.amount
+                ? `金额 ${scrap.amountCurrency} ${scrap.amount}${scrap.unpricedCount > 0 ? ` · ${scrap.unpricedCount} 行缺标准价未计入` : ""}`
+                : `${scrap.unpricedCount} 行缺标准价,金额未知 —— 不按 0 算`}
+          </div>
+        </Link>
+        <Link
+          className={quality.open > 0 ? "kpi danger" : "kpi"}
+          href="/quality"
+          data-testid="kpi-quality"
+        >
+          <div className="kpi-label">质量事件(未关闭)</div>
+          <div className="kpi-value">{quality.open + quality.investigating + quality.contained}</div>
+          <div className="kpi-foot">
+            客诉 {quality.customerComplaints} · 供应商 {quality.supplierIssues} · 本月关闭 {quality.closedThisMonth}
           </div>
         </Link>
         <Link className={agedOver24 && agedOver24.count > 0 ? "kpi danger" : "kpi"} href="/inventory">
