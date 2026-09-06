@@ -156,8 +156,28 @@ export async function extractRows(
         note: `${fileName} 无法作为 Excel 工作簿读取:${e instanceof Error ? e.message : String(e)}`,
       };
     }
-    const ws = wb.worksheets[0];
-    if (!ws) {
+    /*
+     * F5 golden 套件抓出的缺陷:原实现只读 `worksheets[0]`。
+     * 客户 BOM 常见"第一张是封面/说明、第二张才是表"的形态 ——
+     * 那种文件会被**静默解析成封面**,正是"正常 BOM 导不进"的又一种。
+     *
+     * 修法:逐张取行,选**非空行最多**的一张(与 E4 批量导入"多文件取行数最多"
+     * 同一原则,只是作用在 sheet 维度)。取的不是第一张时在 note 里明说,
+     * 让人知道系统读的是哪张表,而不是猜。
+     */
+    let best: { rows: string[][]; name: string; index: number } | null = null;
+    wb.worksheets.forEach((ws, index) => {
+      const rows: string[][] = [];
+      ws.eachRow({ includeEmpty: false }, (row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        rows.push(values.map(cellToString));
+      });
+      const nonEmpty = rows.filter((r) => r.some((c) => c.trim() !== "")).length;
+      if (!best || nonEmpty > best.rows.filter((r) => r.some((c) => c.trim() !== "")).length) {
+        best = { rows, name: ws.name, index };
+      }
+    });
+    if (!best) {
       return {
         kind,
         rows: [],
@@ -167,12 +187,18 @@ export async function extractRows(
         note: "工作簿为空",
       };
     }
-    const rows: string[][] = [];
-    ws.eachRow({ includeEmpty: false }, (row) => {
-      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-      rows.push(values.map(cellToString));
-    });
-    return { kind, rows, source: "spreadsheet", requiresManualTranscription: false, isDraft: false };
+    const picked = best as { rows: string[][]; name: string; index: number };
+    return {
+      kind,
+      rows: picked.rows,
+      source: "spreadsheet",
+      requiresManualTranscription: false,
+      isDraft: false,
+      note:
+        picked.index > 0
+          ? `工作簿含 ${wb.worksheets.length} 张工作表,表格取自「${picked.name}」(第 ${picked.index + 1} 张,非空行最多);其余工作表未读取`
+          : undefined,
+    };
   }
 
   if (kind === "pdf") {

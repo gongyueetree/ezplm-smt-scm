@@ -1,0 +1,14 @@
+{
+  "file": "standard-cn.csv",
+  "description": "标准中文表头 + 表前标题块 + 引号包裹的多位号 + 尾部附注行。构造:4 物料行、1 附注行(仅位号列有字 → 待人工)、结尾空行属行终止符残留不计。",
+  "expected": {
+    "totalRows": 5,
+    "recognized": 4,
+    "mergedIntoPrevious": 0,
+    "nonBusiness": 0,
+    "needsReview": 1,
+    "withIssues": 0,
+    "mustBalance": true,
+    "rowChecks": [{ "sourceRow": 8, "disposition": "INSUFFICIENT" }]
+  }
+}

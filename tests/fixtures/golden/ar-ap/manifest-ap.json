@@ -1,0 +1,5 @@
+{
+  "file": "ap-sample.txt",
+  "description": "AP 对账文本:数量单价行 + 仅金额行,全部有效。",
+  "expected": { "lines": 2, "errors": 0 }
+}

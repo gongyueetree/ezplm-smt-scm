@@ -1,0 +1,9 @@
+某某电子有限公司 BOM 表
+项目:GOLDEN-CN,版本:V1.0
+位号,用量,制造商,制造商料号,封装,描述
+R1,1,Yageo,GOLD-CN-0001,0603,RES 10K 1% 0603
+"C1,C2",2,Murata,GOLD-CN-0002,0603,CAP 0.1uF 50V
+U1,1,ST,GOLD-CN-0003,LQFP-48,MCU 主控
+U2,1,ADI,GOLD-CN-0004,DIP-16,RS-232 收发
+备注:以上为主料,,,,,
+,,,,,

@@ -1,0 +1,1 @@
+{ "scenario": "NETWORK_DROP_AFTER_COMMIT", "expected": { "connection": "READY", "syncStatus": "RETRY_REQUIRED" } }

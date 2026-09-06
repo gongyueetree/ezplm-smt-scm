@@ -1,0 +1,8 @@
+{
+  "file": "aliases-qty.csv",
+  "description": "非标英式列名:Ref / Q'ty(撇号,E1a 曾因它整份拒收)/ Manufacturer P/N。3 行全识别。",
+  "expected": {
+    "totalRows": 3, "recognized": 3, "mergedIntoPrevious": 0,
+    "nonBusiness": 0, "needsReview": 0, "withIssues": 0, "mustBalance": true
+  }
+}

@@ -45,6 +45,22 @@
 
 ---
 
+## Round 2 · F5 Golden Dataset Harness(2026-09-07)
+
+状态:**DONE**(excess 域 PARTIAL —— 夹具锁格式,导入管线本就不存在,见 runner 注释)。
+
+| 项 | 结果 |
+|---|---|
+| 夹具 | bom(7 域:标准中/英、别名×2、多sheet、边界混合、运行时大文件)+ gerber + supplier-quotes + shortage + ar-ap + excess + erp(与 Lab 同格式 3 场景) |
+| 口径 | 生产恒等式 totalRows = recognized + merged + nonBusiness + needsReview;期望值由构造推导,非快照 |
+| 门禁 | CI 单列 `golden dataset suite` 步骤;>10MB 慢档 GOLDEN_SLOW=1(HTTP 全链路由 zz-e9 每次覆盖) |
+| **顺带修的三个生产缺陷** | ① extractRows 只读 worksheets[0](封面在前的多 sheet BOM 被解析成封面);② parseCsv 丢弃全部空行致**行号偏移**,ledger 指不回原表;③ `2026/8/1` 落数量列被读成 2026 个(静默误购风险) |
+| 变异验证 | 两个缺陷分别还原后,对应夹具精准打红 |
+| CI 陷阱 | docs-only PR 因必过检查 + paths-ignore 永久无法合并 —— 增设同名 no-op 伴生 workflow(ci-docs-noop.yml) |
+| 客户文件纪律 | tests/fixtures/customer/ gitignore,真实样例复现后以合成数据入库 |
+
+---
+
 ## 客户第三轮答复(2026-08-31 落档,《待确认技术清单》乾创填写版)
 
 原件:`ezPLM_SMT_客户待确认技术清单_2026-08-11_客户回复.docx`。

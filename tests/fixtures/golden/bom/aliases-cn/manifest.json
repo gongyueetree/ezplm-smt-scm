@@ -1,0 +1,8 @@
+{
+  "file": "aliases-cn2.csv",
+  "description": "中文别名列:元件位号/使用数量/品牌/厂家型号/封装形式/规格。2 行全识别。",
+  "expected": {
+    "totalRows": 2, "recognized": 2, "mergedIntoPrevious": 0,
+    "nonBusiness": 0, "needsReview": 0, "withIssues": 0, "mustBalance": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "file": "shortage-mixed.csv",
+  "description": "缺料单:1 条齐全、1 条大量留空(缺口以单据为准、空值为 null 不回落 0)、1 条缺 MPN(报错带行号)。",
+  "expected": {
+    "lines": 2,
+    "errors": 1,
+    "errorRows": [{ "row": 4, "messageContains": "缺少 MPN" }]
+  }
+}

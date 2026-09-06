@@ -154,6 +154,8 @@ export function parseReconText(text: string): ReconParseResult {
   const lines: ParsedReconLine[] = [];
   for (let i = mapping.headerRowIndex + 1; i < rows.length; i += 1) {
     const row = rows[i];
+    // 空行直接跳过(parseCsv 现保留中段空行以对齐行号;空行不该变成「缺 XX」报错)
+    if ((row ?? []).every((c) => (c ?? "").trim() === "")) continue;
     const get = (f: ReconField): string => cellText(row, mapping.fields[f]) ?? "";
 
     const docNo = get("docNo").trim() || null;

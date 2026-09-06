@@ -26,7 +26,9 @@
     "seed:remote": "sh scripts/seed-remote.sh",
     "reset:password": "tsx scripts/reset-password.ts",
     "check:login": "tsx scripts/check-login.ts",
-    "demo:reset": "tsx scripts/reset-demo-data.ts"
+    "demo:reset": "tsx scripts/reset-demo-data.ts",
+    "test:golden": "vitest run -c vitest.golden.config.ts",
+    "test:golden:slow": "GOLDEN_SLOW=1 vitest run -c vitest.golden.config.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",

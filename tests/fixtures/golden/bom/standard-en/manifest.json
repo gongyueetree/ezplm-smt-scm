@@ -1,0 +1,13 @@
+{
+  "file": "standard-en.xlsx",
+  "description": "英文表头 xlsx:含公式数量(=2+3 须取结果 5)与合并单元格描述(F5:F6,从属行取主格值)。构造:5 物料行全识别。",
+  "expected": {
+    "totalRows": 5,
+    "recognized": 5,
+    "mergedIntoPrevious": 0,
+    "nonBusiness": 0,
+    "needsReview": 0,
+    "withIssues": 0,
+    "mustBalance": true
+  }
+}

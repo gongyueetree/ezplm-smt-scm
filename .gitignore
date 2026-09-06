@@ -39,3 +39,8 @@ coverage/
 
 # occt WASM 由 predev/prebuild 生成,不进版本库(7.6MB)
 public/vendor/
+
+# F5 golden 套件:客户真实文件绝不入库;大文件运行时生成
+tests/fixtures/customer/*
+!tests/fixtures/customer/README.md
+tests/fixtures/golden/**/generated/
