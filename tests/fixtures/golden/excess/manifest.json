@@ -1,0 +1,6 @@
+{
+  "file": "excess-sample.csv",
+  "description": "Excess Report 导入夹具。⚠ 导入管线尚不存在(审计确认:ExcessProvider 只有 db/未配置双态,Excel 导入通道未实现)。本夹具先锁定列格式(与 ErpExcessLineSchema 对齐,含客户点名的「最早入库时间」),管线落地时把 runner 里的格式校验升级为完整对账断言。",
+  "status": "PIPELINE_PENDING",
+  "columns": ["内部料号", "MPN", "账面量", "可动用量", "客户归属", "仓库", "批次", "最早入库时间", "报表单据号"]
+}

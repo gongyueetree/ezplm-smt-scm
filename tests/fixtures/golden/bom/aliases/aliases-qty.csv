@@ -1,0 +1,4 @@
+Ref,Q'ty,Manufacturer,Manufacturer P/N,Package,Description
+R1,1,Yageo,GOLD-AL-0001,0603,RES 1K
+C1,4,Samsung,GOLD-AL-0002,0402,CAP 100nF
+U1,1,TI,GOLD-AL-0003,SOT-23-5,LDO 3V3

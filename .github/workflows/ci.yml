@@ -95,6 +95,13 @@ jobs:
       - name: unit tests
         run: pnpm test
 
+      # F5:golden 数据完整性套件 —— **合并门禁**。
+      # 单列一步而不并进 unit tests:红了要一眼看出是"数据完整性回归"
+      # (哪个夹具、哪一行、哪个阶段),而不是淹在 1400 个单测里。
+      # >10MB 慢档不在 CI 跑(时间预算;同场景 HTTP 全链路由 zz-e9 E2E 覆盖)。
+      - name: golden dataset suite
+        run: pnpm test:golden
+
       - name: build
         run: pnpm build
 

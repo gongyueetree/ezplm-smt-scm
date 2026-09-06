@@ -202,6 +202,15 @@ export function parseQty(raw: string | null): {
   const halfWidth = raw.replace(/[０-９．]/g, (c) =>
     String.fromCharCode(c.charCodeAt(0) - 0xfee0),
   );
+  /*
+   * F5 golden 套件抓出的缺陷:`2026/8/1` 落进数量列会被读成 2026 ——
+   * 首段数字匹配把日期当成了数量,而 2026 个的采购需求就这么静默出现了。
+   * 日期与区间(8-10)形态一律判为无法解析,交人工;
+   * 负数守卫在下方,此处只拦「数字-分隔符-数字」的多段形态。
+   */
+  if (/\d[\/\-年月]\s*\d/.test(halfWidth)) {
+    return { qty: null, issue: `数量像日期或区间,不能当数量用:${raw}` };
+  }
   const m = halfWidth.match(/-?\d+(\.\d+)?/);
   if (!m) return { qty: null, issue: `数量无法解析:${raw}` };
   const n = Number(m[0]);

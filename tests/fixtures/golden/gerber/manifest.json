@@ -1,0 +1,25 @@
+{
+  "description": "Gerber 分类与大小判定夹具。上传链路的 HTTP 行为(流式、413、残档拒收)由 tests/e2e/e1b 与 zz-e9 在每次 CI 覆盖;此处锁定分类与限额判定的纯函数口径。",
+  "classification": [
+    { "name": "top.GTL", "expectKind": "GERBER" },
+    { "name": "bottom.gbl", "expectKind": "GERBER" },
+    { "name": "outline.GKO", "expectKind": "GERBER" },
+    { "name": "drill.drl", "expectKind": "GERBER" },
+    { "name": "pcb.zip", "expectKind": "ARCHIVE" },
+    { "name": "board.7z", "expectKind": "ARCHIVE" },
+    { "name": "layerX.unknownext", "expectKind": "OTHER" },
+    { "name": "gerberfile-no-extension", "expectKind": "OTHER" },
+    { "name": "bom.xlsx", "expectKind": "OTHER" }
+  ],
+  "sizeChecks": [
+    { "label": "小文件放行", "contentLength": "524288", "maxMb": 100, "expectOk": true },
+    { "label": "恰等于上限放行", "contentLength": "104857600", "maxMb": 100, "expectOk": true },
+    { "label": "超上限 1 字节即拒", "contentLength": "104857601", "maxMb": 100, "expectOk": false, "expectCode": "too_large" },
+    { "label": "远超上限(200MB)", "contentLength": "209715200", "maxMb": 100, "expectOk": false, "expectCode": "too_large" },
+    { "label": "无 Content-Length 拒绝", "contentLength": null, "maxMb": 100, "expectOk": false, "expectCode": "unknown_length" }
+  ],
+  "zipFiles": [
+    { "file": "small.zip", "note": "合法小包:上传链路只存不解析(UPLOADED_NOT_PARSED)" },
+    { "file": "malformed.zip", "note": "非法 zip:同样只存不解析 —— 保存不等于读懂,损坏与否在解析阶段才暴露" }
+  ]
+}

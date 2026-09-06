@@ -1,0 +1,34 @@
+name: CI (docs)
+
+# F5 审计发现的合并陷阱(ROUND2_AUDIT §0.3):
+# 主 CI 对 docs/** 与 *.md 用 paths-ignore,而分支保护要求名为
+# `quality-gates` 的检查必须通过 —— 纯文档 PR 不触发主 CI,
+# 该检查永远停在 expected 状态,**PR 永久无法合并**。
+#
+# 修法即 GitHub 官方建议(Handling skipped but required checks):
+# 伴生 workflow 的 paths 恰为主 workflow 的 ignore 集,产出**同名 job**,
+# 秒级通过。两个触发集互补:
+#   docs-only PR → 只有本 workflow 跑 → quality-gates 绿(no-op);
+#   code-only PR → 只有主 CI 跑;
+#   混合 PR      → 两者都跑,都必须绿(no-op 恒绿,不放松任何门槛)。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: docs-only change
+        run: echo "仅文档改动 —— 完整质量门禁不适用;此 job 仅为满足分支保护的必过检查。"

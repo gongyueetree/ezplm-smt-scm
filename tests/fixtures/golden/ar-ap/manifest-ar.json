@@ -1,0 +1,5 @@
+{
+  "file": "ar-sample.txt",
+  "description": "AR 对账文本(生产入口为粘贴):金额行、仅金额行、仅数量单价行各 1 条有效;金额与数量单价都缺的行报错不按 0。",
+  "expected": { "lines": 3, "errors": 1 }
+}

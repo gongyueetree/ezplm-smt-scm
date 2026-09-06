@@ -1,0 +1,18 @@
+{
+  "file": "edge-mixed.csv",
+  "description": "边界混合:重复位号(校验层职责,不影响行去向)、日期落进数量列(F5 抓出的缺陷:旧实现读成 2026 个,修后判 issue)、缺 MFG、缺 MPN+描述(识别但带 issue)、一格双 MPN、中段空行(F5 抓出的缺陷:旧 parseCsv 丢空行致行号偏移)、翻页表头、仅 MFG 行(待人工)、尾部空行(终止符残留不计)。",
+  "expected": {
+    "totalRows": 9,
+    "recognized": 6,
+    "mergedIntoPrevious": 0,
+    "nonBusiness": 2,
+    "needsReview": 1,
+    "withIssues": 2,
+    "mustBalance": true,
+    "rowChecks": [
+      { "sourceRow": 8, "disposition": "BLANK" },
+      { "sourceRow": 9, "disposition": "REPEATED_HEADER" },
+      { "sourceRow": 10, "disposition": "NO_IDENTIFIER" }
+    ]
+  }
+}

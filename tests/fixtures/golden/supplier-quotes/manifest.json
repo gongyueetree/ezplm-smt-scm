@@ -1,0 +1,18 @@
+{
+  "file": "quotes-mixed.csv",
+  "description": "线下报价混合:2 条正常(含 USD)、1 条无币种(回落到 fallbackCurrency)、缺单价 / 单价为零 / 缺 MPN 各 1 条 —— 三条全部逐行报因,不静默丢。",
+  "fallbackCurrency": "CNY",
+  "expected": {
+    "lines": 3,
+    "skipped": 3,
+    "skippedRows": [
+      { "sourceRow": 5, "reasonContains": "单价无法解析" },
+      { "sourceRow": 6, "reasonContains": "单价必须大于 0" },
+      { "sourceRow": 7, "reasonContains": "缺少 MPN" }
+    ],
+    "lineChecks": [
+      { "mpn": "GOLD-SQ-0002", "unitPrice": "1.85", "currency": "USD" },
+      { "mpn": "GOLD-SQ-0003", "unitPrice": "2.4", "currency": "CNY" }
+    ]
+  }
+}

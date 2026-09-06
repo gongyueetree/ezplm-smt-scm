@@ -1,0 +1,9 @@
+{
+  "file": "multi-sheet-cover.xlsx",
+  "description": "多工作表:第一张是封面文案、第二张才是 BOM(客户交付包常见形态)。F5 抓出的缺陷:旧实现只读 worksheets[0] 会把封面当表解析。修后取非空行最多的一张,且备注写明取自哪张。",
+  "expected": {
+    "totalRows": 4, "recognized": 4, "mergedIntoPrevious": 0,
+    "nonBusiness": 0, "needsReview": 0, "withIssues": 0, "mustBalance": true,
+    "extractNoteContains": "取自「BOM明细」"
+  }
+}
