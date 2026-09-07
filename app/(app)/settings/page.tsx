@@ -182,7 +182,16 @@ export default async function SettingsPage() {
                       {a.entityType}
                       <span className="muted"> · {a.entityId.slice(0, 12)}</span>
                     </td>
-                    <td className="mono small">{a.userId.slice(0, 12)}</td>
+                    <td className="mono small">
+                      {a.actorType && a.actorType !== "INTERNAL_USER" ? (
+                        <>
+                          <span className="muted">[{a.actorType}]</span>{" "}
+                          {a.actorDisplay ?? a.actorId?.slice(0, 12) ?? "-"}
+                        </>
+                      ) : (
+                        a.userId.slice(0, 12)
+                      )}
+                    </td>
                   </tr>
                 ))
               )}

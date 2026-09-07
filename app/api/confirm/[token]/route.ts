@@ -3,7 +3,7 @@ import {
   OpoEtaResponseSchema,
   PoConfirmResponseSchema,
 } from "@/lib/domain/supplier-action";
-import { clientIp, rateLimit } from "@/lib/server/rate-limit";
+import { clientIp, rateLimitConsume } from "@/lib/server/rate-limit";
 import { respondOpoEta, respondPoConfirm } from "@/lib/server/repositories/supplier-action";
 
 export const runtime = "nodejs";
@@ -17,12 +17,12 @@ const STATUS: Record<string, number> = {
 
 /**
  * F3:公开提交(免登录;鉴权 = token 本身)。
- * 速率限制:每 IP 每分钟 30 次(单实例兜底,见 lib/server/rate-limit.ts)。
+ * 速率限制:每 IP 每分钟 30 次(生产走 Postgres 共享计数,见 lib/server/rate-limit.ts)。
  * 未知 token 一律 404,与不存在不可区分。
  */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const ip = clientIp(req);
-  if (!rateLimit(`confirm:${ip ?? "unknown"}`, 30, 60_000)) {
+  if (!(await rateLimitConsume(`confirm:${ip ?? "unknown"}`, 30, 60_000))) {
     return NextResponse.json({ error: "请求过于频繁,请稍后再试" }, { status: 429 });
   }
 

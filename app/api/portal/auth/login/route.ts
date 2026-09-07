@@ -5,7 +5,7 @@ import { PORTAL_COOKIE, PORTAL_TTL_SECONDS, signPortalSession } from "@/lib/auth
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import { portalGloballyEnabled, portalEnabledForTenant } from "@/lib/server/portal";
-import { clientIp, rateLimit } from "@/lib/server/rate-limit";
+import { clientIp, rateLimitConsume } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ const Input = z.object({ email: z.string().trim().email(), password: z.string().
 export async function POST(req: Request) {
   if (!portalGloballyEnabled()) return NextResponse.json({ error: "客户门户未启用" }, { status: 404 });
   const ip = clientIp(req);
-  if (!rateLimit(`portal-login:${ip ?? "unknown"}`, 10, 60_000)) {
+  if (!(await rateLimitConsume(`portal-login:${ip ?? "unknown"}`, 10, 60_000))) {
     return NextResponse.json({ error: "尝试过于频繁,请稍后再试" }, { status: 429 });
   }
   const parsed = Input.safeParse(await req.json().catch(() => null));
@@ -26,15 +26,18 @@ export async function POST(req: Request) {
   });
   const genericFail = NextResponse.json({ error: "邮箱或密码不正确" }, { status: 401 });
   if (!account) return genericFail;
-  if (!(await portalEnabledForTenant(account.tenantId))) {
-    return NextResponse.json({ error: "客户门户未启用" }, { status: 404 });
-  }
+  // R3-1 P2-2:租户 flag 关闭时返回与「账号不存在/密码错误」同一句 401 ——
+  // 此前的 404「门户未启用」会向探测者泄露该邮箱存在账号(枚举边信道)
+  if (!(await portalEnabledForTenant(account.tenantId))) return genericFail;
   if (!(await verifyPassword(parsed.data.password, account.passwordHash))) return genericFail;
 
   await prisma.portalAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });
   await writeAudit(prisma, {
     tenantId: account.tenantId,
-    userId: account.invitedById, // 门户账号无内部 userId;实际登录者见 after
+    userId: account.invitedById, // 关联内部责任人 = 邀请人;实际登录者见 actor*
+    actorType: "PORTAL_ACCOUNT",
+    actorId: account.id,
+    actorDisplay: account.email,
     action: "PORTAL_LOGIN",
     entityType: "PortalAccount",
     entityId: account.id,

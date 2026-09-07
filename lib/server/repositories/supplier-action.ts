@@ -259,7 +259,10 @@ export async function respondPoConfirm(
     });
     await writeAudit(tx, {
       tenantId: req.tenantId,
-      userId: req.createdById, // 公开响应无内部 userId;实际来源见 after.respondedVia(设计 §6)
+      userId: req.createdById, // 关联内部责任人 = 链接创建人;实际操作者见 actor*(R3-1)
+      actorType: "SUPPLIER_LINK",
+      actorId: req.id,
+      actorDisplay: input.respondedByName,
       action: "SUPPLIER_ACTION_RESPONDED",
       entityType: "SupplierActionRequest",
       entityId: req.id,
@@ -359,7 +362,10 @@ export async function respondOpoEta(
     }
     await writeAudit(tx, {
       tenantId: req.tenantId,
-      userId: req.createdById,
+      userId: req.createdById, // 同上:实际操作者见 actor*
+      actorType: "SUPPLIER_LINK",
+      actorId: req.id,
+      actorDisplay: input.respondedByName,
       action: "SUPPLIER_ACTION_RESPONDED",
       entityType: "SupplierActionRequest",
       entityId: req.id,
