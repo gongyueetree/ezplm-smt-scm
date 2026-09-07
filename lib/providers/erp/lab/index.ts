@@ -33,12 +33,14 @@ import {
   type ErpPage,
   type ErpProvider,
   type ErpPushResult,
+  type ErpReceiveInputMain,
   type ErpSalesOrderRecord,
   type ErpSupplierRecord,
   type ErpWorkOrder,
   type ErpWriteResult,
 } from "../types";
 import {
+  labPageSchema,
   LabConnectionResultSchema,
   LabCustomerSchema,
   LabSalesOrderSchema,
@@ -110,6 +112,7 @@ export class HttpErpLabProvider implements ErpProvider {
     operation: LabOperation,
     schema: z.ZodType<T>,
     payload: Record<string, unknown> = {},
+    correlationId?: string,
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -121,6 +124,8 @@ export class HttpErpLabProvider implements ErpProvider {
           "Content-Type": "application/json",
           "X-Tenant-Id": this.env.tenantId,
           Authorization: `Bearer ${this.env.accessToken}`,
+          // closed-loop P1-10:业务动作 → 同步记录 → Lab 请求日志 一条链
+          ...(correlationId ? { "X-Correlation-Id": correlationId } : {}),
         },
         body: JSON.stringify({ tenantId: this.env.tenantId, operation, payload }),
         signal: controller.signal,
@@ -230,18 +235,35 @@ export class HttpErpLabProvider implements ErpProvider {
     };
   }
 
-  private pullInput(input: { cursor?: string | null; limit?: number; since?: string | null }): LabPullOptions {
+  private pullInput(input: {
+    cursor?: string | null;
+    limit?: number;
+    since?: string | null;
+    customerCode?: string | null;
+    materialCode?: string | null;
+    warehouseCode?: string | null;
+  }): LabPullOptions {
     return {
       ...(input.cursor ? { cursor: input.cursor } : {}),
       ...(input.limit ? { limit: input.limit } : {}),
       ...(input.since ? { updatedSince: input.since } : {}),
+      ...(input.customerCode ? { customerCode: input.customerCode } : {}),
+      ...(input.materialCode ? { materialCode: input.materialCode } : {}),
+      ...(input.warehouseCode ? { warehouseCode: input.warehouseCode } : {}),
+    };
+  }
+
+  /** Lab 分页信封 → 本系统 ErpPage(**真实 cursor/hasMore/total 透传**,不再假装单页) */
+  private toPage<T, U>(page: { items: T[]; cursor?: string; hasMore: boolean; total?: number }, map: (x: T) => U): ErpPage<U> {
+    return {
+      items: page.items.map(map),
+      page: { cursor: page.cursor ?? null, hasMore: page.hasMore, total: page.total ?? null },
     };
   }
 
   async pullMaterials(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpMaterial>> {
-    const rows = await this.rpc("pullMaterials", z.array(LabMaterialSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((m) => ({
+    const p = await this.rpc("pullMaterials", labPageSchema(LabMaterialSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (m) => ({
         externalId: m.externalId,
         internalPn: opt(m.internalPn) ?? opt(m.materialCode),
         mpn: opt(m.mpn),
@@ -255,8 +277,7 @@ export class HttpErpLabProvider implements ErpProvider {
         lifecycle: opt(m.lifecycle),
         status: opt(m.status),
         updatedAt: opt(m.updatedAt),
-      })),
-    );
+      }));
   }
 
   async pushMaterials(): Promise<ErpPushResult> {
@@ -264,9 +285,8 @@ export class HttpErpLabProvider implements ErpProvider {
   }
 
   async pullInventory(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpInventory>> {
-    const rows = await this.rpc("pullInventory", z.array(LabInventorySchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((r) => ({
+    const p = await this.rpc("pullInventory", labPageSchema(LabInventorySchema), { input: this.pullInput(input) });
+    return this.toPage(p, (r) => ({
         warehouse: opt(r.warehouseName) ?? opt(r.warehouseCode),
         location: null,
         internalPn: opt(r.materialCode),
@@ -278,14 +298,14 @@ export class HttpErpLabProvider implements ErpProvider {
         receivedAt: null,
         materialCode: opt(r.materialCode),
         customerCode: opt(r.customerCode),
-      })),
-    );
+      }));
   }
 
   async pullOpenPurchaseOrders(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpOpenPo>> {
-    const rows = await this.rpc("pullOpenPurchaseOrders", z.array(LabPurchaseOrderSchema), { input: this.pullInput(input) });
-    return page(
-      rows.flatMap((po) =>
+    const p = await this.rpc("pullOpenPurchaseOrders", labPageSchema(LabPurchaseOrderSchema), { input: this.pullInput(input) });
+    // 展开为行级;分页信息按 PO 粒度透传(行级展开不改变 hasMore/cursor 语义)
+    return {
+      items: p.items.flatMap((po) =>
         po.lines.map((l) => ({
           poNo: po.poNumber ?? po.externalId ?? "",
           lineNo: l.lineNo,
@@ -300,14 +320,14 @@ export class HttpErpLabProvider implements ErpProvider {
           unitPrice: l.unitPrice,
         })),
       ),
-    );
+      page: { cursor: p.cursor ?? null, hasMore: p.hasMore, total: p.total ?? null },
+    };
   }
 
   // LAB-1 落地后接入:Lab WO → 本系统 ErpWorkOrder(status/bomRef 原样带出)
   async pullWorkOrders(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpWorkOrder>> {
-    const rows = await this.rpc("pullWorkOrders", z.array(LabWorkOrderSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((w) => ({
+    const p = await this.rpc("pullWorkOrders", labPageSchema(LabWorkOrderSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (w) => ({
         workOrderNo: w.woNumber,
         product: w.productCode,
         bomVersion: opt(w.bomRef),
@@ -315,15 +335,13 @@ export class HttpErpLabProvider implements ErpProvider {
         startAt: opt(w.plannedStart),
         needDate: opt(w.plannedEnd),
         status: w.status,
-      })),
-    );
+      }));
   }
 
   // LAB-1:销售订单(客户需求侧;F2 影响分析与客户告知消费)
   async pullSalesOrders(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpSalesOrderRecord>> {
-    const rows = await this.rpc("pullSalesOrders", z.array(LabSalesOrderSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((so) => ({
+    const p = await this.rpc("pullSalesOrders", labPageSchema(LabSalesOrderSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (so) => ({
         externalId: so.externalId,
         soNumber: so.soNumber,
         customerCode: so.customerCode,
@@ -335,8 +353,7 @@ export class HttpErpLabProvider implements ErpProvider {
           shippedQty: opt(l.shippedQty),
           requestedDate: opt(l.requestedDate),
         })),
-      })),
-    );
+      }));
   }
 
   async pushPurchaseOrders(): Promise<ErpPushResult> {
@@ -358,9 +375,8 @@ export class HttpErpLabProvider implements ErpProvider {
   }
 
   async pullExcessReport(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpExcessLine>> {
-    const rows = await this.rpc("pullExcess", z.array(LabExcessSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((r) => ({
+    const p = await this.rpc("pullExcess", labPageSchema(LabExcessSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (r) => ({
         externalId: r.externalId,
         internalPn: opt(r.materialCode),
         mpn: null,
@@ -372,53 +388,46 @@ export class HttpErpLabProvider implements ErpProvider {
         earliestInboundAt: opt(r.earliestInboundAt),
         sourceDocumentId: opt(r.sourceDocumentId),
         sourceUpdatedAt: opt(r.sourceUpdatedAt),
-      })),
-    );
+      }));
   }
 
   async pullExchangeRates(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpFxRate>> {
-    const rows = await this.rpc("pullExchangeRates", z.array(LabExchangeRateSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((r) => ({
+    const p = await this.rpc("pullExchangeRates", labPageSchema(LabExchangeRateSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (r) => ({
         sourceCurrency: r.baseCurrency,
         targetCurrency: r.quoteCurrency,
         rate: r.rate,
         rateType: opt(r.rateType),
         effectiveDate: r.effectiveDate,
         sourceUpdatedAt: null,
-      })),
-    );
+      }));
   }
 
   async pullSuppliers(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpSupplierRecord>> {
-    const rows = await this.rpc("pullSuppliers", z.array(LabSupplierSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((r) => ({
+    const p = await this.rpc("pullSuppliers", labPageSchema(LabSupplierSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (r) => ({
         externalId: r.externalId,
         supplierCode: r.supplierCode,
         name: r.name,
         status: opt(r.status),
         currency: opt(r.currency),
         updatedAt: opt(r.updatedAt),
-      })),
-    );
+      }));
   }
 
   async pullCustomers(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpCustomerRecord>> {
-    const rows = await this.rpc("pullCustomers", z.array(LabCustomerSchema), { input: this.pullInput(input) });
-    return page(
-      rows.map((r) => ({
+    const p = await this.rpc("pullCustomers", labPageSchema(LabCustomerSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (r) => ({
         externalId: r.externalId,
         customerCode: r.customerCode,
         name: r.name,
         status: opt(r.status),
         updatedAt: opt(r.updatedAt),
-      })),
-    );
+      }));
   }
 
   async createPurchaseOrder(
-    _c: ErpConnectionConfig,
+    config: ErpConnectionConfig,
     input: ErpCreatePoInput,
     idempotencyKey: string,
   ): Promise<ErpWriteResult> {
@@ -437,7 +446,7 @@ export class HttpErpLabProvider implements ErpProvider {
         })),
       },
       idempotencyKey,
-    });
+    }, typeof config.config?.correlationId === "string" ? config.config.correlationId : undefined);
     return {
       success: r.success,
       externalId: r.externalId ?? null,
@@ -447,7 +456,39 @@ export class HttpErpLabProvider implements ErpProvider {
     };
   }
 
-  async updateEta(_c: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult> {
+  async receivePurchaseOrder(
+    config: ErpConnectionConfig,
+    input: ErpReceiveInputMain,
+    idempotencyKey: string,
+  ): Promise<ErpWriteResult> {
+    const r = await this.rpc(
+      "receivePurchaseOrder",
+      LabWriteResultSchema,
+      {
+        input: {
+          ...(input.poExternalId ? { poExternalId: input.poExternalId } : {}),
+          ...(input.poNumber ? { poNumber: input.poNumber } : {}),
+          lines: input.lines.map((l) => ({
+            lineNo: l.lineNo,
+            qty: l.qty,
+            ...(l.lotNo ? { lotNo: l.lotNo } : {}),
+            ...(l.warehouseCode ? { warehouseCode: l.warehouseCode } : {}),
+          })),
+        },
+        idempotencyKey,
+      },
+      typeof config.config?.correlationId === "string" ? config.config.correlationId : undefined,
+    );
+    return {
+      success: r.success,
+      externalId: r.externalId ?? null,
+      documentNumber: r.documentNumber ?? null,
+      idempotentReplay: r.idempotentReplay ?? false,
+      message: r.message ?? null,
+    };
+  }
+
+  async updateEta(config: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult> {
     const r = await this.rpc("updateEta", LabWriteResultSchema, {
       input: {
         ...(input.poExternalId ? { poExternalId: input.poExternalId } : {}),
@@ -457,7 +498,7 @@ export class HttpErpLabProvider implements ErpProvider {
         ...(input.eta ? { eta: input.eta } : {}),
         ...(input.shipDate ? { shipDate: input.shipDate } : {}),
       },
-    });
+    }, typeof config.config?.correlationId === "string" ? config.config.correlationId : undefined);
     return {
       success: r.success,
       externalId: r.externalId ?? null,

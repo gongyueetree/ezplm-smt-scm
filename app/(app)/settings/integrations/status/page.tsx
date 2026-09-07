@@ -6,6 +6,7 @@ import { SYNC_STATE_LABEL, type IntegrationSyncState } from "@/lib/domain/integr
 import { listSyncStatus } from "@/lib/server/repositories/integration-sync";
 import { getSession } from "@/lib/server/session";
 import { RetryButton } from "./retry-button";
+import { RunWorkerButton } from "./run-worker";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export default async function IntegrationStatusPage() {
           <p className="page-desc">实体级同步状态 · 人工重试 · Excel 兜底链入口</p>
         </div>
         <div className="page-actions">
+          <RunWorkerButton />
           <span data-testid="erp-target-badge">
             <Badge tone={target.kind === "NONE" ? "gray" : "amber"}>
               {target.kind === "NONE"
@@ -137,6 +139,7 @@ export default async function IntegrationStatusPage() {
                 <th>状态</th>
                 <th>ERP 单号</th>
                 <th>尝试</th>
+                <th>关联 ID</th>
                 <th>最近错误</th>
                 <th>操作</th>
               </tr>
@@ -154,6 +157,7 @@ export default async function IntegrationStatusPage() {
                   </td>
                   <td className="mono">{r.externalDocumentNo ?? r.externalId ?? "—"}</td>
                   <td>{r.attemptCount}</td>
+                  <td className="mono small">{r.correlationId ? r.correlationId.slice(0, 8) : "—"}</td>
                   <td className="muted" style={{ maxWidth: 360 }}>
                     {r.errorMessage ?? r.note ?? "—"}
                   </td>

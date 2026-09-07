@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DecimalStringSchema,
+  labPageSchema,
+  LabReceiveInputSchema,
   LabSalesOrderSchema,
   LabWorkOrderSchema,
   LAB_OPERATIONS,
@@ -29,7 +31,7 @@ import {
 } from "@/lib/providers/erp/lab/contract";
 
 describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)", () => {
-  it("12 个 RPC 操作名逐字锁定(LAB-1 增加工单/销售订单)", () => {
+  it("13 个 RPC 操作名逐字锁定(closed-loop 增加收货)", () => {
     expect(LAB_OPERATIONS).toEqual([
       "testConnection",
       "pullMaterials",
@@ -43,6 +45,7 @@ describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)"
       "pullSalesOrders",
       "createPurchaseOrder",
       "updateEta",
+      "receivePurchaseOrder",
     ]);
   });
 
@@ -203,6 +206,41 @@ describe("DTO 形状(Lab 侧真实样本)", () => {
         soNumber: "SO20260810001",
         customerCode: "CUS-ACME",
         lines: [{ lineNo: 1, productCode: "FG-ACME-CTRL-A1", qty: "300", shippedQty: "200" }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("closed-loop:分页信封 {items,cursor,hasMore,total};过滤字段进 PullOptions", () => {
+    const page = labPageSchema(LabInventorySchema).safeParse({
+      items: [
+        { externalId: "INV-1", materialCode: "EZ-STM32H743", customerCode: "CUS-ACME", onHandQty: "100" },
+      ],
+      cursor: "o2",
+      hasMore: true,
+      total: 6,
+    });
+    expect(page.success).toBe(true);
+    // 裸数组不再是合法响应 —— 契约破坏性变更由本测试锁定
+    expect(labPageSchema(LabInventorySchema).safeParse([{ externalId: "x" }]).success).toBe(false);
+  });
+
+  it("closed-loop:收货输入形状(行级 qty Decimal String;lotNo/warehouseCode 可选)", () => {
+    expect(
+      LabReceiveInputSchema.safeParse({
+        poExternalId: "PO-EXT-001",
+        lines: [{ lineNo: 1, qty: "400", lotNo: "L-1", warehouseCode: "SZ-RM" }],
+      }).success,
+    ).toBe(true);
+    expect(
+      LabReceiveInputSchema.safeParse({ poExternalId: "x", lines: [{ lineNo: 1, qty: "abc" }] }).success,
+    ).toBe(false);
+    // PO 行带 receivedQty 合法
+    expect(
+      LabPurchaseOrderSchema.safeParse({
+        supplierCode: "SUP-A",
+        currency: "CNY",
+        orderDate: "2026-09-07",
+        lines: [{ lineNo: 1, materialCode: "M", qty: "10", unitPrice: "1", receivedQty: "4" }],
       }).success,
     ).toBe(true);
   });

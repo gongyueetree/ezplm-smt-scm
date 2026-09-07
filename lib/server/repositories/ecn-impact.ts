@@ -8,7 +8,7 @@
  * - 缺源显示「待接入/失败原因」,**禁止 0 或示例数**;
  * - 每卡带来源与取数时间。
  */
-import { getErpProvider, ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
+import { ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
 import { prisma } from "@/lib/server/db";
 import { resolveErpTarget } from "@/lib/server/repositories/integration-sync";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -114,7 +114,7 @@ export async function gatherEcnImpact(tenantId: string, ecnId: string): Promise<
     };
   }
 
-  const provider = getErpProvider(target.kind);
+  const provider = target.provider; // closed-loop:必须用 target 里的租户感知实例,不得回退无租户工厂
   const cfg = target.config;
   const matchOld = (code: string | null) => oldKeys.has(norm(code));
   const matchNew = (code: string | null) => newKeys.has(norm(code));

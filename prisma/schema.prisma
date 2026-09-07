@@ -3508,6 +3508,8 @@ model IntegrationSyncRecord {
   nextRetryAt    DateTime?
   /// 附注(如 PARTIAL_RESPONSE 拉取的行数、FX 占位说明)
   note String?
+  /// closed-loop P1-10:关联 id —— 业务动作→本记录→Lab 请求日志 一条链
+  correlationId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

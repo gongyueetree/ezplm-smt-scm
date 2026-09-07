@@ -72,3 +72,20 @@ test("入口:管理层菜单可见;采购经 URL 直达可读(与 sync-log 同�
   await page.goto("/settings/integrations/status");
   await expect(page.getByTestId("erp-target-badge")).toContainText("ERP 未配置");
 });
+
+test("closed-loop:worker 端点角色门与未配置 ERP 的诚实行为", async ({ page }) => {
+  await login(page, "engineering@demo.qianchuang.cn");
+  const denied = await page.request.post("/api/integration/worker/run");
+  expect(denied.status()).toBe(403);
+
+  await login(page, "procurement@demo.qianchuang.cn");
+  const run = await (await page.request.post("/api/integration/worker/run")).json();
+  // 未配置 ERP:待处理记录一律落 NOT_CONFIGURED,绝无假成功
+  expect(run.synced).toBe(0);
+  expect(run.failed).toBe(0);
+  expect(typeof run.scanned).toBe("number");
+
+  // Cron 路由:无 secret 头 → 401
+  const cron = await page.request.post("/api/cron/integration-worker");
+  expect([401, 503]).toContain(cron.status());
+});

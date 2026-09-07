@@ -200,6 +200,13 @@ export interface ErpCreatePoInput {
   }[];
 }
 
+/** closed-loop:收货输入(对齐 Lab ErpReceiveInput) */
+export interface ErpReceiveInputMain {
+  poExternalId?: string | null;
+  poNumber?: string | null;
+  lines: { lineNo: number; qty: string; lotNo?: string | null; warehouseCode?: string | null }[];
+}
+
 /** F4:单笔 ETA 更新输入(对齐 Lab ErpEtaUpdate) */
 export interface ErpEtaUpdateInput {
   poExternalId?: string | null;
@@ -231,6 +238,10 @@ export interface PullInput {
   limit?: number;
   /** 增量水位 */
   since?: string | null;
+  // closed-loop:服务端过滤(数据最小化;门户/影响分析按需取数)
+  customerCode?: string | null;
+  materialCode?: string | null;
+  warehouseCode?: string | null;
 }
 
 export interface ErpPage<T> {
@@ -354,6 +365,12 @@ export interface ErpProvider {
   updateEta(config: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult>;
   /** F2:销售订单(客户需求侧;LAB-1 扩展,未联调厂商抛 NotImplemented) */
   pullSalesOrders(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpSalesOrderRecord>>;
+  /** closed-loop:收货(幂等键纪律与 createPurchaseOrder 相同) */
+  receivePurchaseOrder(
+    config: ErpConnectionConfig,
+    input: ErpReceiveInputMain,
+    idempotencyKey: string,
+  ): Promise<ErpWriteResult>;
 }
 
 /** 未实现:与"没有数据"必须区分开 */

@@ -32,9 +32,19 @@ export const TenantSettingsSchema = z.object({
    * 主数据真源(KICKOFF 修订 1):按租户配置,业务代码经 MasterDataProvider
    * 消费,不感知差异。KINGDEE 在 F4 落地,当前取值只影响显示与校验。
    */
-  masterDataSource: z.enum(["EZPLM", "KINGDEE", "NONE"]).default("EZPLM"),
+  /**
+   * closed-loop P0-6:ERP_LAB 为**测试专用**主数据源(UI 必须标「ERP 仿真主数据」,
+   * 严禁显示为金蝶/正式已连接)。
+   */
+  masterDataSource: z.enum(["EZPLM", "KINGDEE", "ERP_LAB", "NONE"]).default("EZPLM"),
   /** ERP 流程回写目标(F4):NONE = 只有 Excel 兜底链 */
   erpProvider: z.enum(["KINGDEE", "ERP_LAB", "NONE"]).default("NONE"),
+  /**
+   * closed-loop P0-2:本租户对应的 Lab 数据集租户(如 primatronics-uat)。
+   * **不填时不回落共享数据集**?—— 回落 ezplm-demo 仅用于演示;
+   * 多个 ezPLM 租户各自配置,严禁共用同一客户数据集(部署文档已注明)。
+   */
+  erpLabTenantId: z.string().trim().min(2).max(64).nullable().default(null),
   /** F7:匹配置信度阈值(「一键确认高置信」的线),租户可调不硬编码 */
   /**
    * F2:ECN 评审阶段启停(租户级)。MANAGEMENT 批准阶段**不可关**,
