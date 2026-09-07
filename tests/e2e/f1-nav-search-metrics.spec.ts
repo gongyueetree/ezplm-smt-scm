@@ -58,12 +58,18 @@ test("全局搜索:范围由服务端按角色决定,不是谁想搜什么就搜
   const supplier = body.groups.find((g: { type: string }) => g.type === "SUPPLIER");
   expect(supplier?.hits?.[0]?.title).toContain("华强北");
 
-  // ENGINEERING:ECN 范围如实注明"暂无可搜内容",不假装搜过了没有
+  // ENGINEERING:ECN 范围 —— F2 上线后为真实检索(F1 时曾是占位注明)。
+  // 造一条 ECN 再按编号搜,断言真实命中
   await login(page, "engineering@demo.qianchuang.cn");
-  res = await page.request.get("/api/search?q=任意词");
+  const created = await page.request.post("/api/ecn", {
+    data: { title: `F1 搜索用例 ${Date.now()}`, type: "OTHER", priority: "LOW" },
+  });
+  expect(created.status()).toBe(201);
+  const ecnCode: string = (await created.json()).code;
+  res = await page.request.get(`/api/search?q=${encodeURIComponent(ecnCode)}`);
   body = await res.json();
   const ecn = body.groups.find((g: { type: string }) => g.type === "ECN");
-  expect(ecn?.note).toContain("F2 上线");
+  expect(ecn?.hits?.[0]?.title).toContain(ecnCode);
 
   // 词太短直接拒
   res = await page.request.get("/api/search?q=a");

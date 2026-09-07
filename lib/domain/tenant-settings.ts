@@ -36,6 +36,16 @@ export const TenantSettingsSchema = z.object({
   /** ERP 流程回写目标(F4):NONE = 只有 Excel 兜底链 */
   erpProvider: z.enum(["KINGDEE", "ERP_LAB", "NONE"]).default("NONE"),
   /** F7:匹配置信度阈值(「一键确认高置信」的线),租户可调不硬编码 */
+  /**
+   * F2:ECN 评审阶段启停(租户级)。MANAGEMENT 批准阶段**不可关**,
+   * 不进配置;角色只取五值枚举 —— 无品质/总经理(PAGE_SPEC_ECN §0)。
+   */
+  ecnReviewStages: z
+    .object({
+      engineering: z.boolean().default(true),
+      procurement: z.boolean().default(true),
+    })
+    .default(() => ({ engineering: true, procurement: true })),
   matchConfidenceThreshold: z.number().min(0.5).max(1).default(0.9),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;

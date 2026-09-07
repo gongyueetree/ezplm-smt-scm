@@ -77,11 +77,23 @@ export async function GET(req: Request) {
         truncated: rows.length > PER_TYPE,
       };
     },
-    ECN: async () => ({
-      hits: [],
-      truncated: false,
-      note: "ECN 模块随 Round2 F2 上线 —— 此范围暂无可搜内容(不是没搜到)",
-    }),
+    // F2:ECN 已上线,真实检索(编号/标题)
+    ECN: async () => {
+      const rows = await prisma.ecn.findMany({
+        where: tenantWhere(tenantId, { OR: [{ code: contains }, { title: contains }] }),
+        take: PER_TYPE + 1,
+        select: { id: true, code: true, title: true, status: true },
+        orderBy: { updatedAt: "desc" },
+      });
+      return {
+        hits: rows.slice(0, PER_TYPE).map((e) => ({
+          title: `${e.code} ${e.title}`,
+          subtitle: String(e.status),
+          href: `/ecn/${e.id}`,
+        })),
+        truncated: rows.length > PER_TYPE,
+      };
+    },
     SUPPLIER: async () => {
       const rows = await prisma.supplier.findMany({
         where: tenantWhere(tenantId, { OR: [{ name: contains }, { code: contains }] }),

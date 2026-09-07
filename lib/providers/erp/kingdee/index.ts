@@ -225,4 +225,8 @@ export class KingdeeErpProvider implements ErpProvider {
       "updateEta(交期回写待联调 —— 当前请走 Excel 模板兜底链)",
     );
   }
+  async pullSalesOrders(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError("KINGDEE", "pullSalesOrders(销售订单,待真实账套联调)");
+  }
 }

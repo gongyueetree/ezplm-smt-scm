@@ -270,6 +270,20 @@ export class MockErpProvider implements ErpProvider {
     );
   }
 
+  async pullSalesOrders() {
+    return page([
+      {
+        externalId: "SO-0001",
+        soNumber: "SO-2026-001(示例)",
+        customerCode: "CUST-LC",
+        status: "OPEN",
+        lines: [
+          { lineNo: 1, productCode: "FG-DEMO-1", qty: "100", shippedQty: "40", requestedDate: "2026-10-30" },
+        ],
+      },
+    ]);
+  }
+
   async updateEta(): Promise<never> {
     throw new ErpNotImplementedError(
       "MOCK",

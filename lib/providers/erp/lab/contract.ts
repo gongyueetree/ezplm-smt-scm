@@ -138,6 +138,44 @@ export const LabWriteResultSchema = z.object({
 });
 export type LabWriteResult = z.infer<typeof LabWriteResultSchema>;
 
+// LAB-1(Lab 仓库 PR #1):工单与销售订单
+export const LabWorkOrderLineSchema = z.object({
+  materialCode: z.string(),
+  consumedQty: DecimalStringSchema,
+});
+
+export const LabWorkOrderSchema = z.object({
+  externalId: z.string(),
+  woNumber: z.string(),
+  customerCode: z.string().optional(),
+  productCode: z.string(),
+  bomRef: z.string().optional(),
+  qty: DecimalStringSchema,
+  status: z.enum(["PLANNED", "IN_PROGRESS", "COMPLETED", "SHIPPED"]),
+  currentOperation: z.string().optional(),
+  consumedLines: z.array(LabWorkOrderLineSchema),
+  plannedStart: z.string().optional(),
+  plannedEnd: z.string().optional(),
+});
+export type LabWorkOrder = z.infer<typeof LabWorkOrderSchema>;
+
+export const LabSalesOrderLineSchema = z.object({
+  lineNo: z.number().int(),
+  productCode: z.string(),
+  qty: DecimalStringSchema,
+  shippedQty: DecimalStringSchema.optional(),
+  requestedDate: z.string().optional(),
+});
+
+export const LabSalesOrderSchema = z.object({
+  externalId: z.string(),
+  soNumber: z.string(),
+  customerCode: z.string(),
+  status: z.string().optional(),
+  lines: z.array(LabSalesOrderLineSchema),
+});
+export type LabSalesOrder = z.infer<typeof LabSalesOrderSchema>;
+
 /** Lab `/api/erp` 的 RPC 操作名 —— 与 `api/erp.ts` 的 switch 分支逐字一致 */
 export const LAB_OPERATIONS = [
   "testConnection",
@@ -148,6 +186,8 @@ export const LAB_OPERATIONS = [
   "pullCustomers",
   "pullExchangeRates",
   "pullOpenPurchaseOrders",
+  "pullWorkOrders",
+  "pullSalesOrders",
   "createPurchaseOrder",
   "updateEta",
 ] as const;
@@ -168,6 +208,7 @@ export const LAB_SCENARIO_CODES = [
   "PO_ALREADY_EXISTS",
   "ERP_500",
   "NETWORK_DROP_AFTER_COMMIT",
+  "WORK_ORDER_SOURCE_UNAVAILABLE",
 ] as const;
 export type LabScenarioCode = (typeof LAB_SCENARIO_CODES)[number];
 
