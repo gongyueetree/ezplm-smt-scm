@@ -154,6 +154,8 @@ export const KEEP_MODELS = [
   "UserRole",
   "UserPermission",
   "PermissionGrant",
+  // F6:门户账号与内部账号同类(管理员邀请建的号,清库保留)
+  "PortalAccount",
 
   // ---- 物料主数据及其附属 ----
   "Part",

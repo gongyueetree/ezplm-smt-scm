@@ -14,6 +14,10 @@ const PUBLIC_PATHS = [
   // F3:供应商免登录确认(token 在路径里,鉴权即 token 本身;见 docs/design/F3-CHECKPOINT-A.md)
   "/confirm",
   "/api/confirm",
+  // F6-B:客户门户 —— 独立认证域(portal_session),由门户自身守卫验签;
+  // 内部会话在门户没有效力,反之亦然(docs/design/F6-CHECKPOINT-A.md §1)
+  "/portal",
+  "/api/portal",
 ];
 
 /**
