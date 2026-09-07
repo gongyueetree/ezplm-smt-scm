@@ -140,4 +140,7 @@ export class ExcelErpProvider implements ErpProvider {
   async updateEta(): Promise<never> {
     throw new ErpNotImplementedError("EXCEL", "updateEta(Excel 通道走批量模板导出)");
   }
+  async pullSalesOrders(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "pullSalesOrders(Excel 通道不读 ERP 数据)");
+  }
 }

@@ -92,6 +92,12 @@ export const PURGE_MODELS = [
   "BOMImportJob",
   "BOM",
 
+  // ---- ECN(F2:测试期变更单,子表在前)----
+  "EcnCustomerNotice",
+  "EcnApproval",
+  "EcnChangeLine",
+  "Ecn",
+
   // ---- RFQ ----
   "RFQStatusHistory",
   "RFQAttachment",

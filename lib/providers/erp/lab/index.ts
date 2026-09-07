@@ -33,6 +33,7 @@ import {
   type ErpPage,
   type ErpProvider,
   type ErpPushResult,
+  type ErpSalesOrderRecord,
   type ErpSupplierRecord,
   type ErpWorkOrder,
   type ErpWriteResult,
@@ -40,6 +41,8 @@ import {
 import {
   LabConnectionResultSchema,
   LabCustomerSchema,
+  LabSalesOrderSchema,
+  LabWorkOrderSchema,
   LabEnvelopeSchema,
   LabExcessSchema,
   LabExchangeRateSchema,
@@ -223,7 +226,7 @@ export class HttpErpLabProvider implements ErpProvider {
         OPEN_PO: ["externalId", "poNumber", "supplierCode", "currency", "lines"],
       },
       capabilities: ["pullMaterials", "pullInventory", "pullOpenPurchaseOrders", "pushPurchaseOrders", "pushEtaUpdates"],
-      notImplemented: ["WORK_ORDER(待 LAB-1 扩展)", "SALES_ORDER(待 LAB-1 扩展)"],
+      notImplemented: [],
     };
   }
 
@@ -300,8 +303,40 @@ export class HttpErpLabProvider implements ErpProvider {
     );
   }
 
-  async pullWorkOrders(): Promise<ErpPage<ErpWorkOrder>> {
-    throw new ErpNotConfiguredError("ERP_LAB", ["Lab 尚无工单数据集(LAB-1 扩展后接入)"]);
+  // LAB-1 落地后接入:Lab WO → 本系统 ErpWorkOrder(status/bomRef 原样带出)
+  async pullWorkOrders(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpWorkOrder>> {
+    const rows = await this.rpc("pullWorkOrders", z.array(LabWorkOrderSchema), { input: this.pullInput(input) });
+    return page(
+      rows.map((w) => ({
+        workOrderNo: w.woNumber,
+        product: w.productCode,
+        bomVersion: opt(w.bomRef),
+        plannedQty: w.qty,
+        startAt: opt(w.plannedStart),
+        needDate: opt(w.plannedEnd),
+        status: w.status,
+      })),
+    );
+  }
+
+  // LAB-1:销售订单(客户需求侧;F2 影响分析与客户告知消费)
+  async pullSalesOrders(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null }): Promise<ErpPage<ErpSalesOrderRecord>> {
+    const rows = await this.rpc("pullSalesOrders", z.array(LabSalesOrderSchema), { input: this.pullInput(input) });
+    return page(
+      rows.map((so) => ({
+        externalId: so.externalId,
+        soNumber: so.soNumber,
+        customerCode: so.customerCode,
+        status: opt(so.status),
+        lines: so.lines.map((l) => ({
+          lineNo: l.lineNo,
+          productCode: l.productCode,
+          qty: l.qty,
+          shippedQty: opt(l.shippedQty),
+          requestedDate: opt(l.requestedDate),
+        })),
+      })),
+    );
   }
 
   async pushPurchaseOrders(): Promise<ErpPushResult> {

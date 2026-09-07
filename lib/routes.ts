@@ -93,6 +93,15 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "BOM 与物料",
     routes: [
       {
+        path: "/ecn",
+        label: "ECN 变更",
+        icon: "ledger",
+        plannedPr: "F2",
+        desc: "ECN-Lite:登记、评审(工程→采购→管理)、批准、发布(快照冻结)、Apply to BOM;完整 ECN 在待商务确认池。",
+        implemented: true,
+        roles: ["ENGINEERING", "PM", "PROCUREMENT", "MANAGEMENT"],
+      },
+      {
         path: "/bom",
         label: "BOM 管理",
         icon: "bom",

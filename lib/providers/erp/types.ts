@@ -99,6 +99,24 @@ export const ErpSupplierRecordSchema = z.object({
 });
 export type ErpSupplierRecord = z.infer<typeof ErpSupplierRecordSchema>;
 
+/** F2:ERP 侧销售订单(对齐 Lab ErpSalesOrder;LAB-1 扩展) */
+export const ErpSalesOrderRecordSchema = z.object({
+  externalId: z.string(),
+  soNumber: z.string(),
+  customerCode: z.string(),
+  status: z.string().nullable(),
+  lines: z.array(
+    z.object({
+      lineNo: z.number().int(),
+      productCode: z.string(),
+      qty: z.string(),
+      shippedQty: z.string().nullable(),
+      requestedDate: z.string().nullable(),
+    }),
+  ),
+});
+export type ErpSalesOrderRecord = z.infer<typeof ErpSalesOrderRecordSchema>;
+
 /** F4:ERP 侧客户档案(对齐 Lab ErpCustomer) */
 export const ErpCustomerRecordSchema = z.object({
   externalId: z.string(),
@@ -334,6 +352,8 @@ export interface ErpProvider {
   ): Promise<ErpWriteResult>;
   /** 单笔 ETA 更新 */
   updateEta(config: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult>;
+  /** F2:销售订单(客户需求侧;LAB-1 扩展,未联调厂商抛 NotImplemented) */
+  pullSalesOrders(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpSalesOrderRecord>>;
 }
 
 /** 未实现:与"没有数据"必须区分开 */

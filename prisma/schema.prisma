@@ -736,6 +736,8 @@ model BOMVersion {
   /// 原始导入文件(保留原始客户文件)
   sourceFileKey String?
   note          String?
+  /// F2:由哪个 ECN 的 Apply to BOM 生成(版本图谱据此标 ECO 分支);跨聚合标量
+  ecnId         String?
   createdById   String
   createdAt     DateTime @default(now())
 
@@ -3090,6 +3092,156 @@ model SupplierOnboardInvite {
   updatedAt   DateTime  @updatedAt
 
   @@index([tenantId, status])
+}
+
+// ============================================================
+// F2:ECN-Lite(设计 docs/design/F2-CHECKPOINT-A.md;页面 docs/PAGE_SPEC_ECN.md)
+// 范围:登记、评审(三段固定顺序)、批准、发布(快照冻结)、Apply to BOM、作废可溯。
+// 完整 ECN(流程引擎/签章/MES 指令)仍在待商务确认池。
+// ============================================================
+
+enum EcnStatus {
+  DRAFT
+  REVIEW
+  CUSTOMER_CONFIRM
+  APPROVED
+  RELEASED
+  CLOSED
+  VOIDED
+}
+
+enum EcnType {
+  DESIGN_CHANGE
+  EOL_REPLACEMENT
+  PROCESS_CHANGE
+  DOC_CHANGE
+  OTHER
+}
+
+enum EcnPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+/// 评审阶段:只取五角色模型内的三个内部角色,**无品质/总经理**(PAGE_SPEC §0)
+enum EcnStage {
+  ENGINEERING
+  PROCUREMENT
+  MANAGEMENT
+}
+
+enum EcnEffectiveStrategy {
+  IMMEDIATE
+  AFTER_WORK_ORDERS
+  ON_DATE
+}
+
+model Ecn {
+  id       String      @id @default(cuid())
+  tenantId String
+  /// ECN 编号(租户内唯一)
+  code     String
+  title    String
+  type     EcnType
+  priority EcnPriority @default(MEDIUM)
+  status   EcnStatus   @default(DRAFT)
+
+  customerId  String?
+  productName String?
+  reason      String?
+  /// 生效策略由**人工选择**;AI 推荐只是建议卡,不写入
+  effectiveStrategy EcnEffectiveStrategy?
+  effectiveAt       DateTime?
+  dueDate           DateTime?
+
+  submittedAt DateTime?
+  /// 发布即冻结:头 + 行 + 审批史的 Json 快照(与 Quote 快照同模式),此后只读
+  releasedSnapshot Json?
+  releasedAt       DateTime?
+  releasedById     String?
+
+  voidReason String?
+  voidedAt   DateTime?
+  voidedById String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  changeLines     EcnChangeLine[]
+  approvals       EcnApproval[]
+  customerNotices EcnCustomerNotice[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status, priority])
+  @@index([tenantId, customerId])
+}
+
+model EcnChangeLine {
+  id       String @id @default(cuid())
+  tenantId String
+  ecnId    String
+  ecn      Ecn    @relation(fields: [ecnId], references: [id])
+  lineNo   Int
+
+  /// 影响 BOM/版本(跨聚合标量)
+  bomId        String?
+  bomVersionId String?
+
+  oldInternalPn String?
+  oldMpn        String?
+  newInternalPn String?
+  newMpn        String?
+  /// 数量影响(正=增用,负=减用);未知留空不填 0
+  qtyImpact Decimal? @db.Decimal(18, 4)
+
+  reason          String?
+  engineeringNote String?
+  /// 采购备注(库存处置决策也记这里,PAGE_SPEC §7)
+  procurementNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, ecnId, lineNo])
+}
+
+model EcnApproval {
+  id       String   @id @default(cuid())
+  tenantId String
+  ecnId    String
+  ecn      Ecn      @relation(fields: [ecnId], references: [id])
+  stage    EcnStage
+  /// APPROVED / REJECTED
+  decision  String
+  comment   String?
+  decidedById String
+  decidedAt   DateTime @default(now())
+
+  @@index([tenantId, ecnId, decidedAt])
+}
+
+/// T2(flag ecn.customerNotice):每客户一条告知记录。
+/// 「合同条款」只是自由文本备注 —— **不建合同模型**;发送经既有 OutboundMessage,不伪造。
+model EcnCustomerNotice {
+  id         String  @id @default(cuid())
+  tenantId   String
+  ecnId      String
+  ecn        Ecn     @relation(fields: [ecnId], references: [id])
+  customerId String
+  required   Boolean @default(false)
+  contractNote String?
+  /// DRAFT / SENT / REPLIED —— SENT 只能由真实发送写入
+  status            String    @default("DRAFT")
+  expectedReplyAt   DateTime?
+  outboundMessageId String?
+  updatedById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([tenantId, ecnId, customerId])
 }
 
 // ============================================================

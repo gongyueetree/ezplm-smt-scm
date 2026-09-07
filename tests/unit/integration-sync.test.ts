@@ -61,8 +61,8 @@ describe("状态转移表", () => {
 });
 
 describe("ERP Lab 13 场景 → 终态矩阵", () => {
-  it("场景清单与 Lab 合约一致(13 种,漂移即红)", () => {
-    expect(LAB_SCENARIO_CODES).toHaveLength(13);
+  it("场景清单与 Lab 合约一致(14 种,漂移即红)", () => {
+    expect(LAB_SCENARIO_CODES).toHaveLength(14);
   });
 
   /**
@@ -80,6 +80,8 @@ describe("ERP Lab 13 场景 → 终态矩阵", () => {
     ["MATERIAL_NOT_FOUND", "MATERIAL_NOT_FOUND", false, "FAILED"],
     ["SUPPLIER_NOT_FOUND", "SUPPLIER_NOT_FOUND", false, "FAILED"],
     ["NETWORK_DROP_AFTER_COMMIT", "NETWORK_DROP_AFTER_COMMIT", true, "RETRY_REQUIRED"],
+    // LAB-1:工单源不可用 —— 瞬态(车间系统离线),重试即可;读取方应部分降级
+    ["WORK_ORDER_SOURCE_UNAVAILABLE", "WORK_ORDER_SOURCE_UNAVAILABLE", true, "RETRY_REQUIRED"],
   ];
 
   it.each(FAILURE_MATRIX)("%s(%s)→ %s", (_scenario, code, retryable, expected) => {

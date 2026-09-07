@@ -95,6 +95,9 @@ export function createSkeletonProvider(
     async updateEta() {
       return nope("updateEta");
     },
+    async pullSalesOrders() {
+      return nope("pullSalesOrders");
+    },
     async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
       return { externalJobId, state: "UNKNOWN", message: `${vendor} 待联调` };
     },

@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DecimalStringSchema,
+  LabSalesOrderSchema,
+  LabWorkOrderSchema,
   LAB_OPERATIONS,
   LAB_SCENARIO_CODES,
   LabConnectionResultSchema,
@@ -27,7 +29,7 @@ import {
 } from "@/lib/providers/erp/lab/contract";
 
 describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)", () => {
-  it("10 个 RPC 操作名逐字锁定", () => {
+  it("12 个 RPC 操作名逐字锁定(LAB-1 增加工单/销售订单)", () => {
     expect(LAB_OPERATIONS).toEqual([
       "testConnection",
       "pullMaterials",
@@ -37,12 +39,14 @@ describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)"
       "pullCustomers",
       "pullExchangeRates",
       "pullOpenPurchaseOrders",
+      "pullWorkOrders",
+      "pullSalesOrders",
       "createPurchaseOrder",
       "updateEta",
     ]);
   });
 
-  it("13 个场景码逐字锁定(状态机矩阵按此穷举)", () => {
+  it("14 个场景码逐字锁定(LAB-1 增加工单源不可用)", () => {
     expect([...LAB_SCENARIO_CODES].sort()).toEqual(
       [
         "NORMAL",
@@ -58,6 +62,7 @@ describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)"
         "PO_ALREADY_EXISTS",
         "ERP_500",
         "NETWORK_DROP_AFTER_COMMIT",
+        "WORK_ORDER_SOURCE_UNAVAILABLE",
       ].sort(),
     );
   });
@@ -170,6 +175,34 @@ describe("DTO 形状(Lab 侧真实样本)", () => {
         provider: "simulator",
         message: "Simulator ready",
         checkedAt: "2026-09-07T00:00:00.000Z",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("LAB-1:工单与销售订单形状(consumedLines/lines 嵌套,Decimal String)", () => {
+    expect(
+      LabWorkOrderSchema.safeParse({
+        externalId: "WO-EXT-001",
+        woNumber: "WO-2841",
+        customerCode: "CUS-ACME",
+        productCode: "FG-ACME-CTRL-A1",
+        qty: "300",
+        status: "COMPLETED",
+        consumedLines: [{ materialCode: "EZ-STM32H743", consumedQty: "300" }],
+      }).success,
+    ).toBe(true);
+    // status 只认四值
+    expect(
+      LabWorkOrderSchema.safeParse({
+        externalId: "x", woNumber: "y", productCode: "z", qty: "1", status: "CANCELLED", consumedLines: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      LabSalesOrderSchema.safeParse({
+        externalId: "SO-EXT-001",
+        soNumber: "SO20260810001",
+        customerCode: "CUS-ACME",
+        lines: [{ lineNo: 1, productCode: "FG-ACME-CTRL-A1", qty: "300", shippedQty: "200" }],
       }).success,
     ).toBe(true);
   });
