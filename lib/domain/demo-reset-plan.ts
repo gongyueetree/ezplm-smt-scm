@@ -99,6 +99,8 @@ export const PURGE_MODELS = [
   "ErpConflict",
   "ErpWebhookEvent",
   "IntegrationJob",
+  // F4:实体级同步状态是运行记录(某张 PO 回写到哪一步),不是配置 —— 清库重来
+  "IntegrationSyncRecord",
 
   // ---- 缺料单与 Call 料(子 → 父)----
   // 缺料单是业务导入的单据,Call 料记录与其邮件草稿都是测试期产物;

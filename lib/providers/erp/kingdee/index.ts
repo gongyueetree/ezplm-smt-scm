@@ -201,4 +201,28 @@ export class KingdeeErpProvider implements ErpProvider {
     this.guard(config);
     return { externalJobId, state: "UNKNOWN", message: "金蝶作业状态查询待联调" };
   }
+
+  // ---- F4:Lab 合约增量。金蝶侧同样待凭据(OPEN-QUESTIONS O1),骨架不猜 endpoint ----
+  async pullSuppliers(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError("KINGDEE", "pullSuppliers(供应商档案,待真实账套联调)");
+  }
+  async pullCustomers(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError("KINGDEE", "pullCustomers(客户档案,待真实账套联调)");
+  }
+  async createPurchaseOrder(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError(
+      "KINGDEE",
+      "createPurchaseOrder(API 直写建单待联调 —— 当前请走 Excel 模板兜底链)",
+    );
+  }
+  async updateEta(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError(
+      "KINGDEE",
+      "updateEta(交期回写待联调 —— 当前请走 Excel 模板兜底链)",
+    );
+  }
 }

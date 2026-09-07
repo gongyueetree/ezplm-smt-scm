@@ -387,3 +387,4 @@
 
 **F1 如实交代**:搜索不含 ECN(F2 未做);Excess/金蝶 KPI 依赖 O1/O2,未接入前只显示状态;
 库存"状态"维度因快照无此字段**未提供**(不做假下拉)。
+| **F4** | ERP Sync State + Retry + Audit(对接 ERP Lab 合约) | `DONE`(本 PR) | ① `IntegrationSyncRecord` 实体级同步状态(8 态,`f4_integration_sync` 迁移,唯一集成键防并发重复);② 状态机纯函数 `lib/domain/integration-sync.ts`:Lab 13 场景 → 终态矩阵(凭据类→BLOCKED、单据冲突→BLOCKED、主数据缺失→FAILED、瞬态→RETRY_REQUIRED),幂等键从业务身份推导且**重试永不换键**;③ Lab 合约镜像 `lib/providers/erp/lab/contract.ts` + 契约测试锁字段/操作名/场景码;④ `HttpErpLabProvider`(服务端 RPC,Token 只走环境变量);⑤ `MasterDataProvider` 泛化(EZPLM/KINGDEE/NONE 按租户配置,5 处业务调用点全部改经此入口,KINGDEE 待联调抛错不回落);⑥ 集成状态管理页 `/settings/integrations/status` + 人工重试;⑦ PO 详情页 ERP 双通道并列(API 直写 + Excel 模板兜底,未配置时 Excel 链不受影响);⑧ FX 仅状态位,不落汇率数值(O3 待答) |

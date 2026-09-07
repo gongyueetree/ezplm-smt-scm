@@ -46,9 +46,9 @@ describe("统一 route config(SPEC §2)", () => {
     for (const r of flattenRoutes()) {
       expect(r.label.length).toBeGreaterThan(0);
       expect(r.desc.length).toBeGreaterThan(0);
-      // PR1–PR9 是 SPEC §19 的原始批次;之后追加的能力用字母编号(PR-A/PR-B/PR-C),
-      // 两种都算合法的"落地计划",但不允许留空或写成随便一句话
-      expect(r.plannedPr).toMatch(/^PR(\d|-[A-Z])/);
+      // PR1–PR9 是 SPEC §19 的原始批次;之后追加的能力用字母编号(PR-A/PR-B/PR-C);
+      // Round2 起按 KICKOFF_ROUND2.md 用 F 批次(F1–F7)。都算合法的"落地计划",不允许留空
+      expect(r.plannedPr).toMatch(/^(PR(\d|-[A-Z])|F\d)/);
     }
   });
 
@@ -127,9 +127,9 @@ describe("implemented 标记与实际页面一致(防配置与代码脱节)", ()
 
   it("未实现路由都带 plannedPr,便于占位页如实告知落地计划", () => {
     for (const r of unimplementedRoutes()) {
-      // PR1–PR9 是 SPEC §19 的原始批次;之后追加的能力用字母编号(PR-A/PR-B/PR-C),
-      // 两种都算合法的"落地计划",但不允许留空或写成随便一句话
-      expect(r.plannedPr).toMatch(/^PR(\d|-[A-Z])/);
+      // PR1–PR9 是 SPEC §19 的原始批次;之后追加的能力用字母编号(PR-A/PR-B/PR-C);
+      // Round2 起按 KICKOFF_ROUND2.md 用 F 批次(F1–F7)。都算合法的"落地计划",不允许留空
+      expect(r.plannedPr).toMatch(/^(PR(\d|-[A-Z])|F\d)/);
     }
   });
 });

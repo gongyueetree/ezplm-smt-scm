@@ -16,7 +16,7 @@ import {
 } from "@/lib/domain/bom-parse";
 import { computeProgress, nextBatchSlice, shouldUseImportJob } from "@/lib/domain/import-batching";
 import { validateBomLines, type ValidationReport } from "@/lib/domain/bom-validate";
-import { getEzplmPartsProvider } from "@/lib/providers/ezplm";
+import { getMasterDataProvider } from "@/lib/providers/master-data";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { getMouserProvider } from "@/lib/providers/mouser";
 import { writeAudit } from "@/lib/server/audit";
@@ -298,7 +298,8 @@ async function buildMatchContext(tenantId: string): Promise<MatchContext> {
     byInternalPn: new Map(refs.map((r) => [norm(r.internalPn), r])),
     byMpn,
     allParts: refs,
-    ezplm: getEzplmPartsProvider(),
+    // F4:主数据读取经 MasterDataProvider(租户配置真源),不再直连 ezPLM 工厂
+    ezplm: await getMasterDataProvider(tenantId),
     distributors: [getDigiKeyProvider(), getMouserProvider()],
   };
 }

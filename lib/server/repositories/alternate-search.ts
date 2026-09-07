@@ -25,7 +25,7 @@ import { normalizeMpn } from "@/lib/providers/common/mpn";
 import { rankBySimilarity } from "@/lib/domain/similarity";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { getMouserProvider } from "@/lib/providers/mouser";
-import { ezplmProviderMode, getEzplmPartsProvider } from "@/lib/providers/ezplm";
+import { getMasterDataProvider, masterDataMode } from "@/lib/providers/master-data";
 import { prisma } from "@/lib/server/db";
 import { getPartDetail } from "@/lib/server/repositories/part-detail";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -155,10 +155,10 @@ export async function searchAlternates(
     });
   }
 
-  // ② ezPLM:同系列型号(带真实参数,能逐项比对)
-  if (ezplmProviderMode() === "http") {
+  // ② 主数据源:同系列型号(带真实参数,能逐项比对)。F4:经 MasterDataProvider,真源随租户配置
+  if ((await masterDataMode(input.tenantId)).mode === "http") {
     try {
-      const provider = getEzplmPartsProvider();
+      const provider = await getMasterDataProvider(input.tenantId);
       // 一次调用同时拿回候选与参数(逐个 getParameters 会 N+1 次打接口,烧配额)
       const withParams = await provider.searchPartsWithParameters({
         keyword: input.mpn,

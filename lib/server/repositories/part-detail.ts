@@ -22,7 +22,8 @@ import { ProviderError } from "@/lib/providers/common/errors";
 import { normalizeMpn } from "@/lib/providers/common/mpn";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { HttpEzplmProvider } from "@/lib/providers/ezplm/http";
-import { ezplmProviderMode, getEzplmPartsProvider, MockEzplmProvider } from "@/lib/providers/ezplm";
+import { ezplmProviderMode, MockEzplmProvider } from "@/lib/providers/ezplm";
+import { getMasterDataProvider, masterDataMode } from "@/lib/providers/master-data";
 import type {
   CanonicalPart,
   PartDocument,
@@ -348,10 +349,10 @@ async function loadAlternates(
     });
   }
 
-  // ezPLM:同系列型号
-  if (ezplmProviderMode() === "http") {
+  // 主数据源:同系列型号(F4:经 MasterDataProvider,真源随租户配置)
+  if ((await masterDataMode(tenantId)).mode === "http") {
     try {
-      const found = await getEzplmPartsProvider().searchParts({ keyword: mpn, limit: 20 });
+      const found = await (await getMasterDataProvider(tenantId)).searchParts({ keyword: mpn, limit: 20 });
       const ranked = rankBySimilarity(
         { value: mpn, footprint: self.footprint },
         found

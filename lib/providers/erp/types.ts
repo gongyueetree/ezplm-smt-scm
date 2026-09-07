@@ -79,8 +79,35 @@ export const ErpInventorySchema = z.object({
   availableQty: z.string().nullable(),
   dateCode: z.string().nullable(),
   receivedAt: z.string().nullable(),
+  /**
+   * F4(对齐 ERP Lab 的 ErpInventory):ERP 侧物料编码与归属客户。
+   * `customerCode` 是客户门户(F6)按客户切库存的依据 —— 为空表示公共库存。
+   */
+  materialCode: z.string().nullable().default(null),
+  customerCode: z.string().nullable().default(null),
 });
 export type ErpInventory = z.infer<typeof ErpInventorySchema>;
+
+/** F4:ERP 侧供应商档案(对齐 Lab ErpSupplier) */
+export const ErpSupplierRecordSchema = z.object({
+  externalId: z.string(),
+  supplierCode: z.string(),
+  name: z.string(),
+  status: z.string().nullable(),
+  currency: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type ErpSupplierRecord = z.infer<typeof ErpSupplierRecordSchema>;
+
+/** F4:ERP 侧客户档案(对齐 Lab ErpCustomer) */
+export const ErpCustomerRecordSchema = z.object({
+  externalId: z.string(),
+  customerCode: z.string(),
+  name: z.string(),
+  status: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type ErpCustomerRecord = z.infer<typeof ErpCustomerRecordSchema>;
 
 export const ErpOpenPoSchema = z.object({
   poNo: z.string(),
@@ -123,6 +150,47 @@ export const ErpPushResultSchema = z.object({
   note: z.string().nullable(),
 });
 export type ErpPushResult = z.infer<typeof ErpPushResultSchema>;
+
+/**
+ * F4:单笔写操作结果(对齐 Lab ErpWriteResult)。
+ *
+ * 与批量的 `ErpPushResult` 并存:批量 push 是 Excel 模板链的形态,
+ * 单笔 create/update 是 API 直写的形态 —— 状态机按单笔管理,不混用。
+ * `idempotentReplay=true` 表示 ERP 识别出同幂等键、返回的是**首次创建**的单据。
+ */
+export const ErpWriteResultSchema = z.object({
+  success: z.boolean(),
+  externalId: z.string().nullable(),
+  documentNumber: z.string().nullable(),
+  idempotentReplay: z.boolean(),
+  message: z.string().nullable(),
+});
+export type ErpWriteResult = z.infer<typeof ErpWriteResultSchema>;
+
+/** F4:单笔建 PO 的输入(对齐 Lab ErpPurchaseOrder 的可写子集) */
+export interface ErpCreatePoInput {
+  supplierCode: string;
+  currency: string;
+  orderDate: string;
+  requestedDate?: string | null;
+  lines: {
+    lineNo: number;
+    materialCode: string;
+    qty: string;
+    unitPrice: string;
+    requestedDate?: string | null;
+  }[];
+}
+
+/** F4:单笔 ETA 更新输入(对齐 Lab ErpEtaUpdate) */
+export interface ErpEtaUpdateInput {
+  poExternalId?: string | null;
+  poNumber?: string | null;
+  lineNo: number;
+  confirmedQty?: string | null;
+  eta?: string | null;
+  shipDate?: string | null;
+}
 
 export const ErpJobStatusSchema = z.object({
   externalJobId: z.string(),
@@ -249,6 +317,23 @@ export interface ErpProvider {
   pullExcessReport(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpExcessLine>>;
   /** E8:汇率(客户 Q8) */
   pullExchangeRates(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpFxRate>>;
+
+  // ---- F4:对齐 ERP Lab 合约的增量(未联调的厂商抛 ErpNotImplementedError)----
+  /** 供应商档案 */
+  pullSuppliers(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpSupplierRecord>>;
+  /** 客户档案 */
+  pullCustomers(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpCustomerRecord>>;
+  /**
+   * 单笔建 PO。`idempotencyKey` 由调用方从业务身份推导且**重试不变** ——
+   * ERP 侧据此识别重复提交并返回原单(见 lib/domain/integration-sync.ts)。
+   */
+  createPurchaseOrder(
+    config: ErpConnectionConfig,
+    input: ErpCreatePoInput,
+    idempotencyKey: string,
+  ): Promise<ErpWriteResult>;
+  /** 单笔 ETA 更新 */
+  updateEta(config: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult>;
 }
 
 /** 未实现:与"没有数据"必须区分开 */

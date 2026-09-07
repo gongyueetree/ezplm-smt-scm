@@ -12,6 +12,16 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { PO_STATUS_LABELS, type PoStatusValue } from "@/lib/domain/po-status";
 
+/** F4:API 回写通道的展示状态(与 Excel 模板并列,互不取代) */
+interface ErpApiInfo {
+  configured: boolean;
+  targetLabel: string | null;
+  notConfiguredReason: string | null;
+  state: string | null;
+  documentNo: string | null;
+  errorMessage: string | null;
+}
+
 interface Props {
   poId: string;
   status: PoStatusValue;
@@ -19,14 +29,41 @@ interface Props {
   unresolved: number;
   liveErrors: number;
   erpExported: boolean;
+  erpApi: ErpApiInfo;
 }
 
-export function PoActions({ poId, status, unresolved, liveErrors, erpExported }: Props) {
+export function PoActions({ poId, status, unresolved, liveErrors, erpExported, erpApi }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [unresolvedLines, setUnresolvedLines] = useState<number[] | null>(null);
+  const [writebackMsg, setWritebackMsg] = useState<string | null>(null);
+
+  async function writebackToErp() {
+    setBusy(true);
+    setWritebackMsg(null);
+    try {
+      const res = await fetch(`/api/procurement/orders/${poId}/erp-writeback`, { method: "POST" });
+      const body = (await res.json().catch(() => null)) as
+        | { ok: boolean; state: string; documentNo?: string | null; idempotentReplay?: boolean; reason?: string }
+        | null;
+      if (body?.ok) {
+        setWritebackMsg(
+          `已同步(${body.state})${body.documentNo ? ` · ERP 单号 ${body.documentNo}` : ""}${
+            body.idempotentReplay ? " · 幂等重放:返回首次创建的单据" : ""
+          }`,
+        );
+      } else {
+        setWritebackMsg(body?.reason ?? `回写失败(HTTP ${res.status})`);
+      }
+      router.refresh();
+    } catch {
+      setWritebackMsg("请求失败,请重试");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function go(to: PoStatusValue, opts: { needReason?: boolean; materializeOpo?: boolean } = {}) {
     if (opts.needReason && !reason.trim()) {
@@ -142,6 +179,52 @@ export function PoActions({ poId, status, unresolved, liveErrors, erpExported }:
               </a>
             ) : null}
           </div>
+
+          {/* F4:ERP 输出双通道并列展示 —— API 未配置时 Excel 兜底链不受影响 */}
+          {status === "APPROVED" || status === "EXPORTED" ? (
+            <div className="banner soft" style={{ marginTop: 10 }} data-testid="erp-dual-channel">
+              <b>ERP 输出通道</b>:Excel 模板<b>可用</b>(上方按钮);API 直写
+              {erpApi.configured ? (
+                <>
+                  目标 <b>{erpApi.targetLabel}</b>。
+                  {erpApi.state === "SYNCED" ? (
+                    <>
+                      {" "}
+                      本单已同步{erpApi.documentNo ? `,ERP 单号 ${erpApi.documentNo}` : ""}。
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ marginLeft: 6 }}
+                        disabled={busy}
+                        onClick={() => void writebackToErp()}
+                        data-testid="erp-writeback-btn"
+                      >
+                        {busy ? "回写中…" : "回写 ERP(API)"}
+                      </button>
+                      {erpApi.state ? ` 当前状态:${erpApi.state}` : ""}
+                      {erpApi.errorMessage ? (
+                        <div className="small muted">{erpApi.errorMessage}</div>
+                      ) : null}
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <b>待联调</b>
+                  {erpApi.notConfiguredReason ? `(${erpApi.notConfiguredReason})` : ""}。
+                </>
+              )}
+              {writebackMsg ? (
+                <div className="small" data-testid="erp-writeback-msg">
+                  {writebackMsg}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
 

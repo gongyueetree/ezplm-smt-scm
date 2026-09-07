@@ -123,4 +123,21 @@ export class ExcelErpProvider implements ErpProvider {
   async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
     return { externalJobId, state: "UNKNOWN", message: "Excel 通道无外部作业" };
   }
+
+  // ---- F4:Excel 通道只出模板不发请求,单笔 API 写操作不属于这条通道 ----
+  async pullSuppliers(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "pullSuppliers(Excel 通道不读 ERP 数据)");
+  }
+  async pullCustomers(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "pullCustomers(Excel 通道不读 ERP 数据)");
+  }
+  async createPurchaseOrder(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "EXCEL",
+      "createPurchaseOrder(Excel 通道走批量模板导出,不做单笔 API 直写)",
+    );
+  }
+  async updateEta(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "updateEta(Excel 通道走批量模板导出)");
+  }
 }

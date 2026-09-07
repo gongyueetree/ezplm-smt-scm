@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequest, requireSession } from "@/lib/server/api";
-import { ezplmProviderMode, getEzplmPartsProvider } from "@/lib/providers/ezplm";
+import { getMasterDataProvider, masterDataMode } from "@/lib/providers/master-data";
 import { requirePermission } from "@/lib/server/permissions";
 import { runDuplicateCheck } from "@/lib/server/repositories/part-create";
 import type { DuplicateCandidate } from "@/lib/domain/part-create";
@@ -34,9 +34,11 @@ export async function POST(req: Request) {
   const candidates: DuplicateCandidate[] = [...local];
   let degraded: string | null = null;
 
-  if (parsed.data.mpn && ezplmProviderMode() === "http") {
+  // F4:外部真源按租户配置(masterDataSource)解析
+  if (parsed.data.mpn && (await masterDataMode(auth.session.tenantId)).mode === "http") {
     try {
-      const found = await getEzplmPartsProvider().searchParts({ keyword: parsed.data.mpn, limit: 5 });
+      const provider = await getMasterDataProvider(auth.session.tenantId);
+      const found = await provider.searchParts({ keyword: parsed.data.mpn, limit: 5 });
       for (const p of found) {
         if (!p.mpn) continue;
         if (p.mpn.toUpperCase() !== parsed.data.mpn.toUpperCase()) continue;
@@ -55,7 +57,7 @@ export async function POST(req: Request) {
       degraded = e instanceof Error ? e.message : "ezPLM 查询失败";
     }
   } else if (parsed.data.mpn) {
-    degraded = "ezPLM 未配置凭据(当前为示例数据),本次未查外部真源";
+    degraded = "主数据源未配置凭据(当前为示例数据),本次未查外部真源";
   }
 
   return NextResponse.json({ candidates, degraded });
