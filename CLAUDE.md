@@ -37,6 +37,14 @@
 - **诚实 UI**:禁止"已发送/已生成/已联调"类虚假完成态;邮件=预览/模拟发送;集成状态只用 待确认/待授权/待联调/示例配置;比价页显示数据更新时间而非暗示实时。
 - **角色**:PM / PROCUREMENT / ENGINEERING / MANAGEMENT / SUPPLIER;审批人必须存在于角色模型(无"销售主管/总经理/品质")。
 
+## Round2 沉淀纪律(KICKOFF_ROUND2 §三,2026-09-07 收尾写入)
+1. **主数据真源按租户配置**(`TenantSettings.masterDataSource`:EZPLM/KINGDEE/NONE),读取一律经 `lib/providers/master-data` 的 MasterDataProvider;本系统只读缓存,禁止双写;KINGDEE/NONE 未联调时抛错,不回落、不返回空集。
+2. **供应商协同状态严格分层**:EMAIL_SENT / READ_RECEIPT_REQUESTED / READ_RECEIPT_RECEIVED / SUPPLIER_CONFIRMED 互不推导 —— 发了≠读了≠确认了;SMTP 未配置仍可生成链接,状态停「草稿·未发送」。
+3. **BOM 导入对账恒等式**:totalRows = recognized + mergedIntoPrevious + nonBusiness + needsReview(生产管线词表);生产代码路径必须产出可对账 ledger,金样回归(`pnpm test:golden`)按构造期望断言,禁止快照式期望。
+4. **ERP 同步状态统一走 IntegrationSyncState**(`lib/domain/integration-sync.ts`):无凭据必须 NOT_CONFIGURED,禁止 return []/假成功/假单号;写操作幂等键从业务身份推导且**重试永不换键**;ERP_LAB 是仿真联调靶场,UI 一律标注,不冒充金蝶已联调。
+5. **客户门户与内部完全分域**:独立 cookie/密钥/载荷结构(`lib/auth/portal-session.ts`),服务端强制 customerId scope(无参数可传),DTO 白名单序列化(禁止字段在类型上不存在),门户用户不进 SEARCH_SCOPES 与任何内部 API;双开关(env + 租户 flag)任一关闭即 404。
+6. **公开链路 token 纪律**(`lib/domain/supplier-action.ts` 先例):原始 token 不入库只存 SHA-256、必有过期、条件更新防重放、tenant scoped、最小字段暴露(无单价/金额/内部备注)、未知与撤销一律 404 防枚举、日志只记 hash 前缀。
+
 ## 数据访问约定(PR2 评审新增,2026-07-27)
 - 自 PR3 起,所有业务查询/写入必须经 `lib/server/tenant-scope.ts` 的 `tenantWhere`/`tenantData`/`assertTenantScopedMutation` 守卫;Provider 与业务代码不得绕过直接拼 where。
 
