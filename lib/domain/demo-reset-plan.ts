@@ -49,6 +49,8 @@ export const PURGE_MODELS = [
   "ReconciliationStatement",
 
   // ---- 在途与催办 ----
+  // F3:免登录确认请求是测试期业务单据(token 哈希随单据一起清)
+  "SupplierActionRequest",
   "ReminderLog",
   "OPOReply",
   "OPOLine",

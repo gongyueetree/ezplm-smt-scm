@@ -469,6 +469,8 @@ enum ReplySource {
   EXCEL
   PHONE
   MANUAL
+  /// F3:供应商经免登录确认链接提交
+  LINK
 }
 
 /// 智能体类型(SPEC §13)
@@ -3088,6 +3090,55 @@ model SupplierOnboardInvite {
   updatedAt   DateTime  @updatedAt
 
   @@index([tenantId, status])
+}
+
+// ============================================================
+// F3:供应商免登录确认链路(设计见 docs/design/F3-CHECKPOINT-A.md)
+// ============================================================
+
+enum SupplierActionKind {
+  PO_CONFIRM
+  OPO_ETA
+  /// 进枚举但本轮创建接口暂拒(无落地页不生成死链)
+  CALL_MATERIAL
+  RFQ_QUOTE
+}
+
+enum SupplierActionStatus {
+  PENDING
+  RESPONDED
+  EXPIRED
+  REVOKED
+}
+
+/// 免登录确认请求。**原始 token 不入库**,只存 SHA-256;单次响应,条件更新防重放。
+model SupplierActionRequest {
+  id         String               @id @default(cuid())
+  tenantId   String
+  kind       SupplierActionKind
+  supplierId String
+  /// 关联实体(PO_CONFIRM=purchaseOrderId;OPO_ETA=supplierId,行集在响应时快照)
+  relatedEntityType String
+  relatedEntityId   String
+  tokenHash  String               @unique
+  expiresAt  DateTime
+  status     SupplierActionStatus @default(PENDING)
+
+  respondedAt       DateTime?
+  /// 响应人自述(记录用,不作身份凭据)
+  respondedByName   String?
+  respondedByEmail  String?
+  responsePayload   Json?
+  responseIp        String?
+  responseUa        String?
+
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, kind, status])
+  @@index([tenantId, relatedEntityId])
 }
 
 /// 订单接受通知(客户 docx:「订单接受通知」)。

@@ -110,7 +110,7 @@ export interface RecordReplyInput {
   replyEta: string | null;
   replyQty: number | null;
   replyNote: string | null;
-  replySource: "EMAIL" | "PORTAL" | "EXCEL" | "PHONE" | "MANUAL";
+  replySource: "EMAIL" | "PORTAL" | "EXCEL" | "PHONE" | "MANUAL" | "LINK";
   contactId?: string | null;
 }
 

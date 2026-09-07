@@ -5,6 +5,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getOpoDashboard } from "@/lib/server/repositories/opo";
 import { getSession } from "@/lib/server/session";
 import { OpoActions } from "./actions";
+import { EtaLinkGenerator } from "./eta-link";
+import { prisma } from "@/lib/server/db";
+import { tenantWhere } from "@/lib/server/tenant-scope";
 import { MpnLink } from "@/components/ui/mpn-link";
 import { formatDate } from "@/lib/format/datetime";
 
@@ -14,6 +17,16 @@ export default async function OpoPage() {
   const session = (await getSession())!;
   const now = new Date().toISOString();
   const { lines, kpi, noReply, diffs, anomalies, scopeNotice } = await getOpoDashboard(session, now);
+  // F3:仅内部角色可生成链接(供应商登录态没有这个入口)
+  const canGenerateLink = session.roles.some((r) => r === "PROCUREMENT" || r === "MANAGEMENT");
+  const linkSuppliers = canGenerateLink
+    ? await prisma.supplier.findMany({
+        where: tenantWhere(session.tenantId, { isActive: true }),
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+        take: 200,
+      })
+    : [];
 
   return (
     <div>
@@ -30,6 +43,8 @@ export default async function OpoPage() {
           <b>邮件发送为预览/模拟,尚未接入真实邮件通道</b>。
         </span>
       </Banner>
+
+      {canGenerateLink ? <EtaLinkGenerator suppliers={linkSuppliers} /> : null}
 
       <div className="kpi-grid">
         <div className="kpi">

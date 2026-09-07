@@ -6,7 +6,7 @@
  * 禁止任何旁路计数、禁止落冗余计数字段 —— 这是三轮诊断里"DOM 式旁路计数"的教训。
  */
 
-export type ReplySourceValue = "EMAIL" | "PORTAL" | "EXCEL" | "PHONE" | "MANUAL";
+export type ReplySourceValue = "EMAIL" | "PORTAL" | "EXCEL" | "PHONE" | "MANUAL" | "LINK";
 
 /** 供应商回复(五字段齐备,SPEC §14) */
 export interface OpoReplyView {

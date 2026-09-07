@@ -22,6 +22,12 @@ interface ErpApiInfo {
   errorMessage: string | null;
 }
 
+/** F3:免登录确认链路的展示状态 */
+interface SupplierConfirmInfo {
+  ack: { decision: string; note: string | null; at: string } | null;
+  pendingLink: { expiresAt: string } | null;
+}
+
 interface Props {
   poId: string;
   status: PoStatusValue;
@@ -30,15 +36,34 @@ interface Props {
   liveErrors: number;
   erpExported: boolean;
   erpApi: ErpApiInfo;
+  supplierConfirm: SupplierConfirmInfo;
 }
 
-export function PoActions({ poId, status, unresolved, liveErrors, erpExported, erpApi }: Props) {
+export function PoActions({ poId, status, unresolved, liveErrors, erpExported, erpApi, supplierConfirm }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [unresolvedLines, setUnresolvedLines] = useState<number[] | null>(null);
   const [writebackMsg, setWritebackMsg] = useState<string | null>(null);
+  const [confirmLink, setConfirmLink] = useState<{ url: string; note: string | null } | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+
+  async function generateConfirmLink() {
+    setLinkBusy(true);
+    try {
+      const res = await fetch(`/api/procurement/orders/${poId}/confirm-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json().catch(() => null)) as { url?: string; note?: string | null; error?: string } | null;
+      if (res.ok && body?.url) setConfirmLink({ url: body.url, note: body.note ?? null });
+      else setError(body?.error ?? "生成链接失败");
+    } finally {
+      setLinkBusy(false);
+    }
+  }
 
   async function writebackToErp() {
     setBusy(true);
@@ -221,6 +246,52 @@ export function PoActions({ poId, status, unresolved, liveErrors, erpExported, e
               {writebackMsg ? (
                 <div className="small" data-testid="erp-writeback-msg">
                   {writebackMsg}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* F3:供应商免登录确认 —— 发送状态与确认状态互不推导 */}
+          {status === "APPROVED" || status === "EXPORTED" ? (
+            <div className="banner soft" style={{ marginTop: 10 }} data-testid="supplier-confirm-block">
+              <b>供应商确认</b>:
+              {supplierConfirm.ack ? (
+                <span data-testid="supplier-confirmed-via-link">
+                  {" "}
+                  <b>Supplier Confirmed via Link</b> ·{" "}
+                  {supplierConfirm.ack.decision === "ACCEPTED"
+                    ? "确认接受"
+                    : supplierConfirm.ack.decision === "PARTIAL"
+                      ? "有变更地确认"
+                      : "无法接受"}{" "}
+                  · {supplierConfirm.ack.at.slice(0, 16).replace("T", " ")}
+                  {supplierConfirm.ack.note ? ` · 备注:${supplierConfirm.ack.note}` : ""}
+                </span>
+              ) : (
+                <>
+                  {" "}
+                  尚未确认
+                  {supplierConfirm.pendingLink
+                    ? `(已有待响应链接,有效至 ${supplierConfirm.pendingLink.expiresAt.slice(0, 10)})`
+                    : ""}
+                  。
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ marginLeft: 6 }}
+                    disabled={linkBusy}
+                    onClick={() => void generateConfirmLink()}
+                    data-testid="gen-confirm-link"
+                  >
+                    {linkBusy ? "生成中…" : "生成免登录确认链接"}
+                  </button>
+                </>
+              )}
+              {confirmLink ? (
+                <div className="small" style={{ marginTop: 6 }} data-testid="confirm-link-out">
+                  链接(仅显示这一次,请立即复制):<code>{confirmLink.url}</code>
+                  {confirmLink.note ? <div className="muted">{confirmLink.note}</div> : null}
+                  <div className="muted">SMTP 未配置时请手工外发;发送不代表确认,确认状态以本栏为准。</div>
                 </div>
               ) : null}
             </div>
