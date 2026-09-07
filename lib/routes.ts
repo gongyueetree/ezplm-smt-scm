@@ -354,6 +354,17 @@ export const NAV_SECTIONS: NavSection[] = [
             roles: ["MANAGEMENT", "PM"],
           },
           {
+            path: "/settings/portal-accounts",
+            label: "门户账号",
+            icon: "gear",
+            plannedPr: "R3-3",
+            desc:
+              "客户门户账号邀请与停用。邀请生成一次性激活链接(7 天有效)," +
+              "密码由客户自设,管理员全程不知道;SMTP 未配置时请复制链接手工发送。",
+            implemented: true,
+            roles: ["MANAGEMENT"],
+          },
+          {
             path: "/settings/sync-log",
             label: "ERP 同步日志",
             icon: "clock",

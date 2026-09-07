@@ -47,8 +47,9 @@ describe("统一 route config(SPEC §2)", () => {
       expect(r.label.length).toBeGreaterThan(0);
       expect(r.desc.length).toBeGreaterThan(0);
       // PR1–PR9 是 SPEC §19 的原始批次;之后追加的能力用字母编号(PR-A/PR-B/PR-C);
-      // Round2 起按 KICKOFF_ROUND2.md 用 F 批次(F1–F7)。都算合法的"落地计划",不允许留空
-      expect(r.plannedPr).toMatch(/^(PR(\d|-[A-Z])|F\d)/);
+      // Round2 起按 KICKOFF_ROUND2.md 用 F 批次(F1–F7);Round3 起按 ROUND3_AUDIT 用 R3-N。
+      // 都算合法的"落地计划",不允许留空
+      expect(r.plannedPr).toMatch(/^(PR(\d|-[A-Z])|F\d|R3-\d)/);
     }
   });
 

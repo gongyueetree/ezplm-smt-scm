@@ -21,11 +21,13 @@ export async function POST(req: Request) {
   const parsed = Input.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "参数不合法" }, { status: 400 });
 
+  // R3-3:status 为真源 —— INVITED(未设密码)与 DISABLED 均不可登录,
+  // 且与「账号不存在/密码错误」同一句 401(防枚举)
   const account = await prisma.portalAccount.findFirst({
-    where: { email: parsed.data.email, active: true },
+    where: { email: parsed.data.email, status: "ACTIVE" },
   });
   const genericFail = NextResponse.json({ error: "邮箱或密码不正确" }, { status: 401 });
-  if (!account) return genericFail;
+  if (!account?.passwordHash) return genericFail;
   // R3-1 P2-2:租户 flag 关闭时返回与「账号不存在/密码错误」同一句 401 ——
   // 此前的 404「门户未启用」会向探测者泄露该邮箱存在账号(枚举边信道)
   if (!(await portalEnabledForTenant(account.tenantId))) return genericFail;

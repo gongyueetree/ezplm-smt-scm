@@ -3100,13 +3100,26 @@ model SupplierOnboardInvite {
 // 仅内部管理层邀请建号,无自注册路径。
 // ============================================================
 
+/// R3-3:门户账号状态(邀请流)。INVITED=已建号未设密码(不能登录);
+/// ACTIVE=客户已自设密码;DISABLED=停用(登录与会话守卫即时拒绝)
+enum PortalAccountStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
 model PortalAccount {
   id           String    @id @default(cuid())
   tenantId     String
   customerId   String
   email        String
-  passwordHash String
+  /// R3-3 起可空:INVITED 账号尚无密码(管理员不再代设,消除线下传初始密码)
+  passwordHash String?
+  /// R3-3 起真源是 status;本列仅向后兼容保留,状态变更时同步写
   active       Boolean   @default(true)
+  status       PortalAccountStatus @default(ACTIVE)
+  /// 客户最近一次自设密码时间(审计口径:管理员从不知道密码)
+  passwordChangedAt DateTime?
   invitedById  String
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -3114,6 +3127,29 @@ model PortalAccount {
 
   @@unique([tenantId, email])
   @@index([tenantId, customerId])
+}
+
+/// R3-3:门户激活邀请(复用 F3 token 铁律:原始 token 不入库只存 SHA-256、
+/// 必有过期、条件更新单次使用、未知/撤销一律 404 防枚举、日志只记 hash 前 8 位)
+enum PortalInviteStatus {
+  PENDING
+  USED
+  REVOKED
+}
+
+model PortalInvite {
+  id          String   @id @default(cuid())
+  tenantId    String
+  accountId   String
+  tokenHash   String   @unique
+  status      PortalInviteStatus @default(PENDING)
+  expiresAt   DateTime
+  createdById String
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, accountId])
 }
 
 // ============================================================
