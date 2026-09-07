@@ -1,4 +1,5 @@
 import path from "path";
+import { readFileSync } from "fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -29,7 +30,20 @@ async function login(page: Page, email: string) {
 async function importBomFixture(page: Page): Promise<string> {
   await login(page, "pm@demo.qianchuang.cn");
   await page.goto("/bom/import");
-  await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
+  /*
+   * F7 排查发现的本地陷阱:fixture 内容每次相同 → 导入幂等命中,返回**首次导入的旧版本**。
+   * 长期使用的本地库版本数一旦超过比价页下拉的 200 上限,那个旧版本就掉出窗口,
+   * selectOption 找不到 option 而超时 —— CI(全新库)永远暴露不了。
+   * 掺入唯一描述行,让每次导入都是新内容、新版本。
+   */
+  const raw = readFileSync(BOM_FIXTURE, "utf-8");
+  // 标记**追加进末行描述**而不是加新行 —— 行数断言(如 B4 的 4 行)不能被夹具搅动
+  const unique = `${raw.trimEnd()}·uniq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await page.getByLabel("选择文件(可多选)").setInputFiles({
+    name: `demo-bom-${Date.now()}.csv`,
+    mimeType: "text/csv",
+    buffer: Buffer.from(unique, "utf-8"),
+  });
   await page.getByRole("button", { name: "开始导入" }).click();
   await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
   const href = await page

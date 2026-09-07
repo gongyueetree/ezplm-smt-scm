@@ -13,3 +13,4 @@ export { excessMetric, type ExcessMetric } from "./excess";
 export { shortageMetric } from "./shortage";
 export { scrapLossMetric, type ScrapLossMetric } from "./scrap";
 export { qualityMetric, type QualityMetric } from "./quality";
+export * from "./bom-detail";

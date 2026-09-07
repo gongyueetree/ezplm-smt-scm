@@ -96,3 +96,48 @@ export function compareBomVersions(
 
   return { entries, summary };
 }
+
+/**
+ * F7:差异导出行(CSV 用)。
+ *
+ * 刻意只吃 `compareBomVersions` 的输出 —— 导出与页面共用**同一个 diff 函数**,
+ * 不存在第二套 diff 逻辑(spec §3 验收点,单测据此锁定)。
+ */
+export interface CompareExportRow {
+  type: BomDiffType;
+  typeLabel: string;
+  key: string;
+  refDes: string;
+  beforeMpn: string;
+  afterMpn: string;
+  beforeQty: string;
+  afterQty: string;
+  changes: string;
+}
+
+const EXPORT_TYPE_LABEL: Record<BomDiffType, string> = {
+  added: "新增",
+  removed: "删除",
+  qty_changed: "数量变更",
+  part_changed: "料号变更",
+  unchanged: "未变化",
+};
+
+export function buildCompareExportRows(
+  entries: readonly BomDiffEntry[],
+  opts: { includeUnchanged?: boolean } = {},
+): CompareExportRow[] {
+  return entries
+    .filter((e) => opts.includeUnchanged || e.type !== "unchanged")
+    .map((e) => ({
+      type: e.type,
+      typeLabel: EXPORT_TYPE_LABEL[e.type],
+      key: e.key,
+      refDes: e.after?.refDes ?? e.before?.refDes ?? "",
+      beforeMpn: e.before?.mpn ?? "",
+      afterMpn: e.after?.mpn ?? "",
+      beforeQty: e.before ? String(e.before.qty ?? "") : "",
+      afterQty: e.after ? String(e.after.qty ?? "") : "",
+      changes: e.changes.join(";"),
+    }));
+}

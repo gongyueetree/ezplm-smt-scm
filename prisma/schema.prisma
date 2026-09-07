@@ -737,7 +737,8 @@ model BOMVersion {
   createdById   String
   createdAt     DateTime @default(now())
 
-  lines BOMLine[]
+  lines             BOMLine[]
+  manufacturingInfo BomVersionManufacturingInfo[]
 
   @@unique([tenantId, bomId, versionNo])
 }
@@ -781,6 +782,32 @@ model BOMLine {
 
   @@unique([tenantId, bomVersionId, lineNo])
   @@index([tenantId, mpn])
+}
+
+/// F7(T2,Feature Flag `bom.manufacturingInfo`):BOM 版本的制造工程信息。
+///
+/// 只做**数据模型与只读展示 + 表单录入**;工艺变更审批/参数校验属工艺流程,
+/// 本轮不做(页面注明)。四张卡各存一个 Json 组,字段按静态页归类 ——
+/// 结构未经客户确认前不拆成硬列,免得建错列再迁移。
+model BomVersionManufacturingInfo {
+  id           String     @id @default(cuid())
+  tenantId     String
+  bomVersionId String
+  bomVersion   BOMVersion @relation(fields: [bomVersionId], references: [id])
+  /// 工艺路线:[{seq, process, workCenter, taktSeconds, keyParams}]
+  processRoute Json?
+  /// 拼板规格:[{label, value}]
+  panelization Json?
+  /// 钢网:[{label, value}]
+  stencil      Json?
+  /// 工装治具与程序版本:[{label, value}]
+  tooling      Json?
+  note         String?
+  updatedById  String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([tenantId, bomVersionId])
 }
 
 /// 大 BOM(>50 唯一 MPN)分批处理;幂等键防重复导入

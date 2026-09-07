@@ -105,3 +105,12 @@ export function detectDelimiter(sample: string): string {
   counts.sort((a, b) => b[1] - a[1]);
   return counts[0][1] > 0 ? counts[0][0] : ",";
 }
+
+/**
+ * F7:CSV 序列化(导出用)。
+ * 引号纪律:含分隔符/引号/换行的单元格整体加引号,内部引号翻倍 —— 与 parseCsv 互逆。
+ */
+export function toCsv(header: readonly string[], rows: readonly (readonly string[])[]): string {
+  const cell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  return [header, ...rows].map((r) => r.map(cell).join(",")).join("\n") + "\n";
+}

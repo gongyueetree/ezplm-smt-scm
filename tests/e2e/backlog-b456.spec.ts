@@ -1,4 +1,5 @@
 import path from "path";
+import { readFileSync } from "fs";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -29,7 +30,15 @@ async function login(page: Page, email: string) {
  */
 async function importBomFixture(page: Page): Promise<string> {
   await page.goto("/bom/import");
-  await page.getByLabel("选择文件(可多选)").setInputFiles(BOM_FIXTURE);
+  // 同 procurement.spec 的修复:fixture 内容唯一化,防幂等命中掉出比价下拉 200 窗口的旧版本
+  const raw = readFileSync(BOM_FIXTURE, "utf-8");
+  // 标记**追加进末行描述**而不是加新行 —— 行数断言(如 B4 的 4 行)不能被夹具搅动
+  const unique = `${raw.trimEnd()}·uniq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await page.getByLabel("选择文件(可多选)").setInputFiles({
+    name: `demo-bom-${Date.now()}.csv`,
+    mimeType: "text/csv",
+    buffer: Buffer.from(unique, "utf-8"),
+  });
   await page.getByRole("button", { name: "开始导入" }).click();
   await expect(page.getByText(/· 已完成/)).toBeVisible({ timeout: 60_000 });
   const href = await page

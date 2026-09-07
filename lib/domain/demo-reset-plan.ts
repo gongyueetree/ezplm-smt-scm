@@ -78,6 +78,8 @@ export const PURGE_MODELS = [
   "Quote",
 
   // ---- BOM ----
+  // F7:制造工程信息挂在具体版本上,随 BOM 一起清(在 BOMVersion 之前删)
+  "BomVersionManufacturingInfo",
   // 原始行去向随导入作业一起清(它是某次导入的逐行记录,不是主数据)
   "RawBomRow",
   "BomCompareRun",

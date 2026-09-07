@@ -9,6 +9,7 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { getBomVersionDetail } from "@/lib/server/repositories/bom-import";
 import { getSession } from "@/lib/server/session";
+import { getTenantSettings } from "@/lib/server/tenant-settings";
 import { MatchReview, type ReviewLine } from "./review";
 import { needsAlternate } from "@/lib/domain/alternate-rank";
 import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
@@ -25,6 +26,8 @@ export default async function BomVersionPage({
   const session = (await getSession())!;
   const detail = await getBomVersionDetail(session, versionId);
   if (!detail) notFound();
+  // F7:批量确认阈值为租户配置
+  const { settings } = await getTenantSettings(session.tenantId);
 
   // PR-C:转正式 BOM 需要选客户(客户 Q4:「正式 BOM 必须关联客户编码」)
   const customers = await prisma.customer.findMany({
@@ -126,7 +129,7 @@ export default async function BomVersionPage({
       </Card>
 
       <Card title="匹配确认" sub="逐行采纳候选 / 标记无匹配" flush>
-        <MatchReview lines={lines} />
+        <MatchReview lines={lines} versionId={detail.version.id} threshold={settings.matchConfidenceThreshold} />
       </Card>
     </div>
   );
