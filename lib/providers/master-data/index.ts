@@ -15,13 +15,15 @@
  * 不回落到 ezPLM(那会静默换真源),也不返回空集(那会读成"没有这颗料")。
  */
 import { getEzplmPartsProvider, ezplmProviderMode } from "@/lib/providers/ezplm";
+import { HttpErpLabProvider, resolveErpLabEnv } from "@/lib/providers/erp/lab";
+import { createErpLabMasterDataAdapter } from "./erp-lab-adapter";
 import type { EzplmPartsProvider } from "@/lib/providers/ezplm";
 import { getTenantSettings } from "@/lib/server/tenant-settings";
 
 /** 主数据读取面 = 既有 ezPLM Provider 接口(泛化别名,不另造第二套) */
 export type MasterDataProvider = EzplmPartsProvider;
 
-export type MasterDataSource = "EZPLM" | "KINGDEE" | "NONE";
+export type MasterDataSource = "EZPLM" | "KINGDEE" | "ERP_LAB" | "NONE";
 
 export class MasterDataNotConfiguredError extends Error {
   constructor(
@@ -62,14 +64,22 @@ function notConfigured(source: MasterDataSource, detail: string): MasterDataProv
  */
 export async function getMasterDataProvider(tenantId: string): Promise<MasterDataProvider> {
   const { settings } = await getTenantSettings(tenantId);
-  return providerForSource(settings.masterDataSource);
+  return providerForSource(settings.masterDataSource, settings.erpLabTenantId);
 }
 
 /** 纯函数分支(单测用;getMasterDataProvider 是它的带配置读取版) */
-export function providerForSource(source: MasterDataSource): MasterDataProvider {
+export function providerForSource(source: MasterDataSource, erpLabTenantId?: string | null): MasterDataProvider {
   switch (source) {
     case "EZPLM":
       return getEzplmPartsProvider();
+    case "ERP_LAB": {
+      // closed-loop P0-6:测试专用 —— env 未配置时抛 NotConfigured(不静默回落)
+      const env = resolveErpLabEnv(erpLabTenantId);
+      if (!env) {
+        return notConfigured("ERP_LAB", "缺少 ERP_LAB_BASE_URL / ERP_LAB_ACCESS_TOKEN 环境变量");
+      }
+      return createErpLabMasterDataAdapter(new HttpErpLabProvider(env));
+    }
     case "KINGDEE":
       return notConfigured(
         "KINGDEE",
@@ -85,6 +95,10 @@ export async function masterDataMode(tenantId: string): Promise<{ source: Master
   const { settings } = await getTenantSettings(tenantId);
   if (settings.masterDataSource === "EZPLM") {
     return { source: "EZPLM", mode: ezplmProviderMode() };
+  }
+  if (settings.masterDataSource === "ERP_LAB") {
+    // UI 显示「ERP 仿真主数据」—— 绝不显示为金蝶/正式已连接
+    return { source: "ERP_LAB", mode: resolveErpLabEnv(settings.erpLabTenantId) ? "http" : "not_configured" };
   }
   return { source: settings.masterDataSource, mode: "not_configured" };
 }

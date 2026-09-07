@@ -290,4 +290,8 @@ export class MockErpProvider implements ErpProvider {
       "updateEta(Mock **不假装回写成功** —— 供应商会以为 ERP 交期已更新)",
     );
   }
+
+  async receivePurchaseOrder(): Promise<never> {
+    throw new ErpNotImplementedError("MOCK", "receivePurchaseOrder(Mock 不假装收货成功)");
+  }
 }

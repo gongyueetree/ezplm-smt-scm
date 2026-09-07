@@ -229,4 +229,8 @@ export class KingdeeErpProvider implements ErpProvider {
     this.guard(config);
     throw new ErpNotImplementedError("KINGDEE", "pullSalesOrders(销售订单,待真实账套联调)");
   }
+  async receivePurchaseOrder(config: ErpConnectionConfig): Promise<never> {
+    this.guard(config);
+    throw new ErpNotImplementedError("KINGDEE", "receivePurchaseOrder(收货回写待真实账套联调)");
+  }
 }

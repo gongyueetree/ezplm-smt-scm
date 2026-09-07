@@ -143,4 +143,7 @@ export class ExcelErpProvider implements ErpProvider {
   async pullSalesOrders(): Promise<never> {
     throw new ErpNotImplementedError("EXCEL", "pullSalesOrders(Excel 通道不读 ERP 数据)");
   }
+  async receivePurchaseOrder(): Promise<never> {
+    throw new ErpNotImplementedError("EXCEL", "receivePurchaseOrder(Excel 通道不做单笔 API 直写)");
+  }
 }

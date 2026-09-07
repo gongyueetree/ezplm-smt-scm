@@ -12,6 +12,7 @@
  * 幂等纪律:幂等键在记录创建时生成一次,之后**只读不写**。
  * NETWORK_DROP_AFTER_COMMIT 的重试正确性完全依赖这一条。
  */
+import { randomUUID } from "crypto";
 import type { ErpEntityType, Prisma } from "@prisma/client";
 import {
   applyFailure,
@@ -21,7 +22,8 @@ import {
   type AttemptOutcomePatch,
 } from "@/lib/domain/integration-sync";
 import { getErpProvider, ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
-import { ErpLabRequestError } from "@/lib/providers/erp/lab";
+import { ErpLabRequestError, HttpErpLabProvider, resolveErpLabEnv } from "@/lib/providers/erp/lab";
+import type { ErpProvider } from "@/lib/providers/erp/types";
 import type { ErpConnectionConfig, ErpCreatePoInput } from "@/lib/providers/erp/types";
 import { getTenantSettings } from "@/lib/server/tenant-settings";
 import { writeAudit } from "@/lib/server/audit";
@@ -33,8 +35,8 @@ import { tenantData, tenantWhere } from "@/lib/server/tenant-scope";
 const LAB_CONFIG: ErpConnectionConfig = { vendor: "ERP_LAB", config: {}, secrets: {} };
 
 export type ErpTarget =
-  | { kind: "ERP_LAB"; provider: ReturnType<typeof getErpProvider>; config: ErpConnectionConfig }
-  | { kind: "KINGDEE"; provider: ReturnType<typeof getErpProvider>; config: ErpConnectionConfig }
+  | { kind: "ERP_LAB"; provider: ErpProvider; config: ErpConnectionConfig }
+  | { kind: "KINGDEE"; provider: ErpProvider; config: ErpConnectionConfig }
   | { kind: "NONE"; reason: string };
 
 /**
@@ -54,7 +56,10 @@ export async function resolveErpTarget(tenantId: string): Promise<ErpTarget> {
             "租户已选 ERP 仿真环境,但服务端缺少 ERP_LAB_BASE_URL / ERP_LAB_ACCESS_TOKEN —— 状态保持「ERP 未配置」,Excel 模板兜底可用",
         };
       }
-      return { kind: "ERP_LAB", provider: getErpProvider("ERP_LAB"), config: LAB_CONFIG };
+      // closed-loop P0-2:按租户配置选择 Lab 数据集(未配置回落 ezplm-demo 仅供演示;
+      // 客户数据集必须显式配置 erpLabTenantId,严禁多租户共用)
+      const provider = new HttpErpLabProvider(resolveErpLabEnv(settings.erpLabTenantId));
+      return { kind: "ERP_LAB", provider, config: LAB_CONFIG };
     }
     case "KINGDEE":
       // 金蝶凭据在 ErpConnection 里管理;API 直写待联调(O1),当前一律走 Excel 兜底
@@ -200,6 +205,8 @@ export async function syncPurchaseOrderToErp(
     };
   }
 
+  const correlationId = randomUUID(); // closed-loop P1-10:业务动作→记录→Lab 日志一条链
+
   // 条件抢占:并发调用只有一个能把状态推进到 SYNCING
   const claimed = await prisma.integrationSyncRecord.updateMany({
     where: {
@@ -212,6 +219,7 @@ export async function syncPurchaseOrderToErp(
   if (claimed.count === 0) {
     return { ok: false, state: "SYNCING", reason: "该订单正在同步中(并发抢占失败),请稍后查看状态" };
   }
+  await prisma.integrationSyncRecord.update({ where: { id: record.id }, data: { correlationId } });
 
   // 组装 ERP 单据。物料编码:internalPn 优先、MPN 兜底 —— 都没有则该行无法回写
   const partIds = po.lines.map((l) => l.partId).filter((x): x is string => Boolean(x));
@@ -258,7 +266,11 @@ export async function syncPurchaseOrderToErp(
   };
 
   try {
-    const result = await target.provider.createPurchaseOrder(target.config, input, record.idempotencyKey ?? key);
+    const result = await target.provider.createPurchaseOrder(
+      { ...target.config, config: { ...target.config.config, correlationId } },
+      input,
+      record.idempotencyKey ?? key,
+    );
     const patch = applySuccess(result);
     await applyPatch(session, record.id, patch, {
       action: "ERP_SYNC_PO_ATTEMPT",
@@ -310,6 +322,7 @@ export interface SyncStatusRow {
   note: string | null;
   lastAttemptAt: string | null;
   syncedAt: string | null;
+  correlationId: string | null;
   canRetry: boolean;
 }
 
@@ -345,6 +358,7 @@ export async function listSyncStatus(session: SessionRef): Promise<{
     note: r.note,
     lastAttemptAt: r.lastAttemptAt?.toISOString() ?? null,
     syncedAt: r.syncedAt?.toISOString() ?? null,
+    correlationId: r.correlationId,
     canRetry: canManualRetry(r.state as never),
   }));
 

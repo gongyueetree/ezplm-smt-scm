@@ -93,6 +93,8 @@ export const LabPurchaseOrderLineSchema = z.object({
   unitPrice: DecimalStringSchema,
   requestedDate: z.string().optional(),
   confirmedQty: DecimalStringSchema.optional(),
+  /** closed-loop:累计收货量 */
+  receivedQty: DecimalStringSchema.optional(),
   eta: z.string().optional(),
   shipDate: z.string().optional(),
 });
@@ -110,6 +112,21 @@ export const LabPurchaseOrderSchema = z.object({
   lines: z.array(LabPurchaseOrderLineSchema),
 });
 export type LabPurchaseOrder = z.infer<typeof LabPurchaseOrderSchema>;
+
+// closed-loop:收货
+export const LabReceiveInputSchema = z.object({
+  poExternalId: z.string().optional(),
+  poNumber: z.string().optional(),
+  lines: z.array(
+    z.object({
+      lineNo: z.number().int(),
+      qty: DecimalStringSchema,
+      lotNo: z.string().optional(),
+      warehouseCode: z.string().optional(),
+    }),
+  ),
+});
+export type LabReceiveInput = z.infer<typeof LabReceiveInputSchema>;
 
 export const LabEtaUpdateSchema = z.object({
   poExternalId: z.string().optional(),
@@ -190,6 +207,7 @@ export const LAB_OPERATIONS = [
   "pullSalesOrders",
   "createPurchaseOrder",
   "updateEta",
+  "receivePurchaseOrder",
 ] as const;
 export type LabOperation = (typeof LAB_OPERATIONS)[number];
 
@@ -231,4 +249,18 @@ export interface LabPullOptions {
   updatedSince?: string;
   cursor?: string;
   limit?: number;
+  // closed-loop:服务端过滤(数据最小化)
+  customerCode?: string;
+  materialCode?: string;
+  warehouseCode?: string;
+}
+
+/** closed-loop:pull* 统一分页信封(Lab 端 ErpPullPage 的镜像) */
+export function labPageSchema<T extends z.ZodTypeAny>(item: T) {
+  return z.object({
+    items: z.array(item),
+    cursor: z.string().optional(),
+    hasMore: z.boolean(),
+    total: z.number().int().nonnegative().optional(),
+  });
 }

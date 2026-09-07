@@ -13,7 +13,7 @@ import {
   verifyPortalSession,
   type PortalSessionPayload,
 } from "@/lib/auth/portal-session";
-import { getErpProvider, ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
+import { ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
 import { prisma } from "@/lib/server/db";
 import { resolveErpTarget } from "@/lib/server/repositories/integration-sync";
 import { getTenantSettings } from "@/lib/server/tenant-settings";
@@ -100,23 +100,38 @@ export async function portalInventory(session: PortalSessionPayload): Promise<Po
     return { state: "not_configured", note: "库存数据待接入(ERP 未配置)", fetchedAt: null, rows: [] };
   }
   try {
-    const provider = getErpProvider(target.kind);
-    const { items } = await provider.pullInventory(target.config, {});
+    const provider = target.provider; // closed-loop:必须用 target 里的租户感知实例,不得回退无租户工厂
+    /*
+     * closed-loop P0-5/R3-2:**Provider 层带 customerCode 过滤 + 分页** ——
+     * 门户请求不再全量拉取整租户库存。应用层保留二次校验(defense-in-depth):
+     * Provider 若忽略过滤参数,越界行仍会在这里被丢弃并如实计数。
+     */
+    const PAGE_LIMIT = 200;
+    const { items, page: pageInfo } = await provider.pullInventory(target.config, {
+      customerCode: customer.code,
+      limit: PAGE_LIMIT,
+    });
     const norm = (v: string | null) => (v ?? "").toUpperCase();
+    const scoped = items.filter((i) => norm(i.customerCode) === norm(customer.code));
+    const leaked = items.length - scoped.length;
     return {
       state: "ok",
-      note: target.kind === "ERP_LAB" ? "数据来自 ERP 仿真环境(联调用)" : null,
+      note: [
+        target.kind === "ERP_LAB" ? "数据来自 ERP 仿真环境(联调用)" : null,
+        pageInfo.hasMore ? `仅显示前 ${PAGE_LIMIT} 条(共 ${pageInfo.total ?? "更多"} 条)` : null,
+        leaked > 0 ? `Provider 未执行客户过滤,已在应用层丢弃 ${leaked} 条越界行(defense-in-depth)` : null,
+      ]
+        .filter(Boolean)
+        .join(";") || null,
       fetchedAt: new Date().toISOString(),
-      // 白名单序列化:逐字段挑出;**只**保留本客户 customerCode 的行
-      rows: items
-        .filter((i) => norm(i.customerCode) === norm(customer.code))
-        .map((i) => ({
-          materialCode: i.materialCode ?? i.internalPn ?? "?",
-          qty: i.qty,
-          warehouse: i.warehouse,
-          lotNo: i.lotNo,
-          updatedAt: i.receivedAt,
-        })),
+      // 白名单序列化:逐字段挑出
+      rows: scoped.map((i) => ({
+        materialCode: i.materialCode ?? i.internalPn ?? "?",
+        qty: i.qty,
+        warehouse: i.warehouse,
+        lotNo: i.lotNo,
+        updatedAt: i.receivedAt,
+      })),
     };
   } catch (e) {
     if (e instanceof ErpNotConfiguredError || e instanceof ErpNotImplementedError) {
