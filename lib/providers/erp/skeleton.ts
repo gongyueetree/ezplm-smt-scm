@@ -82,6 +82,19 @@ export function createSkeletonProvider(
     async pullExchangeRates() {
       return nope("pullExchangeRates");
     },
+    // F4:Lab 合约增量 —— 未联调厂商一律"待联调",不返回空集
+    async pullSuppliers() {
+      return nope("pullSuppliers");
+    },
+    async pullCustomers() {
+      return nope("pullCustomers");
+    },
+    async createPurchaseOrder() {
+      return nope("createPurchaseOrder");
+    },
+    async updateEta() {
+      return nope("updateEta");
+    },
     async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
       return { externalJobId, state: "UNKNOWN", message: `${vendor} 待联调` };
     },

@@ -6,8 +6,11 @@ import { MpnLink } from "@/components/ui/mpn-link";
 import { PageHeader } from "@/components/ui/page-header";
 import { SOURCING_MODE_LABELS } from "@/lib/domain/po-scheduling";
 import { PO_STATUS_LABELS } from "@/lib/domain/po-status";
+import { resolveErpTarget } from "@/lib/server/repositories/integration-sync";
 import { getPurchaseOrder } from "@/lib/server/repositories/purchase-order";
+import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
+import { tenantWhere } from "@/lib/server/tenant-scope";
 import { PoActions } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +36,19 @@ export default async function PurchaseOrderDetailPage({
 
   const unresolved = po.lines.filter((l) => l.wasFlagged && !l.resolution).length;
   const liveErrors = po.lines.filter((l) => l.review?.hasError).length;
+
+  // F4:API 回写状态(与 Excel 模板并列展示,互不取代)
+  const [erpTarget, syncRecord] = await Promise.all([
+    resolveErpTarget(session.tenantId),
+    prisma.integrationSyncRecord.findFirst({
+      where: tenantWhere(session.tenantId, {
+        entityType: "PURCHASE_ORDER" as const,
+        entityId: po.id,
+        direction: "EZPLM_TO_ERP" as const,
+      }),
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
 
   return (
     <div>
@@ -78,6 +94,19 @@ export default async function PurchaseOrderDetailPage({
         unresolved={unresolved}
         liveErrors={liveErrors}
         erpExported={Boolean(po.erpExportedAt)}
+        erpApi={{
+          configured: erpTarget.kind !== "NONE",
+          targetLabel:
+            erpTarget.kind === "ERP_LAB"
+              ? "ERP 仿真环境(非金蝶)"
+              : erpTarget.kind === "NONE"
+                ? null
+                : erpTarget.kind,
+          notConfiguredReason: erpTarget.kind === "NONE" ? erpTarget.reason : null,
+          state: syncRecord?.state ?? null,
+          documentNo: syncRecord?.externalDocumentNo ?? syncRecord?.externalId ?? null,
+          errorMessage: syncRecord?.errorMessage ?? null,
+        }}
       />
 
       <Card

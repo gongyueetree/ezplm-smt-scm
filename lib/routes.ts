@@ -317,6 +317,15 @@ export const NAV_SECTIONS: NavSection[] = [
             roles: ["MANAGEMENT"],
           },
           {
+            path: "/settings/integrations/status",
+            label: "集成状态",
+            icon: "db",
+            plannedPr: "F4",
+            desc: "实体级同步状态(NOT_CONFIGURED/SYNCED/FAILED/BLOCKED…)与人工重试;ERP 仿真环境一律标注,不冒充金蝶已联调。",
+            implemented: true,
+            roles: ["MANAGEMENT", "PROCUREMENT"],
+          },
+          {
             path: "/settings/mail",
             label: "邮件通道",
             plannedPr: "PR-E7",

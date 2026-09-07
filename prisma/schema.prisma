@@ -129,6 +129,8 @@ enum ErpVendor {
   ORACLE
   EXCEL
   MOCK
+  /// F4:ERP 仿真环境(gongyueetree/ezplm-erp-lab)。联调目标,**不是金蝶** —— UI 必须标「仿真」
+  ERP_LAB
 }
 
 /// 连接状态。**CONNECTED 只能在真实请求成功后写入** —— 不接受固定绿灯。
@@ -160,6 +162,12 @@ enum ErpEntityType {
   ETA_WRITEBACK
   RECEIPT_LOT
   SHIPMENT
+  // ---- F4:ERP Lab 合约覆盖的实体(Excess/FX/往来单位;AR/AP 仅预留状态位)----
+  EXCESS
+  FX_RATE
+  SUPPLIER
+  CUSTOMER
+  AR_AP
 }
 
 /// 冲突处理策略
@@ -3193,6 +3201,69 @@ model IntegrationJob {
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status, nextRetryAt])
+}
+
+/// F4:实体级同步状态。
+///
+/// 与既有两层的分工(**扩展而非重复**):
+/// - `ErpSyncJob` / `ErpSyncJobLine` = **一次批量作业**跑得怎么样(预览/执行、行级差异);
+/// - `IntegrationJob` = 轻量任务队列(模板导出、催办等一次性动作);
+/// - 本表 = **某个业务对象**当前与 ERP 的对齐状态(这张 PO 回写到哪一步了)。
+///   KPI、状态页、重试入口都从这里读 —— 不从作业日志里反推。
+///
+/// 状态语义(诚实 UI 的依据):
+/// - NOT_CONFIGURED:租户没配 ERP,**不是失败也不是成功**;
+/// - BLOCKED:重试解决不了(凭据过期/单据冲突),必须人工处置;
+/// - RETRY_REQUIRED:瞬态失败(限流/超时/断网),可重试,**幂等键不变**。
+enum IntegrationSyncState {
+  NOT_CONFIGURED
+  READY
+  PENDING
+  SYNCING
+  SYNCED
+  FAILED
+  RETRY_REQUIRED
+  BLOCKED
+}
+
+model IntegrationSyncRecord {
+  id         String               @id @default(cuid())
+  tenantId   String
+  /// 目标系统(ErpVendor 字符串;ERP_LAB=仿真环境,UI 不得显示为「金蝶已联调」)
+  provider   String
+  entityType ErpEntityType
+  /// 本系统侧业务对象 id;数据集级拉取(物料/库存/Excess…)用固定值 "dataset"
+  entityId   String
+  direction  ErpSyncDirection
+  state      IntegrationSyncState @default(NOT_CONFIGURED)
+
+  /// ERP 侧对象 id 与单据号(回查凭据;也是 ExternalEntityMapping 的等价物)
+  externalId         String?
+  externalDocumentNo String?
+
+  /// 幂等键:**首次生成后不再变**,重试必须复用 —— 这是"提交后断网"不重复建单的唯一保证
+  idempotencyKey String?
+
+  attemptCount  Int       @default(0)
+  errorCode     String?
+  errorMessage  String?
+  /// ERP 侧数据时间(读取方向);与本地时间分开存
+  sourceUpdatedAt DateTime?
+  /// 成功那一刻发出去/拉回来的内容快照 —— 事后对账用,不再从活数据反推
+  syncedSnapshot Json?
+  lastAttemptAt  DateTime?
+  syncedAt       DateTime?
+  nextRetryAt    DateTime?
+  /// 附注(如 PARTIAL_RESPONSE 拉取的行数、FX 占位说明)
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// 唯一集成键:同一对象对同一方向只有一条状态记录,并发 upsert 不产生第二条
+  @@unique([tenantId, provider, entityType, entityId, direction])
+  @@index([tenantId, state, nextRetryAt])
+  @@index([tenantId, entityType, state])
 }
 
 /// 外部 API 用量日志(DigiKey/Mouser 限流与配额观测,记录 X-RateLimit)

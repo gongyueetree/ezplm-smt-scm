@@ -5,6 +5,7 @@
  */
 import { ExcelErpProvider } from "./excel";
 import { KingdeeErpProvider } from "./kingdee";
+import { HttpErpLabProvider, resolveErpLabEnv } from "./lab";
 import { MockErpProvider } from "./mock";
 import { createSkeletonProvider } from "./skeleton";
 import type { ErpProvider } from "./types";
@@ -34,6 +35,9 @@ export function getErpProvider(vendor: string): ErpProvider {
   switch (vendor) {
     case "KINGDEE":
       return new KingdeeErpProvider();
+    case "ERP_LAB":
+      // 仿真环境:目标地址与令牌只来自服务端环境变量;缺失时 provider 抛 NotConfigured
+      return new HttpErpLabProvider(resolveErpLabEnv());
     case "EXCEL":
       return new ExcelErpProvider();
     case "MOCK":

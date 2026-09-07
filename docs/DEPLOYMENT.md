@@ -31,6 +31,7 @@
 | `CRON_SECRET` | — | 催办 Cron 鉴权 | **催办接口返回 503 拒绝运行**(不在无鉴权下开放) |
 | `SEED_DEMO_PASSWORD` | — | 演示种子口令 | `demo1234`。**种子在 `NODE_ENV=production` 下拒绝执行** |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_SECURE` | — | 公司 SMTP(E7) | 未齐时状态 `WAITING_FOR_CREDENTIALS`,邮件一律停在「草稿 · 未发送」 |
+| `ERP_LAB_BASE_URL` / `ERP_LAB_ACCESS_TOKEN` | — | ERP **仿真环境**(F4,`ezplm-erp-lab` 部署地址与访问令牌;仅服务端) | 未配置时一切 ERP 同步状态为 `NOT_CONFIGURED`,Excel 模板兜底链不受影响。**这是联调靶场,不是金蝶** —— 配置后 UI 仍标「仿真环境」 |
 | `ATTACHMENT_MAX_MB` | — | 流式上传单文件上限(MB) | 默认 100 |
 
 #### SMTP:客户已提供的参数(2026-08 回复清单第 3 项)

@@ -170,6 +170,8 @@ export class MockErpProvider implements ErpProvider {
         availableQty: "854",
         dateCode: "2625",
         receivedAt: "2026-07-01T00:00:00.000Z",
+        materialCode: "QC-IC-0001",
+        customerCode: null,
       },
     ]);
   }
@@ -230,5 +232,48 @@ export class MockErpProvider implements ErpProvider {
 
   async getJobStatus(_c: ErpConnectionConfig, externalJobId: string): Promise<ErpJobStatus> {
     return { externalJobId, state: "SUCCEEDED", message: "Mock 作业" };
+  }
+
+  // ---- F4:Lab 合约增量 ----
+  // 供应商/客户档案给最小示例(演示同步预览用);写操作与 Excess/汇率同理**不冒充成功**:
+  // Mock 若返回 success=true + 一个编的单号,状态机就会把这单标成 SYNCED,
+  // 页面上"已同步·单号 XXX"全是假的 —— 这正是禁止的虚假完成态。
+  async pullSuppliers() {
+    return page([
+      {
+        externalId: "S-0001",
+        supplierCode: "SUP-HQB",
+        name: "华强北电子(示例)",
+        status: "启用",
+        currency: "CNY",
+        updatedAt: "2026-07-20T08:00:00.000Z",
+      },
+    ]);
+  }
+
+  async pullCustomers() {
+    return page([
+      {
+        externalId: "C-0001",
+        customerCode: "CUST-LC",
+        name: "联创科技(示例)",
+        status: "启用",
+        updatedAt: "2026-07-20T08:00:00.000Z",
+      },
+    ]);
+  }
+
+  async createPurchaseOrder(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "MOCK",
+      "createPurchaseOrder(Mock **不假装建单成功** —— 假单号会被登记成「已同步」)",
+    );
+  }
+
+  async updateEta(): Promise<never> {
+    throw new ErpNotImplementedError(
+      "MOCK",
+      "updateEta(Mock **不假装回写成功** —— 供应商会以为 ERP 交期已更新)",
+    );
   }
 }

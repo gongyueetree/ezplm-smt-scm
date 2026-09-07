@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequest, notFound, requireSession } from "@/lib/server/api";
-import { ezplmProviderMode, getEzplmPartsProvider } from "@/lib/providers/ezplm";
+import { getMasterDataProvider, masterDataMode } from "@/lib/providers/master-data";
 import { requirePermission } from "@/lib/server/permissions";
 
 export const runtime = "nodejs";
@@ -24,10 +24,11 @@ export async function POST(req: Request) {
   const parsed = Input.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest("请求参数不合法");
 
-  if (ezplmProviderMode() !== "http") {
+  // F4:主数据源按租户配置解析(EZPLM/KINGDEE/NONE),不再写死 ezPLM
+  if ((await masterDataMode(auth.session.tenantId)).mode !== "http") {
     return NextResponse.json(
       {
-        error: "ezPLM 未配置凭据 —— 当前为示例数据,引用功能待联调",
+        error: "主数据源未配置凭据 —— 当前为示例数据,引用功能待联调",
         code: "not_configured",
       },
       { status: 422 },
@@ -35,9 +36,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    const found = await getEzplmPartsProvider().searchParts({ keyword: parsed.data.mpn, limit: 5 });
+    const provider = await getMasterDataProvider(auth.session.tenantId);
+    const found = await provider.searchParts({ keyword: parsed.data.mpn, limit: 5 });
     const hit = found.find((p) => p.mpn?.toUpperCase() === parsed.data.mpn.toUpperCase()) ?? null;
-    if (!hit) return notFound("ezPLM 中未找到该 MPN");
+    if (!hit) return notFound("主数据源中未找到该 MPN");
 
     return NextResponse.json({
       // 逐字段标注取自 ezPLM,UI 要显示来源徽标,让人知道哪些不是自己填的
