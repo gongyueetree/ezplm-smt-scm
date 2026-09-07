@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getMesTraceProvider, traceGranularityNote } from "@/lib/providers/mes";
 import { formatDateTime } from "@/lib/format/datetime";
+import { qualityMetric } from "@/lib/metrics";
 import { prisma } from "@/lib/server/db";
 import { loadPermissions } from "@/lib/server/permissions";
 import { getSession } from "@/lib/server/session";
@@ -35,16 +36,45 @@ const STATUS_TONE: Record<string, "red" | "amber" | "green" | "gray"> = {
  * 这一页就是那个缺口的最小填补:能登记、能分类、能跟状态、能挂追溯。
  * **不是完整 QMS**,页面上写明,免得被当成 8D/CAPA 都有了。
  */
-export default async function QualityPage() {
+export default async function QualityPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    type?: string;
+    status?: string;
+    customerId?: string;
+    supplierId?: string;
+    severity?: string;
+    from?: string;
+    to?: string;
+  }>;
+}) {
   const session = (await getSession())!;
+  const filters = await searchParams;
   const perms = await loadPermissions(session);
   const canView = perms.has("quality.view");
   const canCreate = perms.has("quality.create");
 
-  const [incidents, snCount, customers, suppliers] = await Promise.all([
+  const where = tenantWhere(session.tenantId, {
+    ...(filters.type ? { eventType: filters.type as never } : {}),
+    ...(filters.status ? { status: filters.status as never } : {}),
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+    ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+    ...(filters.severity ? { severity: filters.severity } : {}),
+    ...(filters.from || filters.to
+      ? {
+          createdAt: {
+            ...(filters.from ? { gte: new Date(filters.from) } : {}),
+            ...(filters.to ? { lte: new Date(`${filters.to}T23:59:59.999Z`) } : {}),
+          },
+        }
+      : {}),
+  });
+
+  const [incidents, snCount, customers, suppliers, kpi, trendRows] = await Promise.all([
     canView
       ? prisma.qualityIncident.findMany({
-          where: tenantWhere(session.tenantId),
+          where,
           orderBy: { createdAt: "desc" },
           take: 200,
         })
@@ -52,7 +82,28 @@ export default async function QualityPage() {
     prisma.finishedGoodsSerial.count({ where: tenantWhere(session.tenantId) }),
     prisma.customer.findMany({ where: tenantWhere(session.tenantId), select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.supplier.findMany({ where: tenantWhere(session.tenantId), select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // F6-A:KPI **必须消费 lib/metrics**(与管理看板同一查询源),本页不新写聚合
+    qualityMetric(session.tenantId, new Date().toISOString()),
+    // 90 天趋势(按周汇总;tenant scope 由 where 保证)
+    canView
+      ? prisma.qualityIncident.findMany({
+          where: tenantWhere(session.tenantId, {
+            createdAt: { gte: new Date(Date.now() - 90 * 86400_000) },
+          }),
+          select: { createdAt: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // 周桶(13 周):简单 SVG 条形,不引第三方图表库(仓库没有,如实用轻量实现)
+  const WEEK = 7 * 86400_000;
+  const buckets = new Array(13).fill(0);
+  const now = Date.now();
+  for (const r of trendRows) {
+    const idx = 12 - Math.floor((now - r.createdAt.getTime()) / WEEK);
+    if (idx >= 0 && idx < 13) buckets[idx] += 1;
+  }
+  const maxBucket = Math.max(1, ...buckets);
 
   const mes = getMesTraceProvider();
 
@@ -72,6 +123,86 @@ export default async function QualityPage() {
           {traceGranularityNote(mes.state, snCount).replace(/\*\*/g, "")}
         </span>
       </Banner>
+
+      {canView ? (
+        <>
+          <div className="kpis" data-testid="quality-kpis">
+            <a className={kpi.open > 0 ? "kpi danger" : "kpi"} href="/quality?status=OPEN" data-testid="quality-kpi-open">
+              <div className="kpi-num">{kpi.open}</div>
+              <div className="kpi-label">Open</div>
+            </a>
+            <a className="kpi" href="/quality?status=INVESTIGATING">
+              <div className="kpi-num">{kpi.investigating}</div>
+              <div className="kpi-label">调查中</div>
+            </a>
+            <a className="kpi" href="/quality?status=CONTAINED">
+              <div className="kpi-num">{kpi.contained}</div>
+              <div className="kpi-label">已围堵</div>
+            </a>
+            <div className="kpi">
+              <div className="kpi-num">{kpi.closedThisMonth}</div>
+              <div className="kpi-label">本月关闭</div>
+            </div>
+            <a className="kpi" href="/quality?type=CUSTOMER_COMPLAINT" data-testid="quality-kpi-complaint">
+              <div className="kpi-num">{kpi.customerComplaints}</div>
+              <div className="kpi-label">客户投诉</div>
+            </a>
+            <a className="kpi" href="/quality?type=SUPPLIER">
+              <div className="kpi-num">{kpi.supplierIssues}</div>
+              <div className="kpi-label">供应商问题</div>
+            </a>
+          </div>
+
+          <Card title="90 天趋势(按周)" sub="事件登记数;数据仅含本租户">
+            <svg viewBox="0 0 260 60" width="260" height="60" role="img" aria-label="90 天质量事件趋势" data-testid="quality-trend">
+              {buckets.map((v, i) => (
+                <rect
+                  key={i}
+                  x={i * 20 + 2}
+                  y={56 - (v / maxBucket) * 50}
+                  width={14}
+                  height={Math.max(1, (v / maxBucket) * 50)}
+                  fill={v > 0 ? "var(--brand, #00890b)" : "var(--gray-200, #e5e5e5)"}
+                >
+                  <title>{`${13 - i} 周前:${v} 件`}</title>
+                </rect>
+              ))}
+            </svg>
+          </Card>
+
+          <Card title="筛选" flush>
+            <form style={{ display: "flex", gap: 8, padding: "10px 16px", flexWrap: "wrap" }}>
+              <select name="type" defaultValue={filters.type ?? ""} aria-label="类型筛选">
+                <option value="">全部类型</option>
+                {Object.entries(TYPE_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+              <select name="status" defaultValue={filters.status ?? ""} aria-label="状态筛选">
+                <option value="">全部状态</option>
+                {["OPEN", "INVESTIGATING", "CONTAINED", "CLOSED"].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              <select name="customerId" defaultValue={filters.customerId ?? ""} aria-label="客户筛选">
+                <option value="">全部客户</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <select name="supplierId" defaultValue={filters.supplierId ?? ""} aria-label="供应商筛选">
+                <option value="">全部供应商</option>
+                {suppliers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <input type="date" name="from" defaultValue={filters.from ?? ""} aria-label="起始日期" />
+              <input type="date" name="to" defaultValue={filters.to ?? ""} aria-label="截止日期" />
+              <button className="btn" type="submit">筛选</button>
+            </form>
+          </Card>
+        </>
+      ) : null}
 
       {!canView ? (
         <Card title="无权限">

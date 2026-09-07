@@ -3095,6 +3095,28 @@ model SupplierOnboardInvite {
 }
 
 // ============================================================
+// F6-B:客户门户账号(设计 docs/design/F6-CHECKPOINT-A.md)
+// 独立认证域:与内部 User 完全分离,无 roles、不进 SEARCH_SCOPES。
+// 仅内部管理层邀请建号,无自注册路径。
+// ============================================================
+
+model PortalAccount {
+  id           String    @id @default(cuid())
+  tenantId     String
+  customerId   String
+  email        String
+  passwordHash String
+  active       Boolean   @default(true)
+  invitedById  String
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, customerId])
+}
+
+// ============================================================
 // F2:ECN-Lite(设计 docs/design/F2-CHECKPOINT-A.md;页面 docs/PAGE_SPEC_ECN.md)
 // 范围:登记、评审(三段固定顺序)、批准、发布(快照冻结)、Apply to BOM、作废可溯。
 // 完整 ECN(流程引擎/签章/MES 指令)仍在待商务确认池。

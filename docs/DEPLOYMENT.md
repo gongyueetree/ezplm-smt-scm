@@ -33,6 +33,7 @@
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_SECURE` | — | 公司 SMTP(E7) | 未齐时状态 `WAITING_FOR_CREDENTIALS`,邮件一律停在「草稿 · 未发送」 |
 | `APP_PUBLIC_URL` | — | 对外域名(F3 免登录确认链接拼装用,如 `https://erp.tindie.com`) | 未配置时链接为相对路径,UI 提示「外发前请补全域名」 |
 | `ERP_LAB_BASE_URL` / `ERP_LAB_ACCESS_TOKEN` | — | ERP **仿真环境**(F4,`ezplm-erp-lab` 部署地址与访问令牌;仅服务端) | 未配置时一切 ERP 同步状态为 `NOT_CONFIGURED`,Excel 模板兜底链不受影响。**这是联调靶场,不是金蝶** —— 配置后 UI 仍标「仿真环境」 |
+| `CUSTOMER_PORTAL_ENABLED` / `PORTAL_AUTH_SECRET` | — | 客户门户(F6-B)双开关之一 + **独立**会话密钥(与 AUTH_SECRET 不同值;未配置时门户整体 404/503,不回落) | 另需租户 flag `customerPortal` 同时开启 |
 | `ATTACHMENT_MAX_MB` | — | 流式上传单文件上限(MB) | 默认 100 |
 
 #### SMTP:客户已提供的参数(2026-08 回复清单第 3 项)

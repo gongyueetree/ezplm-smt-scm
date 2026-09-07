@@ -34,6 +34,9 @@ export default defineConfig({
     // 否则它一律 503,测不到"带正确 secret 能过、带错的过不去"
     env: {
       CRON_SECRET: process.env.CRON_SECRET ?? "e2e-cron-secret",
+      // F6-B:门户双开关之一(租户 flag 由用例内开启并还原);独立密钥,不与 AUTH_SECRET 共用
+      CUSTOMER_PORTAL_ENABLED: "1",
+      PORTAL_AUTH_SECRET: "e2e-portal-secret-独立于内部密钥",
       // 自助注册默认关闭;E2E 必须显式打开才测得到注册流程
       ALLOW_SELF_REGISTRATION: "true",
       /*
