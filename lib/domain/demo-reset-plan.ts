@@ -205,6 +205,13 @@ export const KEEP_MODELS = [
    * 确实要清时用 --include-audit。
    */
   "AuditLog",
+
+  /*
+   * R3-1:限流计数桶是**全局**运行时状态(键 = 路由+IP,无 tenantId),
+   * 租户清库脚本按 tenantId 删,碰不得全局表 —— 归 KEEP。
+   * 桶自身按窗口过期并由消费路径机会式清理,不会积累。
+   */
+  "RateLimitBucket",
 ] as const;
 
 export type PurgeModel = (typeof PURGE_MODELS)[number];

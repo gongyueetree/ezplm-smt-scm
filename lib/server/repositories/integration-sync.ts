@@ -21,7 +21,7 @@ import {
   canManualRetry,
   type AttemptOutcomePatch,
 } from "@/lib/domain/integration-sync";
-import { getErpProvider, ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
+import { ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
 import { ErpLabRequestError, HttpErpLabProvider, resolveErpLabEnv } from "@/lib/providers/erp/lab";
 import type { ErpProvider } from "@/lib/providers/erp/types";
 import type { ErpConnectionConfig, ErpCreatePoInput } from "@/lib/providers/erp/types";

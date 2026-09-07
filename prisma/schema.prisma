@@ -3421,10 +3421,41 @@ model AgentApproval {
 // ============================================================
 
 /// 审计日志(评审要求二.7 全字段;每个写操作必录)
+/// R3-1:审计操作主体类型(历史行为空,视同 INTERNAL_USER)
+enum ActorType {
+  INTERNAL_USER
+  PORTAL_ACCOUNT
+  SUPPLIER_LINK
+  SYSTEM
+  INTEGRATION
+}
+
+/// R3-1:共享限流计数(固定窗口;PostgreSQL 实现,多实例共享)。
+/// 语义为固定窗口而非滑动窗口 —— 公开端点低频写场景够用,文档如实注明。
+/// 过期桶由消费路径机会式清理。
+model RateLimitBucket {
+  key         String
+  bucketStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@id([key, bucketStart])
+  @@index([bucketStart])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   tenantId   String
+  /// 关联的内部责任人。外部主体操作时 = 相关内部负责人(如邀请人/链接创建人),
+  /// **实际操作者看 actorType/actorId**(R3-1:修正门户登录/供应商响应的归因污染)
   userId     String
+  /// R3-1:实际操作主体类型。空 = 历史行,视同 INTERNAL_USER
+  actorType  ActorType?
+  /// 实际操作主体 id(INTERNAL_USER=userId;PORTAL_ACCOUNT=portalAccountId;
+  /// SUPPLIER_LINK=supplierActionRequestId;SYSTEM/INTEGRATION=进程标识)
+  actorId    String?
+  /// 人读的操作者标识(如门户邮箱、供应商自述姓名)—— 展示用,不是身份凭据
+  actorDisplay String?
   action     String
   entityType String
   entityId   String

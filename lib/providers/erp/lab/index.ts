@@ -89,10 +89,6 @@ export function resolveErpLabEnv(labTenantId?: string | null): ErpLabEnv | null 
 
 const TIMEOUT_MS = 15_000;
 
-function page<T>(items: T[]): ErpPage<T> {
-  return { items, page: { cursor: null, hasMore: false, total: items.length } };
-}
-
 const opt = (v: string | undefined): string | null => (v === undefined || v === "" ? null : v);
 
 export class HttpErpLabProvider implements ErpProvider {

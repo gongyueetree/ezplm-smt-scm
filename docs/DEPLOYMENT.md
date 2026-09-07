@@ -30,6 +30,8 @@
 | `AI_PROVIDER` | — | 强制指定厂商:`gemini` / `anthropic` / `none` | 按 Gemini → Anthropic 顺序自动选;`none` 可强制关闭 AI |
 | `CRON_SECRET` | — | 催办 Cron 鉴权 | **催办接口返回 503 拒绝运行**(不在无鉴权下开放) |
 | `SEED_DEMO_PASSWORD` | — | 演示种子口令 | `demo1234`。**种子在 `NODE_ENV=production` 下拒绝执行** |
+| `RATE_LIMIT_PROVIDER` | — | 公开端点限流实现:`postgres`(多实例共享计数)/ `memory`(单进程) | 生产缺省 `postgres`,其余缺省 `memory`。固定窗口语义;DB 抖动时 fail-open 放行并记 `[rate-limit]` 警告(应用层是第二道兜底,第一道在部署层/WAF)(R3-1) |
+| `TRUSTED_PROXY_HOPS` | — | 部署前可信代理层数,决定从 `x-forwarded-for` **右起第几段**取客户端 IP | 缺省 `1`(Railway/Vercel 单层)。`0`=直连部署,完全忽略转发头(限流退化为全局键)。**配错会让限流按伪造 IP 分桶**(R3-1) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_SECURE` | — | 公司 SMTP(E7) | 未齐时状态 `WAITING_FOR_CREDENTIALS`,邮件一律停在「草稿 · 未发送」 |
 | `APP_PUBLIC_URL` | — | 对外域名(F3 免登录确认链接拼装用,如 `https://erp.tindie.com`) | 未配置时链接为相对路径,UI 提示「外发前请补全域名」 |
 | `ERP_LAB_BASE_URL` / `ERP_LAB_ACCESS_TOKEN` | — | ERP **仿真环境**(F4,`ezplm-erp-lab` 部署地址与访问令牌;仅服务端) | 未配置时一切 ERP 同步状态为 `NOT_CONFIGURED`,Excel 模板兜底链不受影响。**这是联调靶场,不是金蝶** —— 配置后 UI 仍标「仿真环境」。每个租户经 `TenantSettings.erpLabTenantId` 指向**各自的** Lab 数据集(如 primatronics-uat),**严禁多租户共用同一客户数据集**;未配置时回落 ezplm-demo 仅供演示。Lab 侧非公开租户已强制 Bearer(P0-1),`PUBLIC_DEMO_TENANTS` 由 Lab 部署配置 |

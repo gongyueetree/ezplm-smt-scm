@@ -75,10 +75,12 @@ async function executeEtaWriteback(
     await writeAudit(prisma, {
       tenantId,
       userId: actorUserId,
+      actorType: "SYSTEM",
+      actorId: "eta-writeback-worker",
       action: "ERP_SYNC_ETA_ATTEMPT",
       entityType: "IntegrationSyncRecord",
       entityId: record.id,
-      after: { state: patch.state, errorCode: patch.errorCode, correlationId, actorType: "SYSTEM_WORKER" },
+      after: { state: patch.state, errorCode: patch.errorCode, correlationId },
     });
     return { state: patch.state, note: patch.errorMessage ?? patch.note ?? null };
   };

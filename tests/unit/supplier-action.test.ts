@@ -15,7 +15,7 @@ import {
   validatePoConfirm,
   PoConfirmResponseSchema,
 } from "@/lib/domain/supplier-action";
-import { rateLimit } from "@/lib/server/rate-limit";
+import { MemoryRateLimitProvider } from "@/lib/server/rate-limit";
 
 describe("token 生成与哈希", () => {
   it("raw 为 base64url ≥43 字符;hash 是 64 位 hex 且可复算;两次生成互不相同", () => {
@@ -123,14 +123,15 @@ describe("链接拼装", () => {
   });
 });
 
-describe("速率限制(滑动窗口)", () => {
-  it("窗口内超限拒绝;窗口滑过后恢复", () => {
+describe("速率限制(R3-1 起为固定窗口 provider,详见 tests/unit/rate-limit.test.ts)", () => {
+  it("窗口内超限拒绝;下一窗口恢复", async () => {
+    const p = new MemoryRateLimitProvider();
     const key = `t-${Math.random()}`;
     const t0 = 1_000_000;
-    expect(rateLimit(key, 3, 1000, t0)).toBe(true);
-    expect(rateLimit(key, 3, 1000, t0 + 10)).toBe(true);
-    expect(rateLimit(key, 3, 1000, t0 + 20)).toBe(true);
-    expect(rateLimit(key, 3, 1000, t0 + 30)).toBe(false);
-    expect(rateLimit(key, 3, 1000, t0 + 1100)).toBe(true);
+    expect((await p.consume({ key, limit: 3, windowMs: 1000, now: t0 })).allowed).toBe(true);
+    expect((await p.consume({ key, limit: 3, windowMs: 1000, now: t0 + 10 })).allowed).toBe(true);
+    expect((await p.consume({ key, limit: 3, windowMs: 1000, now: t0 + 20 })).allowed).toBe(true);
+    expect((await p.consume({ key, limit: 3, windowMs: 1000, now: t0 + 30 })).allowed).toBe(false);
+    expect((await p.consume({ key, limit: 3, windowMs: 1000, now: t0 + 1100 })).allowed).toBe(true);
   });
 });
