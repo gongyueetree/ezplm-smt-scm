@@ -6,7 +6,15 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
  * 注册接口自己按 ALLOW_SELF_REGISTRATION 决定开不开 —— 这里放行不等于开放注册,
  * 关闭时它回 403,而不是让中间件先挡成 401「未登录」让人以为是别的问题。
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/register", "/api/auth/register"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/register",
+  "/api/auth/register",
+  // F3:供应商免登录确认(token 在路径里,鉴权即 token 本身;见 docs/design/F3-CHECKPOINT-A.md)
+  "/confirm",
+  "/api/confirm",
+];
 
 /**
  * 定时任务接口:**没有用户会话**,鉴权走 `Authorization: Bearer $CRON_SECRET`

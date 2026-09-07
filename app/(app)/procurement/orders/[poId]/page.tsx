@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SOURCING_MODE_LABELS } from "@/lib/domain/po-scheduling";
 import { PO_STATUS_LABELS } from "@/lib/domain/po-status";
 import { resolveErpTarget } from "@/lib/server/repositories/integration-sync";
+import { linkConfirmStateForPo } from "@/lib/server/repositories/supplier-action";
 import { getPurchaseOrder } from "@/lib/server/repositories/purchase-order";
 import { prisma } from "@/lib/server/db";
 import { getSession } from "@/lib/server/session";
@@ -36,6 +37,9 @@ export default async function PurchaseOrderDetailPage({
 
   const unresolved = po.lines.filter((l) => l.wasFlagged && !l.resolution).length;
   const liveErrors = po.lines.filter((l) => l.review?.hasError).length;
+
+  // F3:免登录确认状态(Supplier Confirmed via Link)
+  const linkState = await linkConfirmStateForPo(session.tenantId, po.poNo, po.supplierId);
 
   // F4:API 回写状态(与 Excel 模板并列展示,互不取代)
   const [erpTarget, syncRecord] = await Promise.all([
@@ -94,6 +98,14 @@ export default async function PurchaseOrderDetailPage({
         unresolved={unresolved}
         liveErrors={liveErrors}
         erpExported={Boolean(po.erpExportedAt)}
+        supplierConfirm={{
+          ack: linkState.ack
+            ? { decision: linkState.ack.decision, note: linkState.ack.note, at: linkState.ack.recordedAt.toISOString() }
+            : null,
+          pendingLink: linkState.pendingLink
+            ? { expiresAt: linkState.pendingLink.expiresAt.toISOString() }
+            : null,
+        }}
         erpApi={{
           configured: erpTarget.kind !== "NONE",
           targetLabel:
