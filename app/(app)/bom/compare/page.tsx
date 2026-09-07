@@ -212,6 +212,10 @@ export default async function BomComparePage({
       <PageHeader path="/bom/compare" />
       <Card title="本次比对" sub="比对结果可存入台账留档">
         <SaveCompareRun from={from} to={to} />
+        {/* F7:差异导出 —— 与本页共用 compareBomVersions,无第二套 diff */}
+        <a className="btn" href={`/api/bom/compare/export?from=${from}&to=${to}`} data-testid="compare-export">
+          导出差异 CSV
+        </a>
       </Card>
       {/* 看完一对之后往往要换一对 —— 不该逼人退回去重新走一遍 */}
       <VersionPicker

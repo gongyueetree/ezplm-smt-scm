@@ -58,6 +58,26 @@ export interface ReviewLine {
   flags: { dupRefDes: boolean; eol: boolean; footprintMismatch: boolean };
   decision: { decision: string; candidateId: string | null } | null;
   candidates: ReviewCandidate[];
+  /** F7:已匹配内部料的本地库存快照(经 MasterDataProvider 缓存);null=无快照(待接入) */
+  inventory?: { qty: number; fetchedAt: string } | null;
+  /** F7:既有 PartAlternate 替代关系数(只读) */
+  alternateCount?: number;
+}
+
+/** F7:相似度类来源 —— 永不进批量确认(与 lib/domain/bom-detail.ts 同一口径) */
+const BULK_SIMILARITY_SOURCES = SIMILAR_SOURCES;
+
+type ReviewFilter = "all" | "needs-review" | "unrecognized" | "has-alternate";
+
+/** 行分类(与服务端 deriveBomKpis 同口径;显示用,资格最终由服务端复核) */
+function classifyLine(l: ReviewLine, threshold: number) {
+  if (l.decision) return "decided" as const;
+  if (l.candidates.length === 0) return "unrecognized" as const;
+  const top = l.candidates[0];
+  if (top.confidence >= threshold && !BULK_SIMILARITY_SOURCES.has(top.source)) {
+    return "batch-eligible" as const;
+  }
+  return "needs-review" as const;
 }
 
 const LIFECYCLE_TONE: Record<string, "green" | "amber" | "red" | "gray"> = {
@@ -68,12 +88,74 @@ const LIFECYCLE_TONE: Record<string, "green" | "amber" | "red" | "gray"> = {
   UNKNOWN: "gray",
 };
 
-export function MatchReview({ lines }: { lines: ReviewLine[] }) {
+export function MatchReview({
+  lines,
+  versionId,
+  threshold,
+}: {
+  lines: ReviewLine[];
+  /** F7:提供 versionId + threshold 时启用筛选与批量确认(阈值为租户配置,不硬编码) */
+  versionId?: string;
+  threshold?: number;
+}) {
   const router = useRouter();
   const [busyLine, setBusyLine] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ReviewFilter>("all");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkChecked, setBulkChecked] = useState<Record<string, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    confirmed: number;
+    skipped: { lineId: string; lineNo: number | null; reason: string }[];
+  } | null>(null);
 
   const [manualMpn, setManualMpn] = useState<Record<string, string>>({});
+
+  const bulkEnabled = versionId !== undefined && threshold !== undefined;
+  const eligible = bulkEnabled
+    ? lines.filter((l) => classifyLine(l, threshold!) === "batch-eligible")
+    : [];
+
+  const visible =
+    !bulkEnabled || filter === "all"
+      ? lines
+      : lines.filter((l) => {
+          const cls = classifyLine(l, threshold!);
+          if (filter === "needs-review") return cls === "needs-review";
+          if (filter === "unrecognized") return cls === "unrecognized";
+          return (l.alternateCount ?? 0) > 0 || Boolean(l.alternateHint);
+        });
+
+  function openBulk() {
+    // 默认全勾;弹卡里可逐条取消
+    setBulkChecked(Object.fromEntries(eligible.map((l) => [l.id, true])));
+    setBulkResult(null);
+    setBulkOpen(true);
+  }
+
+  async function submitBulk() {
+    const lineIds = eligible.filter((l) => bulkChecked[l.id]).map((l) => l.id);
+    if (lineIds.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/bom/version/${versionId}/bulk-confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lineIds }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? "批量确认失败");
+        return;
+      }
+      setBulkResult(body);
+      router.refresh();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   async function decide(
     lineId: string,
@@ -107,6 +189,102 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
           {error}
         </div>
       ) : null}
+
+      {bulkEnabled ? (
+        <div
+          style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px 16px" }}
+          data-testid="review-toolbar"
+        >
+          {(
+            [
+              ["all", `全部(${lines.length})`],
+              ["needs-review", `需人工确认(${lines.filter((l) => classifyLine(l, threshold!) === "needs-review").length})`],
+              ["unrecognized", `未识别(${lines.filter((l) => classifyLine(l, threshold!) === "unrecognized").length})`],
+              ["has-alternate", `有替代(${lines.filter((l) => (l.alternateCount ?? 0) > 0 || l.alternateHint).length})`],
+            ] as [ReviewFilter, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              className={`btn xs${filter === key ? " primary" : ""}`}
+              onClick={() => setFilter(key)}
+              data-testid={`review-filter-${key}`}
+            >
+              {label}
+            </button>
+          ))}
+          <span style={{ flex: 1 }} />
+          <button
+            className="btn"
+            disabled={eligible.length === 0}
+            onClick={openBulk}
+            data-testid="bulk-confirm-open"
+            title={eligible.length === 0 ? "没有达到阈值的未决行" : undefined}
+          >
+            一键确认高置信匹配({eligible.length} 行 ≥ {(threshold! * 100).toFixed(0)}%)
+          </button>
+        </div>
+      ) : null}
+
+      {bulkOpen ? (
+        <div className="banner soft" style={{ margin: "0 16px 10px" }} data-testid="bulk-confirm-card">
+          {bulkResult ? (
+            <div>
+              <b>批量确认完成</b>:已确认 {bulkResult.confirmed} 行
+              {bulkResult.skipped.length > 0 ? (
+                <>
+                  ,跳过 {bulkResult.skipped.length} 行:
+                  <ul className="small" style={{ margin: "4px 0 0 18px" }}>
+                    {bulkResult.skipped.slice(0, 10).map((s) => (
+                      <li key={s.lineId}>
+                        {s.lineNo !== null ? `第 ${s.lineNo} 行` : s.lineId}:{s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              <div style={{ marginTop: 6 }}>
+                <button className="btn xs" onClick={() => setBulkOpen(false)}>
+                  关闭
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <b>确认卡片</b>:即将批量确认以下 <b>{eligible.filter((l) => bulkChecked[l.id]).length}</b> 行
+              (首选候选置信度 ≥ 阈值 <b>{(threshold! * 100).toFixed(0)}%</b>,相似度来源已排除)。
+              可逐条取消勾选;每行写入独立人工决定 + 一条批量审计。
+              <div style={{ maxHeight: 220, overflow: "auto", margin: "6px 0" }}>
+                {eligible.map((l) => (
+                  <label key={l.id} className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={bulkChecked[l.id] ?? false}
+                      onChange={(e) => setBulkChecked((prev) => ({ ...prev, [l.id]: e.target.checked }))}
+                      data-testid={`bulk-line-${l.lineNo}`}
+                    />
+                    第 {l.lineNo} 行 · {l.refDes ?? "-"} · {l.candidates[0]?.mpn}(
+                    {(l.candidates[0]?.confidence * 100).toFixed(0)}% · {SOURCE_LABEL[l.candidates[0]?.source] ?? l.candidates[0]?.source})
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn primary"
+                  disabled={bulkBusy || eligible.filter((l) => bulkChecked[l.id]).length === 0}
+                  onClick={() => void submitBulk()}
+                  data-testid="bulk-confirm-submit"
+                >
+                  {bulkBusy ? "确认中…" : `确认 ${eligible.filter((l) => bulkChecked[l.id]).length} 行`}
+                </button>
+                <button className="btn" onClick={() => setBulkOpen(false)}>
+                  取消
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <div className="tbl-scroll">
         <table className="tbl">
           <thead>
@@ -119,7 +297,7 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
             </tr>
           </thead>
           <tbody>
-            {lines.map((l) => (
+            {visible.map((l) => (
               <tr
                 key={l.id}
                 className={l.flags.eol || l.flags.dupRefDes ? "row-danger" : undefined}
@@ -156,7 +334,25 @@ export function MatchReview({ lines }: { lines: ReviewLine[] }) {
                     {l.flags.dupRefDes ? <Badge tone="red">位号重复</Badge> : null}
                     {l.flags.eol ? <Badge tone="red">EOL</Badge> : null}
                     {l.flags.footprintMismatch ? <Badge tone="amber">封装不一致</Badge> : null}
+                    {l.candidates.length >= 2 ? (
+                      <Badge tone="blue">{l.candidates.length} 候选</Badge>
+                    ) : null}
+                    {(l.alternateCount ?? 0) > 0 ? (
+                      <Badge tone="gray">有 {l.alternateCount} 个替代</Badge>
+                    ) : null}
                   </div>
+                  {l.inventory !== undefined ? (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      库存{" "}
+                      {l.inventory ? (
+                        <>
+                          {l.inventory.qty}(快照 {l.inventory.fetchedAt})
+                        </>
+                      ) : (
+                        "待接入(无 ERP 快照,不按 0 计)"
+                      )}
+                    </div>
+                  ) : null}
                 </td>
                 <td>
                   {l.candidates.length === 0 ? (

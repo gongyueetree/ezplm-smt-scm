@@ -57,7 +57,7 @@ export async function GET(req: Request) {
         hits: rows.slice(0, PER_TYPE).map((b) => ({
           title: b.name,
           subtitle: b.purpose === "PRODUCTION" ? "正式 BOM" : "预 BOM",
-          href: b.versions[0] ? `/bom/version/${b.versions[0].id}` : "/bom",
+          href: `/bom/${b.id}`, // F7:统一落到 BOM 详情页
         })),
         truncated: rows.length > PER_TYPE,
       };

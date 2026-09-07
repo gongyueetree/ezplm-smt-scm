@@ -323,6 +323,9 @@ export default async function BomListPage({
                       <td>
                         {b.latestVersionId ? (
                           <div style={{ display: "flex", gap: 6 }}>
+                            <Link className="btn sm" href={`/bom/${b.bomId}`} data-testid={`bom-detail-link-${b.bomId}`}>
+                              详情
+                            </Link>
                             <Link className="btn sm" href={`/bom/version/${b.latestVersionId}`}>
                               匹配确认
                             </Link>
