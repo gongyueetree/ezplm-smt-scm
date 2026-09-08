@@ -134,6 +134,9 @@ export const PURGE_MODELS = [
   // ---- 其它测试期产物 ----
   "EmailDraft",
   "SupplierOnboardInvite",
+  // R3-3:门户激活邀请是一次性凭据(hash+过期),清库必清;
+  // INVITED 账号(KEEP)清后可由管理员「重新邀请」
+  "PortalInvite",
   "ScrapRecord",
   "ApiUsageLog",
   "ExternalPartSnapshot", // 三方数据缓存,清掉会重新拉,不是主数据

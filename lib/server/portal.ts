@@ -55,7 +55,8 @@ export async function requirePortalSession(): Promise<PortalAuth> {
   }
   // 账号仍需在启用状态(邀请可被停用)
   const account = await prisma.portalAccount.findFirst({
-    where: tenantWhere(session.tenantId, { id: session.portalAccountId, active: true }),
+    // R3-3:status 为真源;DISABLED 即时截断在途会话
+    where: tenantWhere(session.tenantId, { id: session.portalAccountId, status: "ACTIVE" as const }),
     select: { id: true },
   });
   if (!account) {
