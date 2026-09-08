@@ -31,6 +31,9 @@ test("状态页:未配置 ERP 时如实显示 NOT_CONFIGURED,不显示 0 条成�
   await expect(table.getByTestId("dataset-EXCESS")).toContainText("ERP 未配置");
   // FX 行的占位纪律在配置后才显示;未配置时与其它实体一致
   await expect(table.getByTestId("dataset-FX_RATE")).toContainText("ERP 未配置");
+
+  // R3-6:目标 NONE 时不渲染 Lab 数据集卡(也不向 Lab 发任何请求)
+  await expect(page.getByTestId("lab-dataset-summary")).toHaveCount(0);
 });
 
 test("状态页 API 越权:工程角色 → 403;采购/管理层可读", async ({ page }) => {
