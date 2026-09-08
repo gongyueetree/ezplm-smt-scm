@@ -98,6 +98,12 @@ export function createSkeletonProvider(
     async pullSalesOrders() {
       return nope("pullSalesOrders");
     },
+    async pullInventoryMovements() {
+      return nope("pullInventoryMovements");
+    },
+    async pullInventoryLots() {
+      return nope("pullInventoryLots");
+    },
     async receivePurchaseOrder() {
       return nope("receivePurchaseOrder");
     },

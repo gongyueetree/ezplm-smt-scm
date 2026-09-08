@@ -193,6 +193,35 @@ export const LabSalesOrderSchema = z.object({
 });
 export type LabSalesOrder = z.infer<typeof LabSalesOrderSchema>;
 
+/** R3-7:库存异动 / 批次(门户 Transactions/Lots 数据源) */
+export const LabInventoryMovementSchema = z.object({
+  externalId: z.string(),
+  materialCode: z.string(),
+  movementType: z.enum(["IN", "OUT", "TRANSFER", "ADJUST"]),
+  qty: DecimalStringSchema,
+  warehouseCode: z.string().optional(),
+  lotNo: z.string().optional(),
+  customerCode: z.string().optional(),
+  refDocType: z.string().optional(),
+  refDocNo: z.string().optional(),
+  occurredAt: z.string(),
+});
+export type LabInventoryMovement = z.infer<typeof LabInventoryMovementSchema>;
+
+export const LabInventoryLotSchema = z.object({
+  externalId: z.string(),
+  lotNo: z.string(),
+  materialCode: z.string(),
+  qty: DecimalStringSchema,
+  warehouseCode: z.string().optional(),
+  customerCode: z.string().optional(),
+  supplierCode: z.string().optional(),
+  receivedAt: z.string().optional(),
+  expiresAt: z.string().optional(),
+  status: z.enum(["AVAILABLE", "HOLD", "CONSUMED"]).optional(),
+});
+export type LabInventoryLot = z.infer<typeof LabInventoryLotSchema>;
+
 /** Lab `/api/erp` 的 RPC 操作名 —— 与 `api/erp.ts` 的 switch 分支逐字一致 */
 export const LAB_OPERATIONS = [
   "testConnection",
@@ -205,6 +234,8 @@ export const LAB_OPERATIONS = [
   "pullOpenPurchaseOrders",
   "pullWorkOrders",
   "pullSalesOrders",
+  "pullInventoryMovements",
+  "pullInventoryLots",
   "createPurchaseOrder",
   "updateEta",
   "receivePurchaseOrder",

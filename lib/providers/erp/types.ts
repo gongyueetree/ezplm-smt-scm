@@ -117,6 +117,36 @@ export const ErpSalesOrderRecordSchema = z.object({
 });
 export type ErpSalesOrderRecord = z.infer<typeof ErpSalesOrderRecordSchema>;
 
+/** R3-7:库存异动(门户 Transactions 数据源;对齐 Lab ErpInventoryMovement) */
+export const ErpInventoryMovementSchema = z.object({
+  externalId: z.string(),
+  materialCode: z.string(),
+  movementType: z.enum(["IN", "OUT", "TRANSFER", "ADJUST"]),
+  qty: z.string(),
+  warehouseCode: z.string().nullable().default(null),
+  lotNo: z.string().nullable().default(null),
+  customerCode: z.string().nullable().default(null),
+  refDocType: z.string().nullable().default(null),
+  refDocNo: z.string().nullable().default(null),
+  occurredAt: z.string(),
+});
+export type ErpInventoryMovement = z.infer<typeof ErpInventoryMovementSchema>;
+
+/** R3-7:库存批次(门户 Lots 数据源;对齐 Lab ErpInventoryLot) */
+export const ErpInventoryLotSchema = z.object({
+  externalId: z.string(),
+  lotNo: z.string(),
+  materialCode: z.string(),
+  qty: z.string(),
+  warehouseCode: z.string().nullable().default(null),
+  customerCode: z.string().nullable().default(null),
+  supplierCode: z.string().nullable().default(null),
+  receivedAt: z.string().nullable().default(null),
+  expiresAt: z.string().nullable().default(null),
+  status: z.string().nullable().default(null),
+});
+export type ErpInventoryLot = z.infer<typeof ErpInventoryLotSchema>;
+
 /** F4:ERP 侧客户档案(对齐 Lab ErpCustomer) */
 export const ErpCustomerRecordSchema = z.object({
   externalId: z.string(),
@@ -365,6 +395,9 @@ export interface ErpProvider {
   updateEta(config: ErpConnectionConfig, input: ErpEtaUpdateInput): Promise<ErpWriteResult>;
   /** F2:销售订单(客户需求侧;LAB-1 扩展,未联调厂商抛 NotImplemented) */
   pullSalesOrders(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpSalesOrderRecord>>;
+  /** R3-7:门户 Transactions/Lots 数据源(金蝶 NOT_IMPLEMENTED,Lab 供测试数据) */
+  pullInventoryMovements(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpInventoryMovement>>;
+  pullInventoryLots(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpInventoryLot>>;
   /** closed-loop:收货(幂等键纪律与 createPurchaseOrder 相同) */
   receivePurchaseOrder(
     config: ErpConnectionConfig,

@@ -270,6 +270,19 @@ export class MockErpProvider implements ErpProvider {
     );
   }
 
+  async pullInventoryMovements() {
+    return page([
+      { externalId: "MV-0001", materialCode: "EZ-DEMO-001", movementType: "IN" as const, qty: "100", warehouseCode: "SZ-RM", lotNo: "L-DEMO-1", customerCode: "CUST-LC", refDocType: "RECEIPT", refDocNo: "RCV-DEMO-1(示例)", occurredAt: "2026-08-01T00:00:00.000Z" },
+      { externalId: "MV-0002", materialCode: "EZ-DEMO-001", movementType: "OUT" as const, qty: "40", warehouseCode: "SZ-RM", lotNo: "L-DEMO-1", customerCode: "CUST-LC", refDocType: "WORK_ORDER", refDocNo: "WO-DEMO-1(示例)", occurredAt: "2026-08-10T00:00:00.000Z" },
+    ]);
+  }
+
+  async pullInventoryLots() {
+    return page([
+      { externalId: "LOT-0001", lotNo: "L-DEMO-1", materialCode: "EZ-DEMO-001", qty: "60", warehouseCode: "SZ-RM", customerCode: "CUST-LC", supplierCode: "SUP-DEMO", receivedAt: "2026-08-01", expiresAt: "2028-08-01", status: "AVAILABLE" },
+    ]);
+  }
+
   async pullSalesOrders() {
     return page([
       {

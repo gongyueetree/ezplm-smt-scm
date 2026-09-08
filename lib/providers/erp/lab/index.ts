@@ -34,6 +34,8 @@ import {
   type ErpProvider,
   type ErpPushResult,
   type ErpReceiveInputMain,
+  type ErpInventoryLot,
+  type ErpInventoryMovement,
   type ErpSalesOrderRecord,
   type ErpSupplierRecord,
   type ErpWorkOrder,
@@ -43,6 +45,8 @@ import {
   labPageSchema,
   LabConnectionResultSchema,
   LabCustomerSchema,
+  LabInventoryLotSchema,
+  LabInventoryMovementSchema,
   LabSalesOrderSchema,
   LabWorkOrderSchema,
   LabEnvelopeSchema,
@@ -350,6 +354,39 @@ export class HttpErpLabProvider implements ErpProvider {
           requestedDate: opt(l.requestedDate),
         })),
       }));
+  }
+
+  // R3-7:门户 Transactions/Lots 数据源
+  async pullInventoryMovements(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null; customerCode?: string | null; materialCode?: string | null; warehouseCode?: string | null }): Promise<ErpPage<ErpInventoryMovement>> {
+    const p = await this.rpc("pullInventoryMovements", labPageSchema(LabInventoryMovementSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (m) => ({
+      externalId: m.externalId,
+      materialCode: m.materialCode,
+      movementType: m.movementType,
+      qty: m.qty,
+      warehouseCode: opt(m.warehouseCode),
+      lotNo: opt(m.lotNo),
+      customerCode: opt(m.customerCode),
+      refDocType: opt(m.refDocType),
+      refDocNo: opt(m.refDocNo),
+      occurredAt: m.occurredAt,
+    }));
+  }
+
+  async pullInventoryLots(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null; customerCode?: string | null; materialCode?: string | null; warehouseCode?: string | null }): Promise<ErpPage<ErpInventoryLot>> {
+    const p = await this.rpc("pullInventoryLots", labPageSchema(LabInventoryLotSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (l) => ({
+      externalId: l.externalId,
+      lotNo: l.lotNo,
+      materialCode: l.materialCode,
+      qty: l.qty,
+      warehouseCode: opt(l.warehouseCode),
+      customerCode: opt(l.customerCode),
+      supplierCode: opt(l.supplierCode),
+      receivedAt: opt(l.receivedAt),
+      expiresAt: opt(l.expiresAt),
+      status: opt(l.status),
+    }));
   }
 
   async pushPurchaseOrders(): Promise<ErpPushResult> {
