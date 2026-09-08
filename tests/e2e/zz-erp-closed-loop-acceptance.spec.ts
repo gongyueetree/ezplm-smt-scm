@@ -135,6 +135,17 @@ test("〔2〕影响分析经主应用消费 Lab 数据(各源 state=ok)", async 
   expect(impact.openPo.state).toBe("ok");
   expect(impact.workOrders.state).toBe("ok");
   expect(impact.salesOrders.state).toBe("ok");
+  // R3-5:coverage 口径 —— 工单/销售订单只有单据头,必须标 HEADER_ONLY
+  expect(impact.oldInventory.coverage).toBe("FULL");
+  expect(impact.workOrders.coverage).toBe("HEADER_ONLY");
+
+  // R3-6:集成状态页展示 Lab 数据集就绪度(名/版本/行数,真实取自 Lab)
+  await page.goto("/settings/integrations/status");
+  const summary = page.getByTestId("lab-dataset-summary");
+  await expect(summary).toBeVisible();
+  await expect(summary).toHaveAttribute("data-state", "ok");
+  await expect(summary).toContainText(LAB_TENANT);
+  await expect(page.getByTestId("lab-dataset-counts")).toContainText("物料");
 });
 
 test("〔3〕PO 直写:SYNCED 取回 SIM 单号;重复回写幂等;correlationId 两边对齐", async ({ page }) => {

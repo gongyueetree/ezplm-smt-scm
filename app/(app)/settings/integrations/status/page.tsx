@@ -3,8 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import { SYNC_STATE_LABEL, type IntegrationSyncState } from "@/lib/domain/integration-sync";
+import { fetchLabDatasetSummary } from "@/lib/providers/erp/lab/dataset";
 import { listSyncStatus } from "@/lib/server/repositories/integration-sync";
 import { getSession } from "@/lib/server/session";
+import { getTenantSettings } from "@/lib/server/tenant-settings";
 import { RetryButton } from "./retry-button";
 import { RunWorkerButton } from "./run-worker";
 
@@ -51,6 +53,14 @@ function stateTone(state: string): "green" | "amber" | "red" | "gray" {
 export default async function IntegrationStatusPage() {
   const session = (await getSession())!;
   const { target, records, datasets } = await listSyncStatus(session);
+  // R3-6:目标是 Lab 时展示数据集就绪度(名/版本/种子时间/行数)——
+  // 客户脱敏快照导到 Lab 后,主仓在这里可观测;NONE/金蝶不发这次请求
+  const labSummary =
+    target.kind === "ERP_LAB"
+      ? await fetchLabDatasetSummary(
+          (await getTenantSettings(session.tenantId)).settings.erpLabTenantId,
+        )
+      : null;
 
   return (
     <div>
@@ -91,6 +101,47 @@ export default async function IntegrationStatusPage() {
           )}
         </span>
       </Banner>
+
+      {labSummary ? (
+        <Card
+          title="Lab 数据集就绪度(R3-6 · 仿真环境)"
+          sub="客户脱敏快照在 Lab 界面导入;此处只读展示当前数据集现状 —— 不是金蝶"
+        >
+          <div data-testid="lab-dataset-summary" data-state={labSummary.state}>
+            {labSummary.state !== "ok" ? (
+              <p className="small muted">{labSummary.note}</p>
+            ) : (
+              <>
+                <p className="small">
+                  数据集 <b>{labSummary.dataset!.datasetName}</b>(租户 {labSummary.dataset!.tenantId})
+                  · 版本 v{labSummary.dataset!.version} · 种子时间{" "}
+                  {labSummary.dataset!.seededAt.slice(0, 19).replace("T", " ")} · 场景{" "}
+                  <Badge tone={labSummary.dataset!.scenario === "NORMAL" ? "green" : "amber"}>
+                    {labSummary.dataset!.scenario}
+                  </Badge>
+                  {labSummary.health ? (
+                    <span className="muted"> · 健康 {labSummary.health.ok ? "正常" : "异常"}
+                      {labSummary.health.latencyMs != null ? `(${labSummary.health.latencyMs}ms)` : ""}
+                      {labSummary.health.version ? ` · Lab ${labSummary.health.version}` : ""}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="small" data-testid="lab-dataset-counts">
+                  {Object.entries(labSummary.dataset!.counts)
+                    .map(([k, v]) => `${k} ${v}`)
+                    .join(" · ")}
+                  {" · "}映射档案 {labSummary.dataset!.mappingProfiles}
+                </p>
+                <p className="small muted">
+                  快照上传/场景注入/导入对账报告(含断裂引用)在 Lab 界面操作与呈现
+                  {labSummary.labUrl ? <>:<code>{labSummary.labUrl}</code></> : null};
+                  导入报告未持久化,本页不复述。
+                </p>
+              </>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       <Card title="数据集实体(读取方向)">
         <table className="tbl" data-testid="dataset-status-table">
