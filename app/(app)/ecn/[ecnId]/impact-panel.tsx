@@ -9,12 +9,24 @@ import { useEffect, useState } from "react";
 import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 
+type SourceCoverage = "FULL" | "PARTIAL" | "HEADER_ONLY" | "UNAVAILABLE";
+
 interface SourceResult<T> {
   state: "ok" | "not_configured" | "error";
+  /** R3-5:口径标注 —— HEADER_ONLY 的数字不是受影响面 */
+  coverage: SourceCoverage;
+  warning: string | null;
   note: string | null;
   fetchedAt: string | null;
   items: T[];
 }
+
+const COVERAGE_LABEL: Record<SourceCoverage, { text: string; tone: "green" | "amber" | "gray" }> = {
+  FULL: { text: "精确匹配", tone: "green" },
+  PARTIAL: { text: "部分覆盖", tone: "amber" },
+  HEADER_ONLY: { text: "仅单据头 · 全量口径", tone: "amber" },
+  UNAVAILABLE: { text: "无数据源", tone: "gray" },
+};
 
 interface Impact {
   erpTarget: string;
@@ -38,9 +50,29 @@ function SourceCard({
   render: (items: unknown[]) => React.ReactNode;
   testid: string;
 }) {
+  const cov = COVERAGE_LABEL[source.coverage] ?? COVERAGE_LABEL.FULL;
   return (
     <Card title={title} sub={source.fetchedAt ? `取数时间 ${source.fetchedAt.slice(0, 16).replace("T", " ")}` : undefined}>
-      <div data-testid={testid} data-state={source.state}>
+      <div data-testid={testid} data-state={source.state} data-coverage={source.coverage}>
+        <span
+          className="badge"
+          style={{
+            fontSize: 11,
+            marginBottom: 6,
+            display: "inline-block",
+            color: cov.tone === "green" ? "#00890b" : cov.tone === "amber" ? "#a15c00" : "#888",
+            border: "1px solid currentColor",
+            borderRadius: 6,
+            padding: "1px 6px",
+          }}
+        >
+          {cov.text}
+        </span>
+        {source.warning ? (
+          <p className="small" style={{ color: "#a15c00" }} data-testid={`${testid}-warning`}>
+            {source.warning}
+          </p>
+        ) : null}
         {source.state === "not_configured" ? (
           <p className="small muted">数据源待接入:{source.note}</p>
         ) : source.state === "error" ? (

@@ -6,7 +6,8 @@ import { Banner } from "@/components/ui/banner";
 import { Card } from "@/components/ui/card";
 import {
   canDecideStage,
-  currentStage,
+  currentStageInList,
+  parseWorkflowSnapshot,
   ECN_PRIORITY_LABEL,
   ECN_STAGE_LABEL,
   ECN_STATUS_LABEL,
@@ -51,14 +52,16 @@ export default async function EcnDetailPage({ params }: { params: Promise<{ ecnI
   });
   if (!ecn) notFound();
 
-  const cfg = await stageConfig(session.tenantId);
+  // R3-5:详情页与审批同口径 —— 在途单看提交时冻结的快照,快照缺失才回落实时配置
+  const frozen = parseWorkflowSnapshot(ecn.workflowSnapshot);
+  const stages = frozen?.stages ?? (await stageConfig(session.tenantId));
   const status = ecn.status as EcnStatusValue;
   const approvedStages = new Set<EcnStageValue>(
     ecn.approvals
       .filter((a) => a.decision === "APPROVED" && ecn.submittedAt && a.decidedAt >= ecn.submittedAt)
       .map((a) => a.stage as EcnStageValue),
   );
-  const stage = status === "REVIEW" ? currentStage(cfg, approvedStages) : null;
+  const stage = status === "REVIEW" ? currentStageInList(stages, approvedStages) : null;
   const canDecide = stage ? canDecideStage(stage, session.roles) : false;
 
   const customer = ecn.customerId

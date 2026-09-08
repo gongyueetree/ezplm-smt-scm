@@ -3223,6 +3223,9 @@ model Ecn {
   customerId  String?
   productName String?
   reason      String?
+  /// R3-5:提交评审时冻结的审批链 {stages, frozenAt} ——
+  /// 评审中改租户配置不影响在途单;退回重提时重新冻结
+  workflowSnapshot Json?
   /// 生效策略由**人工选择**;AI 推荐只是建议卡,不写入
   effectiveStrategy EcnEffectiveStrategy?
   effectiveAt       DateTime?

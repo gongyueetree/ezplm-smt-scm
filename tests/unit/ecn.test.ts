@@ -4,6 +4,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEcnCode,
+  currentStageInList,
+  parseWorkflowSnapshot,
+  resolveApprovalStages,
   canApplyToBom,
   canDecideStage,
   canReject,
@@ -102,5 +105,51 @@ describe("变更行 CSV 导入", () => {
 describe("编号", () => {
   it("ECN-YYYYMMDD-序号", () => {
     expect(buildEcnCode(new Date("2026-09-07T10:00:00Z"), 7)).toBe("ECN-20260907-007");
+  });
+});
+
+// ============================================================
+// R3-5:审批链冻结(P1-1)
+// ============================================================
+
+describe("resolveApprovalStages(显式有序列表优先,否则布尔启停推导)", () => {
+  it("显式列表优先;null/空回落 legacy", () => {
+    expect(resolveApprovalStages(["PROCUREMENT", "MANAGEMENT"], { engineering: true, procurement: true }))
+      .toEqual(["PROCUREMENT", "MANAGEMENT"]);
+    expect(resolveApprovalStages(null, { engineering: false, procurement: true }))
+      .toEqual(["PROCUREMENT", "MANAGEMENT"]);
+    expect(resolveApprovalStages([], { engineering: false, procurement: false }))
+      .toEqual(["MANAGEMENT"]);
+  });
+});
+
+describe("parseWorkflowSnapshot(形状不对返回 null,调用方回落并标注)", () => {
+  it("合法快照解析成功", () => {
+    const r = parseWorkflowSnapshot({ stages: ["ENGINEERING", "MANAGEMENT"], frozenAt: "2026-09-08T00:00:00Z" });
+    expect(r).toEqual({ stages: ["ENGINEERING", "MANAGEMENT"], frozenAt: "2026-09-08T00:00:00Z" });
+  });
+
+  it("null/空数组/未知阶段/MANAGEMENT 不收尾 → null", () => {
+    expect(parseWorkflowSnapshot(null)).toBeNull();
+    expect(parseWorkflowSnapshot({ stages: [] })).toBeNull();
+    expect(parseWorkflowSnapshot({ stages: ["QUALITY", "MANAGEMENT"] })).toBeNull();
+    expect(parseWorkflowSnapshot({ stages: ["MANAGEMENT", "ENGINEERING"] })).toBeNull();
+  });
+});
+
+describe("currentStageInList(冻结链推进 —— 评审中改配置不影响在途单)", () => {
+  it("按冻结顺序推进;全过返回 null", () => {
+    const stages = ["ENGINEERING", "PROCUREMENT", "MANAGEMENT"] as const;
+    expect(currentStageInList(stages, new Set())).toBe("ENGINEERING");
+    expect(currentStageInList(stages, new Set(["ENGINEERING"]))).toBe("PROCUREMENT");
+    expect(currentStageInList(stages, new Set(["ENGINEERING", "PROCUREMENT", "MANAGEMENT"]))).toBeNull();
+  });
+
+  it("冻结链与实时配置解耦:配置怎么改,快照序列不变(回归 P1-1)", () => {
+    // 快照 = 提交时的三段;之后配置把采购关了 —— 在途单仍然要过采购
+    const frozen = parseWorkflowSnapshot({ stages: ["ENGINEERING", "PROCUREMENT", "MANAGEMENT"], frozenAt: "" })!;
+    const liveAfterChange = resolveApprovalStages(null, { engineering: true, procurement: false });
+    expect(liveAfterChange).toEqual(["ENGINEERING", "MANAGEMENT"]); // 实时链已变
+    expect(currentStageInList(frozen.stages, new Set(["ENGINEERING"]))).toBe("PROCUREMENT"); // 在途单不受影响
   });
 });

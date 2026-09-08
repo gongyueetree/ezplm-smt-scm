@@ -56,6 +56,19 @@ export const TenantSettingsSchema = z.object({
       procurement: z.boolean().default(true),
     })
     .default(() => ({ engineering: true, procurement: true })),
+  /**
+   * R3-5:ECN 审批链升级为**有序阶段列表**(为将来 QUALITY 等新阶段留配置位,
+   * 角色枚举不动)。null = 未显式配置,回落上面的布尔启停(向后兼容)。
+   * 校验兜底:非空、去重、MANAGEMENT 必须收尾 —— 不合法整键回落默认并进 invalidKeys。
+   */
+  ecnApprovalStages: z
+    .array(z.enum(["ENGINEERING", "PROCUREMENT", "MANAGEMENT"]))
+    .min(1)
+    .max(6)
+    .refine((v) => v[v.length - 1] === "MANAGEMENT", "MANAGEMENT 批准阶段必须收尾且不可关闭")
+    .refine((v) => new Set(v).size === v.length, "阶段不可重复")
+    .nullable()
+    .default(null),
   matchConfidenceThreshold: z.number().min(0.5).max(1).default(0.9),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;

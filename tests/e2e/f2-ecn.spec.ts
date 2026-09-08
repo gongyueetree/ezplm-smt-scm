@@ -7,6 +7,10 @@ import { expect, test, type Page } from "@playwright/test";
  */
 const PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
 
+// T2/R3-5 多个用例开关租户配置(featureFlags / ecnApprovalStages)——
+// fullyParallel 下同文件也会并行,必须串行避免互踩(与 f6 同纪律)
+test.describe.configure({ mode: "serial" });
+
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel("邮箱").fill(email);
@@ -165,4 +169,108 @@ test("越权:供应商角色无 ECN 入口;创建接口拒绝采购", async ({ p
     data: { title: "采购不能发起", type: "OTHER", priority: "LOW" },
   });
   expect(res.status()).toBe(403);
+});
+
+// ============================================================
+// R3-5:审批链冻结 + Impact coverage
+// ============================================================
+
+async function addLineAndSubmit(page: Page, ecnId: string, stamp: number) {
+  const lines = await page.request.post(`/api/ecn/${ecnId}/lines`, {
+    data: {
+      csvText: `旧内部料号,旧MPN,新内部料号,新MPN,数量影响,原因,工程备注\n,R35-OLD-${stamp},,R35-NEW-${stamp},,冻结回归,`,
+    },
+  });
+  expect(lines.status()).toBe(200);
+  const submit = await page.request.post(`/api/ecn/${ecnId}/transition`, { data: { action: "submit" } });
+  expect(submit.status()).toBe(200);
+}
+
+test("R3-5 冻结:提交后改审批链配置,在途单仍走提交时的链;新单走新链", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await login(page, "engineering@demo.qianchuang.cn");
+  const stamp = Date.now();
+  const inflightId = await createEcnViaApi(page, `R35 冻结在途 ${stamp}`);
+  await addLineAndSubmit(page, inflightId, stamp);
+
+  // 管理层把采购段从审批链里拿掉(显式有序列表)
+  const mgmtCtx = await browser.newContext();
+  const mgmt = await mgmtCtx.newPage();
+  await login(mgmt, "management@demo.qianchuang.cn");
+  const current = await (await mgmt.request.get("/api/settings/tenant")).json();
+  const put = await mgmt.request.put("/api/settings/tenant", {
+    data: { ...current.settings, ecnApprovalStages: ["ENGINEERING", "MANAGEMENT"] },
+  });
+  expect(put.status()).toBe(200);
+
+  try {
+    // 工程通过在途单第一段
+    const eng = await page.request.post(`/api/ecn/${inflightId}/transition`, { data: { action: "approve" } });
+    expect(eng.status()).toBe(200);
+
+    // 冻结回归核心:在途单下一段仍是**采购**(提交时链)。
+    // 探针用工程账号(MANAGEMENT 设计上兼批一切阶段,探不出链)——
+    // 报错文本点名当前阶段:冻结链下必须是 PROCUREMENT,若误用实时链会是 MANAGEMENT
+    const engTry = await page.request.post(`/api/ecn/${inflightId}/transition`, { data: { action: "approve" } });
+    expect(engTry.status()).toBe(422);
+    expect(((await engTry.json()) as { error: string }).error).toContain("PROCUREMENT");
+
+    // 采购把冻结链走完
+    const procCtx = await browser.newContext();
+    const proc = await procCtx.newPage();
+    await login(proc, "procurement@demo.qianchuang.cn");
+    const procOk = await proc.request.post(`/api/ecn/${inflightId}/transition`, { data: { action: "approve" } });
+    expect(procOk.status()).toBe(200);
+    await procCtx.close();
+    const mgmtOk = await mgmt.request.post(`/api/ecn/${inflightId}/transition`, { data: { action: "approve" } });
+    expect(mgmtOk.status()).toBe(200);
+
+    // 配置变更后提交的**新单**:走新链(工程→管理,采购不再出现)
+    const freshId = await createEcnViaApi(page, `R35 新链 ${stamp}`);
+    await addLineAndSubmit(page, freshId, stamp + 1);
+    const engOk = await page.request.post(`/api/ecn/${freshId}/transition`, { data: { action: "approve" } });
+    expect(engOk.status()).toBe(200);
+    // 新链探针:工程再试 → 点名 MANAGEMENT(采购段确实不在新链里)
+    const engTry2 = await page.request.post(`/api/ecn/${freshId}/transition`, { data: { action: "approve" } });
+    expect(engTry2.status()).toBe(422);
+    expect(((await engTry2.json()) as { error: string }).error).toContain("MANAGEMENT");
+    const mgmtFinal = await mgmt.request.post(`/api/ecn/${freshId}/transition`, { data: { action: "approve" } });
+    expect(mgmtFinal.status()).toBe(200);
+    expect(((await mgmtFinal.json()) as { status: string }).status).toMatch(/APPROVED|CUSTOMER_CONFIRM/);
+  } finally {
+    // 显式归零而不是回放捕获值 —— 捕获值可能已被上一轮失败运行污染(R3-3 教训)
+    await mgmt.request.put("/api/settings/tenant", {
+      data: { ...current.settings, ecnApprovalStages: null },
+    });
+    await mgmtCtx.close();
+  }
+});
+
+test("R3-5 coverage:工单/销售订单卡标 HEADER_ONLY 并给口径警示;库存卡 FULL", async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, "management@demo.qianchuang.cn");
+  const ecnId = await createEcnViaApi(page, `R35 coverage ${Date.now()}`);
+
+  const current = await (await page.request.get("/api/settings/tenant")).json();
+  await page.request.put("/api/settings/tenant", {
+    data: {
+      ...current.settings,
+      featureFlags: { ...current.settings.featureFlags, "ecn.impactAnalysis": true },
+    },
+  });
+  try {
+    const impact = await (await page.request.get(`/api/ecn/${ecnId}/impact`)).json();
+    expect(impact.oldInventory.coverage).toBe("FULL");
+    expect(impact.workOrders.coverage).toBe("HEADER_ONLY");
+    expect(impact.workOrders.warning).toContain("不可直接作决策依据");
+    expect(impact.salesOrders.coverage).toBe("HEADER_ONLY");
+
+    await page.goto(`/ecn/${ecnId}`);
+    await expect(page.getByTestId("ecn-impact-panel")).toBeVisible();
+    await expect(page.getByTestId("impact-work-orders")).toHaveAttribute("data-coverage", "HEADER_ONLY");
+    await expect(page.getByTestId("impact-work-orders-warning")).toContainText("不可直接作决策依据");
+    await expect(page.getByTestId("impact-old-inventory")).toHaveAttribute("data-coverage", "FULL");
+  } finally {
+    await page.request.put("/api/settings/tenant", { data: current.settings });
+  }
 });
