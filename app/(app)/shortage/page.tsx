@@ -32,7 +32,15 @@ export default async function ShortagePage({
     where: tenantWhere(session.tenantId),
     orderBy: [{ status: "asc" }, { requiredDate: "asc" }],
     take: 300,
-    include: { _count: { select: { callRecords: true } } },
+    include: {
+      _count: { select: { callRecords: true } },
+      // R3-4:最新一条 Call 料记录(生成确认链接 + 展示供应商回复)
+      callRecords: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { id: true, replyCanSupply: true, replyQty: true, replyEta: true, replyAt: true },
+      },
+    },
   });
   const [sheetCustomers, sheetSuppliers] = await Promise.all([
     prisma.customer.findMany({ where: tenantWhere(session.tenantId), select: { id: true, name: true } }),
@@ -56,6 +64,14 @@ export default async function ShortagePage({
     requiredDate: l.requiredDate ? formatDate(l.requiredDate, "—") : null,
     status: l.status as ShortageStatus,
     draftCount: l._count.callRecords,
+    latestCallRecordId: l.callRecords[0]?.id ?? null,
+    callReply: l.callRecords[0]?.replyAt
+      ? {
+          canSupply: l.callRecords[0].replyCanSupply === true,
+          qty: l.callRecords[0].replyQty?.toString() ?? null,
+          eta: l.callRecords[0].replyEta ? formatDate(l.callRecords[0].replyEta, "—") : null,
+        }
+      : null,
   }));
   const canCall = session.roles.some((r) => r === "PROCUREMENT" || r === "MANAGEMENT");
 

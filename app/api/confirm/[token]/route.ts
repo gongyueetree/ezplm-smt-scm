@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import {
+  CallMaterialResponseSchema,
   OpoEtaResponseSchema,
   PoConfirmResponseSchema,
+  RfqQuoteResponseSchema,
 } from "@/lib/domain/supplier-action";
 import { clientIp, rateLimitConsume } from "@/lib/server/rate-limit";
-import { respondOpoEta, respondPoConfirm } from "@/lib/server/repositories/supplier-action";
+import {
+  respondCallMaterial,
+  respondOpoEta,
+  respondPoConfirm,
+  respondRfqQuote,
+} from "@/lib/server/repositories/supplier-action";
 
 export const runtime = "nodejs";
 
@@ -47,6 +54,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     const r = await respondOpoEta(token, parsed.data, meta);
     if (!r.ok) return NextResponse.json({ error: r.reason }, { status: STATUS[r.code] ?? 400 });
     return NextResponse.json({ ok: true, savedLines: r.savedLines });
+  }
+  if (body && body.kind === "CALL_MATERIAL") {
+    const parsed = CallMaterialResponseSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: "参数不合法" }, { status: 400 });
+    const r = await respondCallMaterial(token, parsed.data, meta);
+    if (!r.ok) return NextResponse.json({ error: r.reason }, { status: STATUS[r.code] ?? 400 });
+    return NextResponse.json({ ok: true });
+  }
+  if (body && body.kind === "RFQ_QUOTE") {
+    const parsed = RfqQuoteResponseSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: "参数不合法" }, { status: 400 });
+    const r = await respondRfqQuote(token, parsed.data, meta);
+    if (!r.ok) return NextResponse.json({ error: r.reason }, { status: STATUS[r.code] ?? 400 });
+    return NextResponse.json({ ok: true, savedLines: r.savedLines, droppedLines: r.droppedLines });
   }
   return NextResponse.json({ error: "参数不合法" }, { status: 400 });
 }

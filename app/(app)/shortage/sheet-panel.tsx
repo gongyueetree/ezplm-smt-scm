@@ -30,6 +30,10 @@ export interface SheetLineView {
   status: ShortageStatus;
   /** 已生成的邮件草稿数;>0 且未发送时界面必须说「待发送」 */
   draftCount: number;
+  /** R3-4:最新 Call 料记录 id(生成免登录确认链接用) */
+  latestCallRecordId: string | null;
+  /** R3-4:供应商经链接的回复(null=未回复;回复状态与邮件状态互不推导) */
+  callReply: { canSupply: boolean; qty: string | null; eta: string | null } | null;
 }
 
 const TONE: Record<ShortageStatus, "red" | "amber" | "blue" | "green" | "gray"> = {
@@ -54,6 +58,20 @@ export function ShortageSheetPanel({
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ lineCount: number; errors: { row: number; message: string }[]; notices: string[] } | null>(null);
+  const [callLink, setCallLink] = useState<{ lineId: string; url: string; note: string | null } | null>(null);
+
+  async function genCallLink(lineId: string, recordId: string) {
+    setBusy(`link:${recordId}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/shortage/call-records/${recordId}/link`, { method: "POST" });
+      const body = (await res.json().catch(() => null)) as { url?: string; note?: string | null; error?: string } | null;
+      if (res.ok && body?.url) setCallLink({ lineId, url: body.url, note: body.note ?? null });
+      else setError(body?.error ?? "生成失败");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function upload(mode: "PREVIEW" | "EXECUTE") {
     const f = fileRef.current?.files?.[0];
@@ -245,6 +263,29 @@ export function ShortageSheetPanel({
                         >
                           Call 料
                         </button>
+                      ) : null}
+                      {canCall && l.latestCallRecordId && !l.callReply ? (
+                        <button
+                          className="btn xs"
+                          disabled={busy !== null}
+                          onClick={() => void genCallLink(l.id, l.latestCallRecordId!)}
+                          data-testid={`call-link-${l.id}`}
+                        >
+                          确认链接
+                        </button>
+                      ) : null}
+                      {l.callReply ? (
+                        <div className="small" data-testid={`call-reply-${l.id}`}>
+                          {l.callReply.canSupply
+                            ? `供应商可供 ${l.callReply.qty ?? "?"}${l.callReply.eta ? ` · ${l.callReply.eta}` : ""}`
+                            : "供应商回复:无法供应"}
+                        </div>
+                      ) : null}
+                      {callLink?.lineId === l.id ? (
+                        <div className="small" data-testid={`call-link-out-${l.id}`}>
+                          链接(仅显示这一次):<code style={{ wordBreak: "break-all" }}>{callLink.url}</code>
+                          {callLink.note ? <div className="muted">{callLink.note}</div> : null}
+                        </div>
                       ) : null}
                     </td>
                   </tr>

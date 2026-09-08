@@ -1489,6 +1489,10 @@ model SupplierOffer {
   rohs               Boolean?
   reach              Boolean?
   currency           String
+  /// R3-4:报价有效期(审计核对出 SupplierOffer 缺 validity —— 加列,不建平行模型)
+  validUntil         DateTime?
+  /// R3-4:供应商自述备注(来自免登录报价链接;展示用,非内部备注)
+  supplierNote       String?
   sourceUpdatedAt    DateTime?
   sourceUrl          String?
   createdAt          DateTime     @default(now())
@@ -2172,6 +2176,16 @@ model CallMaterialRecord {
   failureReason     String?
   createdById       String
   createdAt         DateTime          @default(now())
+
+  // ---- R3-4:供应商经免登录链接的回复(与邮件状态互不推导)----
+  /// 能否供应(null=未回复;true/false=供应商明确表态)
+  replyCanSupply Boolean?
+  replyQty       Decimal?  @db.Decimal(18, 4)
+  replyEta       DateTime?
+  replyNote      String?
+  replyAt        DateTime?
+  /// 回复来源(LINK=免登录链接;后续或有 EMAIL/PHONE 人工代录)
+  replySource    String?
 
   @@index([tenantId, lineId])
 }
@@ -3309,8 +3323,9 @@ model EcnCustomerNotice {
 enum SupplierActionKind {
   PO_CONFIRM
   OPO_ETA
-  /// 进枚举但本轮创建接口暂拒(无落地页不生成死链)
+  /// R3-4 起可用:Call 料回复(回填 CallMaterialRecord.reply*)
   CALL_MATERIAL
+  /// R3-4 起可用:报价征集(落 SupplierOffer + PriceBreak,provider=OFFLINE)
   RFQ_QUOTE
 }
 

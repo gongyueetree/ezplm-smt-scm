@@ -123,6 +123,58 @@ export function validateOpoEta(input: OpoEtaResponse): string | null {
   return null;
 }
 
+// ---- R3-4:CALL_MATERIAL / RFQ_QUOTE 响应体 ----
+
+export const CallMaterialResponseSchema = z.object({
+  respondedByName: z.string().trim().min(1).max(80),
+  respondedByEmail: z.string().trim().email().max(160),
+  /** 能否供应:必选,不给默认 —— 沉默不是表态 */
+  canSupply: z.boolean(),
+  replyQty: z.string().regex(/^\d+(\.\d+)?$/).nullable().default(null),
+  replyEta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  replyNote: z.string().trim().max(500).nullable().default(null),
+});
+export type CallMaterialResponse = z.infer<typeof CallMaterialResponseSchema>;
+
+/** 能供 → 数量必填(光说"能供"不给量,采购没法排产);不能供 → 数量/交期无意义,说明可选 */
+export function validateCallMaterial(input: CallMaterialResponse): string | null {
+  if (input.canSupply && !input.replyQty) return "选择「可以供应」时必须填写可供数量";
+  if (input.canSupply && input.replyQty && Number(input.replyQty) <= 0) return "可供数量必须大于 0";
+  return null;
+}
+
+export const RfqQuoteLineSchema = z.object({
+  mpn: z.string().trim().min(1).max(120),
+  unitPrice: z.string().regex(/^\d+(\.\d+)?$/),
+  moq: z.string().regex(/^\d+(\.\d+)?$/).nullable().default(null),
+  spq: z.string().regex(/^\d+(\.\d+)?$/).nullable().default(null),
+  leadTimeDays: z.number().int().min(0).max(3650).nullable().default(null),
+  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  note: z.string().trim().max(500).nullable().default(null),
+});
+
+export const RfqQuoteResponseSchema = z.object({
+  respondedByName: z.string().trim().min(1).max(80),
+  respondedByEmail: z.string().trim().email().max(160),
+  /** 一次报价一个币种(与 SupplierQuote 同口径);跨币种分次报 */
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+  lines: z.array(RfqQuoteLineSchema).min(1).max(200),
+});
+export type RfqQuoteResponse = z.infer<typeof RfqQuoteResponseSchema>;
+
+/** 单价必须为正;同一 MPN 不允许重复行(重复=输入错误,不猜哪行算数) */
+export function validateRfqQuote(input: RfqQuoteResponse): string | null {
+  const bad = input.lines.find((l) => Number(l.unitPrice) <= 0);
+  if (bad) return `型号 ${bad.mpn} 的单价必须大于 0`;
+  const seen = new Set<string>();
+  for (const l of input.lines) {
+    const key = l.mpn.toUpperCase();
+    if (seen.has(key)) return `型号 ${l.mpn} 出现重复报价行,请合并后提交`;
+    seen.add(key);
+  }
+  return null;
+}
+
 /** 公开链接拼装:APP_PUBLIC_URL 缺失时返回相对路径 + 告警位 */
 export function buildConfirmUrl(rawToken: string, publicUrl: string | undefined, basePath = ""): {
   url: string;
