@@ -8,6 +8,7 @@ import { getProcurementPolicy } from "@/lib/server/repositories/procurement-poli
 import { getSession } from "@/lib/server/session";
 import { prisma } from "@/lib/server/db";
 import { tenantWhere } from "@/lib/server/tenant-scope";
+import { QuoteLinkGenerator } from "./quote-link";
 import { SourcingPanel } from "./sourcing-panel";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +95,8 @@ export default async function ProcurementRfqDetail({
           <div className="kpi-foot">流程状态以此为准</div>
         </div>
       </div>
+
+      <QuoteLinkGenerator prfqId={prfq.id} suppliers={suppliers} />
 
       <SourcingPanel
         procurementRfqId={prfq.id}

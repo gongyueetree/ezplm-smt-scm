@@ -20,6 +20,14 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
   const [decision, setDecision] = useState<"CONFIRM" | "CONFIRM_WITH_CHANGES" | "CANNOT_ACCEPT">("CONFIRM");
   const [poLines, setPoLines] = useState<Record<number, { qty: string; eta: string }>>({});
   const [etaLines, setEtaLines] = useState<Record<string, { eta: string; qty: string; note: string }>>({});
+  // R3-4:CALL_MATERIAL / RFQ_QUOTE
+  const [canSupply, setCanSupply] = useState<"yes" | "no" | "">("");
+  const [callQty, setCallQty] = useState("");
+  const [callEta, setCallEta] = useState("");
+  const [currency, setCurrency] = useState("CNY");
+  const [quoteLines, setQuoteLines] = useState<
+    Record<string, { unitPrice: string; moq: string; spq: string; leadTimeDays: string; validUntil: string; note: string }>
+  >({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,19 +52,47 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
                   confirmedEta: v.eta || null,
                 })),
             }
-          : {
-              kind: "OPO_ETA",
-              respondedByName: name,
-              respondedByEmail: email,
-              lines: Object.entries(etaLines)
-                .filter(([, v]) => v.eta || v.qty || v.note)
-                .map(([opoLineId, v]) => ({
-                  opoLineId,
-                  replyEta: v.eta || null,
-                  replyQty: v.qty || null,
-                  replyNote: v.note || null,
-                })),
-            };
+          : view.kind === "OPO_ETA"
+            ? {
+                kind: "OPO_ETA",
+                respondedByName: name,
+                respondedByEmail: email,
+                lines: Object.entries(etaLines)
+                  .filter(([, v]) => v.eta || v.qty || v.note)
+                  .map(([opoLineId, v]) => ({
+                    opoLineId,
+                    replyEta: v.eta || null,
+                    replyQty: v.qty || null,
+                    replyNote: v.note || null,
+                  })),
+              }
+            : view.kind === "CALL_MATERIAL"
+              ? {
+                  kind: "CALL_MATERIAL",
+                  respondedByName: name,
+                  respondedByEmail: email,
+                  canSupply: canSupply === "yes",
+                  replyQty: callQty || null,
+                  replyEta: callEta || null,
+                  replyNote: note || null,
+                }
+              : {
+                  kind: "RFQ_QUOTE",
+                  respondedByName: name,
+                  respondedByEmail: email,
+                  currency,
+                  lines: Object.entries(quoteLines)
+                    .filter(([, v]) => v.unitPrice)
+                    .map(([mpn, v]) => ({
+                      mpn,
+                      unitPrice: v.unitPrice,
+                      moq: v.moq || null,
+                      spq: v.spq || null,
+                      leadTimeDays: v.leadTimeDays ? Number(v.leadTimeDays) : null,
+                      validUntil: v.validUntil || null,
+                      note: v.note || null,
+                    })),
+                };
       const res = await fetch(`/api/confirm/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,7 +183,7 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
             ))}
           </div>
         </>
-      ) : (
+      ) : view.kind === "OPO_ETA" ? (
         <>
           <p style={{ fontSize: 14 }}>
             致 <b>{view.supplierName}</b>:请回复以下未交订单行的交期 · 链接有效至 {view.expiresAt.slice(0, 10)}
@@ -219,6 +255,120 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
             </tbody>
           </table>
         </>
+      ) : view.kind === "CALL_MATERIAL" ? (
+        <>
+          <p style={{ fontSize: 14 }}>
+            致 <b>{view.supplierName}</b>:我司紧急 Call 料,请确认能否供应 · 链接有效至 {view.expiresAt.slice(0, 10)}
+          </p>
+          <table style={{ width: "100%", borderCollapse: "collapse", margin: "8px 0" }} data-testid="call-line">
+            <thead>
+              <tr>
+                <th style={th}>型号</th>
+                <th style={th}>制造商</th>
+                <th style={th}>需求数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style={td}>{view.mpn ?? "—"}</td>
+                <td style={td}>{view.manufacturer ?? "—"}</td>
+                <td style={td}>{view.callQty}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ display: "flex", gap: 12, margin: "10px 0" }} role="radiogroup" aria-label="能否供应">
+            <label style={{ fontSize: 14 }}>
+              <input type="radio" name="cansupply" checked={canSupply === "yes"} onChange={() => setCanSupply("yes")} /> 可以供应
+            </label>
+            <label style={{ fontSize: 14 }}>
+              <input type="radio" name="cansupply" checked={canSupply === "no"} onChange={() => setCanSupply("no")} /> 无法供应
+            </label>
+          </div>
+          {canSupply === "yes" ? (
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", margin: "10px 0" }}>
+              <label style={{ fontSize: 13 }}>
+                可供数量 *
+                <input style={box} inputMode="decimal" value={callQty} onChange={(e) => setCallQty(e.target.value)} aria-label="可供数量" />
+              </label>
+              <label style={{ fontSize: 13 }}>
+                最早交期
+                <input style={box} type="date" value={callEta} onChange={(e) => setCallEta(e.target.value)} aria-label="最早交期" />
+              </label>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 14 }}>
+            致 <b>{view.supplierName}</b>:询价单 <b>{view.rfqCode}</b> 请贵司报价 · 链接有效至 {view.expiresAt.slice(0, 10)}
+          </p>
+          <label style={{ fontSize: 13, display: "inline-block", marginBottom: 8 }}>
+            报价币种
+            <select
+              style={{ ...box, width: "auto", marginLeft: 8 }}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              aria-label="报价币种"
+            >
+              {["CNY", "USD", "EUR", "JPY", "HKD"].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", margin: "8px 0", minWidth: 760 }} data-testid="quote-lines">
+              <thead>
+                <tr>
+                  <th style={th}>型号</th>
+                  <th style={th}>制造商</th>
+                  <th style={th}>需求参考量</th>
+                  <th style={th}>单价 *</th>
+                  <th style={th}>MOQ</th>
+                  <th style={th}>SPQ</th>
+                  <th style={th}>货期(天)</th>
+                  <th style={th}>报价有效期</th>
+                  <th style={th}>备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.mpns.map((m) => {
+                  const v = quoteLines[m.mpn] ?? { unitPrice: "", moq: "", spq: "", leadTimeDays: "", validUntil: "", note: "" };
+                  const set = (patch: Partial<typeof v>) => setQuoteLines((p) => ({ ...p, [m.mpn]: { ...v, ...patch } }));
+                  return (
+                    <tr key={m.mpn}>
+                      <td style={td}>{m.mpn}</td>
+                      <td style={td}>{m.manufacturer ?? "—"}</td>
+                      <td style={td}>{m.demandQty}</td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 80 }} inputMode="decimal" aria-label={`${m.mpn} 单价`} value={v.unitPrice} onChange={(e) => set({ unitPrice: e.target.value })} />
+                      </td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 60 }} inputMode="decimal" aria-label={`${m.mpn} MOQ`} value={v.moq} onChange={(e) => set({ moq: e.target.value })} />
+                      </td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 60 }} inputMode="decimal" aria-label={`${m.mpn} SPQ`} value={v.spq} onChange={(e) => set({ spq: e.target.value })} />
+                      </td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 60 }} inputMode="numeric" aria-label={`${m.mpn} 货期`} value={v.leadTimeDays} onChange={(e) => set({ leadTimeDays: e.target.value })} />
+                      </td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 120 }} type="date" aria-label={`${m.mpn} 报价有效期`} value={v.validUntil} onChange={(e) => set({ validUntil: e.target.value })} />
+                      </td>
+                      <td style={td}>
+                        <input style={{ ...box, minWidth: 100 }} aria-label={`${m.mpn} 备注`} value={v.note} onChange={(e) => set({ note: e.target.value })} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ fontSize: 12, color: "#888" }}>
+            未填单价的行视为不报价;单价为 MOQ 起步价,多阶梯价请联系采购走 Excel 报价单。
+          </p>
+        </>
       )}
 
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr", margin: "10px 0" }}>
@@ -231,7 +381,7 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
           <input style={box} type="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="您的邮箱" />
         </label>
       </div>
-      {view.kind === "PO_CONFIRM" ? (
+      {view.kind === "PO_CONFIRM" || view.kind === "CALL_MATERIAL" ? (
         <label style={{ fontSize: 13, display: "block", marginBottom: 10 }}>
           备注(可选)
           <input style={box} value={note} onChange={(e) => setNote(e.target.value)} aria-label="备注" />
@@ -246,7 +396,7 @@ export function ConfirmForm({ token, view }: { token: string; view: OkView }) {
 
       <button
         onClick={() => void submit()}
-        disabled={busy || !name.trim() || !email.trim()}
+        disabled={busy || !name.trim() || !email.trim() || (view.kind === "CALL_MATERIAL" && canSupply === "")}
         data-testid="confirm-submit"
         style={{
           background: "#00890b",
