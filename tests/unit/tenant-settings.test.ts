@@ -44,3 +44,27 @@ describe("TenantSettings 合并", () => {
     expect(r.settings).toEqual(DEFAULT_TENANT_SETTINGS);
   });
 });
+
+// R3-5:ECN 审批链有序列表校验兜底
+import { resolveTenantSettings as _pts } from "@/lib/domain/tenant-settings";
+
+describe("ecnApprovalStages(R3-5)", () => {
+  it("合法列表通过;MANAGEMENT 必须收尾、不可重复、不可为空", () => {
+    expect(_pts({ ecnApprovalStages: ["PROCUREMENT", "MANAGEMENT"] }).settings.ecnApprovalStages)
+      .toEqual(["PROCUREMENT", "MANAGEMENT"]);
+    for (const bad of [
+      ["ENGINEERING"], // 无 MANAGEMENT 收尾
+      ["MANAGEMENT", "ENGINEERING"], // MANAGEMENT 不在末位
+      ["MANAGEMENT", "MANAGEMENT"], // 重复
+      [],
+    ]) {
+      const r = _pts({ ecnApprovalStages: bad });
+      expect(r.settings.ecnApprovalStages, JSON.stringify(bad)).toBeNull(); // 回落默认
+      expect(r.invalidKeys, JSON.stringify(bad)).toContain("ecnApprovalStages");
+    }
+  });
+
+  it("缺省 null —— 回落布尔启停(向后兼容)", () => {
+    expect(_pts({}).settings.ecnApprovalStages).toBeNull();
+  });
+});

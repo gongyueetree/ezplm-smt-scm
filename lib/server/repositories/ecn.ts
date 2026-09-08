@@ -18,12 +18,13 @@ import {
   canRelease,
   canSubmit,
   canVoid,
-  currentStage,
+  currentStageInList,
   isFrozen,
+  parseWorkflowSnapshot,
+  resolveApprovalStages,
   statusAfterFinalApproval,
   type EcnStageValue,
   type EcnStatusValue,
-  type StageConfig,
 } from "@/lib/domain/ecn";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
@@ -44,9 +45,10 @@ async function loadEcn(session: SessionRef, ecnId: string) {
   });
 }
 
-export async function stageConfig(tenantId: string): Promise<StageConfig> {
+/** R3-5:当前租户配置解析出的审批链(仅用于**提交时冻结**与草稿预览;在途单读快照) */
+export async function stageConfig(tenantId: string): Promise<EcnStageValue[]> {
   const { settings } = await getTenantSettings(tenantId);
-  return settings.ecnReviewStages;
+  return resolveApprovalStages(settings.ecnApprovalStages, settings.ecnReviewStages);
 }
 
 export async function createEcn(
@@ -229,7 +231,12 @@ export async function submitEcn(session: SessionRef, ecnId: string): Promise<Out
   if (!ecn) return { ok: false, reason: "ECN 不存在或不属于当前租户" };
   const check = canSubmit(ecn.status as EcnStatusValue, ecn.changeLines.length);
   if (!check.ok) return { ok: false, reason: check.reason! };
-  return transition(session, ecnId, ["DRAFT"], "REVIEW", "ECN_SUBMIT", { submittedAt: new Date() });
+  // R3-5:提交那一刻冻结审批链 —— 评审期间改配置不影响本单;退回重提会重新冻结
+  const stages = await stageConfig(session.tenantId);
+  return transition(session, ecnId, ["DRAFT"], "REVIEW", "ECN_SUBMIT", {
+    submittedAt: new Date(),
+    workflowSnapshot: { stages, frozenAt: new Date().toISOString() } as unknown as Prisma.InputJsonValue,
+  });
 }
 
 export async function decideStage(
@@ -241,14 +248,16 @@ export async function decideStage(
   if (!ecn) return { ok: false, reason: "ECN 不存在或不属于当前租户" };
   if (ecn.status !== "REVIEW") return { ok: false, reason: "只有评审中的 ECN 可审批" };
 
-  const cfg = await stageConfig(session.tenantId);
+  // R3-5:审批链只看提交时冻结的快照;快照缺失(冻结上线前的在途单)回落实时配置并审计标注
+  const frozen = parseWorkflowSnapshot(ecn.workflowSnapshot);
+  const stages = frozen?.stages ?? (await stageConfig(session.tenantId));
   // 本轮评审(最近一次提交后)已通过的阶段
   const approvedStages = new Set<EcnStageValue>(
     ecn.approvals
       .filter((a) => a.decision === "APPROVED" && ecn.submittedAt && a.decidedAt >= ecn.submittedAt)
       .map((a) => a.stage as EcnStageValue),
   );
-  const stage = currentStage(cfg, approvedStages);
+  const stage = currentStageInList(stages, approvedStages);
   if (!stage) return { ok: false, reason: "所有阶段已通过" };
   if (!canDecideStage(stage, session.roles)) {
     return { ok: false, reason: `当前阶段为「${stage}」,您无权审批此 ECN` };
@@ -280,7 +289,7 @@ export async function decideStage(
     }),
   });
   approvedStages.add(stage);
-  const next = currentStage(cfg, approvedStages);
+  const next = currentStageInList(stages, approvedStages);
   if (next) {
     await writeAudit(prisma, {
       tenantId: session.tenantId,
@@ -288,7 +297,7 @@ export async function decideStage(
       action: "ECN_STAGE_APPROVE",
       entityType: "Ecn",
       entityId: ecnId,
-      after: { stage, nextStage: next },
+      after: { stage, nextStage: next, ...(frozen ? {} : { workflowFallback: "快照缺失,按提交后当前配置执行" }) },
     });
     return { ok: true, status: "REVIEW" };
   }
@@ -345,6 +354,8 @@ export async function releaseEcn(session: SessionRef, ecnId: string): Promise<Ou
       decidedById: a.decidedById,
       decidedAt: a.decidedAt.toISOString(),
     })),
+    // R3-5:发布快照回答"当时的审批链是什么"
+    workflow: parseWorkflowSnapshot(ecn.workflowSnapshot),
     releasedBy: session.userId,
     releasedAt: new Date().toISOString(),
   };

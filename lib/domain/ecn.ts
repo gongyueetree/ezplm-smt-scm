@@ -74,6 +74,43 @@ export function canDecideStage(stage: EcnStageValue, roles: readonly RoleName[])
 }
 
 /** 已通过的阶段集合 → 当前待批阶段;全通过返回 null */
+/** R3-5:提交时冻结的审批链快照(在途单只看它,不看实时配置) */
+export interface EcnWorkflowSnapshot {
+  stages: EcnStageValue[];
+  frozenAt: string;
+}
+
+/** 从租户配置解析当前审批链(显式有序列表优先,否则由布尔启停推导) */
+export function resolveApprovalStages(
+  explicit: EcnStageValue[] | null | undefined,
+  legacy: StageConfig,
+): EcnStageValue[] {
+  if (explicit && explicit.length > 0) return explicit;
+  return enabledStages(legacy);
+}
+
+/** 解析已存的 workflowSnapshot;形状不对返回 null(调用方回落实时配置并如实标注) */
+export function parseWorkflowSnapshot(raw: unknown): EcnWorkflowSnapshot | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as { stages?: unknown; frozenAt?: unknown };
+  if (!Array.isArray(o.stages) || o.stages.length === 0) return null;
+  const valid = new Set(["ENGINEERING", "PROCUREMENT", "MANAGEMENT"]);
+  if (!o.stages.every((x) => typeof x === "string" && valid.has(x))) return null;
+  if (o.stages[o.stages.length - 1] !== "MANAGEMENT") return null;
+  return { stages: o.stages as EcnStageValue[], frozenAt: typeof o.frozenAt === "string" ? o.frozenAt : "" };
+}
+
+/** 列表版:下一个未通过阶段(全过返回 null) */
+export function currentStageInList(
+  stages: readonly EcnStageValue[],
+  approvedStages: ReadonlySet<EcnStageValue>,
+): EcnStageValue | null {
+  for (const s of stages) {
+    if (!approvedStages.has(s)) return s;
+  }
+  return null;
+}
+
 export function currentStage(
   cfg: StageConfig,
   approvedStages: ReadonlySet<EcnStageValue>,
