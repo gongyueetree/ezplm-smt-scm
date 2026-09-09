@@ -17,6 +17,8 @@ import {
   LabWorkOrderSchema,
   LAB_OPERATIONS,
   LAB_SCENARIO_CODES,
+  LabInventoryLotSchema,
+  LabInventoryMovementSchema,
   LabConnectionResultSchema,
   LabCustomerSchema,
   LabEnvelopeSchema,
@@ -31,7 +33,7 @@ import {
 } from "@/lib/providers/erp/lab/contract";
 
 describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)", () => {
-  it("13 个 RPC 操作名逐字锁定(closed-loop 增加收货)", () => {
+  it("15 个 RPC 操作名逐字锁定(closed-loop 增加收货;R3-7 增加异动/批次)", () => {
     expect(LAB_OPERATIONS).toEqual([
       "testConnection",
       "pullMaterials",
@@ -43,10 +45,24 @@ describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)"
       "pullOpenPurchaseOrders",
       "pullWorkOrders",
       "pullSalesOrders",
+      "pullInventoryMovements",
+      "pullInventoryLots",
       "createPurchaseOrder",
       "updateEta",
       "receivePurchaseOrder",
     ]);
+  });
+
+  // R3-7:异动/批次形状锁定
+  it("异动/批次 schema:类型枚举、必填与可选逐字段锁定", () => {
+    const mv = LabInventoryMovementSchema.parse({
+      externalId: "MV-1", materialCode: "EZ-X", movementType: "IN", qty: "10", occurredAt: "2026-09-08T00:00:00Z",
+    });
+    expect(mv.movementType).toBe("IN");
+    expect(LabInventoryMovementSchema.safeParse({ externalId: "x", materialCode: "m", movementType: "STEAL", qty: "1", occurredAt: "t" }).success).toBe(false);
+    const lot = LabInventoryLotSchema.parse({ externalId: "L-1", lotNo: "L1", materialCode: "EZ-X", qty: "5", status: "CONSUMED" });
+    expect(lot.status).toBe("CONSUMED");
+    expect(LabInventoryLotSchema.safeParse({ externalId: "x", lotNo: "l", materialCode: "m", qty: "1", status: "GONE" }).success).toBe(false);
   });
 
   it("14 个场景码逐字锁定(LAB-1 增加工单源不可用)", () => {

@@ -84,7 +84,7 @@ test("〔0〕接线:租户指向 Lab 验收数据集;Lab 连通且已播种", as
   expect(upsert.status).toBe(200);
 });
 
-test("〔1〕读取面:Material/Inventory/Excess/FX/OpenPO/WO/SO 全部经分页信封可拉", async ({ page }) => {
+test("〔1〕读取面:Material/Inventory/Excess/FX/OpenPO/WO/SO/Movements/Lots 全部经分页信封可拉", async ({ page }) => {
   test.setTimeout(120_000);
   await login(page, "management@demo.qianchuang.cn");
   for (const op of [
@@ -95,6 +95,9 @@ test("〔1〕读取面:Material/Inventory/Excess/FX/OpenPO/WO/SO 全部经分页
     "pullOpenPurchaseOrders",
     "pullWorkOrders",
     "pullSalesOrders",
+    // R3-7:门户 Transactions/Lots 数据源
+    "pullInventoryMovements",
+    "pullInventoryLots",
   ]) {
     const { status, body } = await labRpc(page, op, { input: { limit: 3 } });
     expect(status, op).toBe(200);

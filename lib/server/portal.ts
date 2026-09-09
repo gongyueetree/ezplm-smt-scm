@@ -146,3 +146,121 @@ export async function portalInventory(session: PortalSessionPayload): Promise<Po
     };
   }
 }
+
+// ============================================================
+// R3-7:出入流水 / 批次(合约接上;白名单 DTO 延续同一纪律)
+// ============================================================
+
+/** 门户流水行:无单价、无供应商、无内部备注字段位 */
+export interface PortalMovementRow {
+  materialCode: string;
+  movementType: string;
+  qty: string;
+  warehouse: string | null;
+  lotNo: string | null;
+  refDocNo: string | null;
+  occurredAt: string;
+}
+
+/** 门户批次行:**没有 supplierCode 字段位**(供应商归属是内部信息) */
+export interface PortalLotRow {
+  lotNo: string;
+  materialCode: string;
+  qty: string;
+  warehouse: string | null;
+  receivedAt: string | null;
+  expiresAt: string | null;
+  status: string | null;
+}
+
+interface PortalSourceResult<T> {
+  state: "ok" | "not_configured" | "error";
+  note: string | null;
+  fetchedAt: string | null;
+  rows: T[];
+}
+
+/** 共用取数壳:客户 scope + Provider 过滤 + defense-in-depth 二次校验 + 白名单映射 */
+async function portalScopedPull<Raw extends { customerCode?: string | null }, Row>(
+  session: PortalSessionPayload,
+  pull: (provider: Awaited<ReturnType<typeof resolveErpTarget>> & { kind: Exclude<Awaited<ReturnType<typeof resolveErpTarget>>["kind"], "NONE"> }, customerCode: string) => Promise<{ items: Raw[]; page: { hasMore: boolean; total: number | null } }>,
+  toRow: (raw: Raw) => Row,
+  emptyNote: string,
+): Promise<PortalSourceResult<Row>> {
+  const customer = await prisma.customer.findFirst({
+    where: tenantWhere(session.tenantId, { id: session.customerId }),
+    select: { code: true },
+  });
+  if (!customer) return { state: "error", note: "客户档案缺失", fetchedAt: null, rows: [] };
+
+  const target = await resolveErpTarget(session.tenantId);
+  if (target.kind === "NONE") {
+    return { state: "not_configured", note: emptyNote, fetchedAt: null, rows: [] };
+  }
+  try {
+    const PAGE_LIMIT = 200;
+    const { items, page: pageInfo } = await pull(target as never, customer.code);
+    const norm = (v: string | null | undefined) => (v ?? "").toUpperCase();
+    const scoped = items.filter((i) => norm(i.customerCode) === norm(customer.code));
+    const leaked = items.length - scoped.length;
+    return {
+      state: "ok",
+      note:
+        [
+          target.kind === "ERP_LAB" ? "数据来自 ERP 仿真环境(联调用)" : null,
+          pageInfo.hasMore ? `仅显示前 ${PAGE_LIMIT} 条(共 ${pageInfo.total ?? "更多"} 条)` : null,
+          leaked > 0 ? `Provider 未执行客户过滤,已在应用层丢弃 ${leaked} 条越界行(defense-in-depth)` : null,
+        ]
+          .filter(Boolean)
+          .join(";") || null,
+      fetchedAt: new Date().toISOString(),
+      rows: scoped.map(toRow),
+    };
+  } catch (e) {
+    if (e instanceof ErpNotConfiguredError || e instanceof ErpNotImplementedError) {
+      return { state: "not_configured", note: e.message, fetchedAt: null, rows: [] };
+    }
+    return {
+      state: "error",
+      note: `数据源失败:${e instanceof Error ? e.message : "未知错误"}`,
+      fetchedAt: null,
+      rows: [],
+    };
+  }
+}
+
+export async function portalMovements(session: PortalSessionPayload): Promise<PortalSourceResult<PortalMovementRow>> {
+  return portalScopedPull(
+    session,
+    (target, customerCode) =>
+      target.provider.pullInventoryMovements(target.config, { customerCode, limit: 200 }),
+    (m) => ({
+      materialCode: m.materialCode,
+      movementType: m.movementType,
+      qty: m.qty,
+      warehouse: m.warehouseCode,
+      lotNo: m.lotNo,
+      refDocNo: m.refDocNo,
+      occurredAt: m.occurredAt,
+    }),
+    "出入流水数据待接入(ERP 未配置)",
+  );
+}
+
+export async function portalLots(session: PortalSessionPayload): Promise<PortalSourceResult<PortalLotRow>> {
+  return portalScopedPull(
+    session,
+    (target, customerCode) =>
+      target.provider.pullInventoryLots(target.config, { customerCode, limit: 200 }),
+    (l) => ({
+      lotNo: l.lotNo,
+      materialCode: l.materialCode,
+      qty: l.qty,
+      warehouse: l.warehouseCode,
+      receivedAt: l.receivedAt,
+      expiresAt: l.expiresAt,
+      status: l.status,
+    }),
+    "批次数据待接入(ERP 未配置)",
+  );
+}
