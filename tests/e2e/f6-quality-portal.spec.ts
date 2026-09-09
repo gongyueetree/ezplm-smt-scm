@@ -68,7 +68,13 @@ async function setupPortal(page: Page) {
     email,
     password: "portal-e2e-pass-1",
     restore: async () => {
-      await page.request.put("/api/settings/tenant", { data: current.settings });
+      // 显式归零而不是回放捕获值 —— 捕获值可能已被上一轮失败运行污染(R3-3/R3-5 教训)
+      await page.request.put("/api/settings/tenant", {
+        data: {
+          ...current.settings,
+          featureFlags: { ...current.settings.featureFlags, customerPortal: false },
+        },
+      });
     },
   };
 }
@@ -181,7 +187,13 @@ async function setupFlag(page: Page) {
     },
   });
   return async () => {
-    await page.request.put("/api/settings/tenant", { data: current.settings });
+    // 同上:显式归零
+    await page.request.put("/api/settings/tenant", {
+      data: {
+        ...current.settings,
+        featureFlags: { ...current.settings.featureFlags, customerPortal: false },
+      },
+    });
   };
 }
 

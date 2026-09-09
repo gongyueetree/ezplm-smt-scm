@@ -98,6 +98,11 @@ pnpm smoke:ai
 Key 原文会出现在 `command not found: <Key>` 里,直接泄进终端历史与 CI 日志。
 冒烟脚本已改为**自己解析** `.env.local`(见 `scripts/load-env.ts`),直接 `pnpm smoke:ai` 即可。
 
+**日志与审计红线**(R3-8 成文,守卫在 `lib/server/audit.ts`):
+- 审计载荷(before/after)禁止携带凭据性键:password/passwordHash/secret/apiKey/accessToken/authorization/bearer/tokenHash —— 深度扫描,命中即抛错(宁可写库失败,不静默沉凭据);token 痕迹只允许 `tokenRef`(SHA-256 前 8 位);
+- 应用日志(console)不得打印 Bearer 头、原始 token、幂等键全文;IntegrationSyncRecord 的幂等键允许入库(业务身份推导,非凭据)但不进 UI 日志导出;
+- 公开链路(供应商确认/门户激活)原始 token 只在生成响应里出现一次,不落任何日志。
+
 **密钥纪律**:所有 Key 只存服务端环境变量;`.gitignore` 覆盖 `.env*`(仅放行 `.env.example`);
 日志与 `ApiUsageLog` 中的端点一律经 `redactUrl()` 脱敏(Mouser 的 `apiKey` 走 query,尤其重要)。
 

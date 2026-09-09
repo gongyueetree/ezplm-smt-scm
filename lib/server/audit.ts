@@ -34,6 +34,36 @@ export interface AuditWriter {
   };
 }
 
+export class AuditRedactionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuditRedactionError";
+  }
+}
+
+/**
+ * R3-8(P1-6 收尾):审计载荷红线 —— 凭据性数据**永不入审计日志**。
+ * 键名黑名单(大小写不敏感,深度扫描):password/passwordHash/secret/
+ * apiKey/accessToken/authorization/bearer/tokenHash。
+ * token 痕迹只允许 tokenRef(hash 前 8 位,见 tokenAuditRef)。
+ * 命中即抛错:宁可写库失败暴露问题,不可静默把凭据沉进 append-only 日志。
+ */
+const FORBIDDEN_KEY = /^(password|passwordhash|secret|apikey|accesstoken|authorization|bearer|tokenhash)$/i;
+
+function assertRedacted(value: unknown, path: string): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => assertRedacted(v, `${path}[${i}]`));
+    return;
+  }
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_KEY.test(k)) {
+      throw new AuditRedactionError(`审计载荷禁止携带凭据性键:${path}.${k}(token 痕迹只允许 tokenRef)`);
+    }
+    assertRedacted(v, `${path}.${k}`);
+  }
+}
+
 export function buildAuditRecord(input: AuditInput): Prisma.AuditLogUncheckedCreateInput {
   const { tenantId, userId, action, entityType, entityId } = input;
   if (!tenantId || !userId) throw new Error("AuditLog 必须携带 tenantId 与 userId");
@@ -41,6 +71,8 @@ export function buildAuditRecord(input: AuditInput): Prisma.AuditLogUncheckedCre
   if ((input.actorType === "PORTAL_ACCOUNT" || input.actorType === "SUPPLIER_LINK") && !input.actorId) {
     throw new Error("外部主体审计必须携带 actorId(账号/请求 id)");
   }
+  assertRedacted(input.before, "before");
+  assertRedacted(input.after, "after");
   return {
     tenantId,
     userId,
