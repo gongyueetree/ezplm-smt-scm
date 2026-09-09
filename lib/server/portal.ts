@@ -112,9 +112,13 @@ export async function portalInventory(session: PortalSessionPayload): Promise<Po
       customerCode: customer.code,
       limit: PAGE_LIMIT,
     });
-    const norm = (v: string | null) => (v ?? "").toUpperCase();
-    const scoped = items.filter((i) => norm(i.customerCode) === norm(customer.code));
-    const leaked = items.length - scoped.length;
+    const { rows: scopedRows, leaked } = scopePortalRows(customer.code, items, (i) => ({
+      materialCode: i.materialCode ?? i.internalPn ?? "?",
+      qty: i.qty,
+      warehouse: i.warehouse,
+      lotNo: i.lotNo,
+      updatedAt: i.receivedAt,
+    }));
     return {
       state: "ok",
       note: [
@@ -125,14 +129,8 @@ export async function portalInventory(session: PortalSessionPayload): Promise<Po
         .filter(Boolean)
         .join(";") || null,
       fetchedAt: new Date().toISOString(),
-      // 白名单序列化:逐字段挑出
-      rows: scoped.map((i) => ({
-        materialCode: i.materialCode ?? i.internalPn ?? "?",
-        qty: i.qty,
-        warehouse: i.warehouse,
-        lotNo: i.lotNo,
-        updatedAt: i.receivedAt,
-      })),
+      // 白名单序列化:逐字段挑出(纯函数 scopePortalRows,golden 矩阵覆盖)
+      rows: scopedRows,
     };
   } catch (e) {
     if (e instanceof ErpNotConfiguredError || e instanceof ErpNotImplementedError) {
@@ -173,6 +171,20 @@ export interface PortalLotRow {
   status: string | null;
 }
 
+/**
+ * R3-8:客户 scope 过滤 + 白名单映射的**纯函数**(golden 安全矩阵直接驱动)。
+ * Provider 若忽略 customerCode 过滤,越界行在此被丢弃并如实计数(fail-closed)。
+ */
+export function scopePortalRows<Raw extends { customerCode?: string | null }, Row>(
+  customerCode: string,
+  items: Raw[],
+  toRow: (raw: Raw) => Row,
+): { rows: Row[]; leaked: number } {
+  const norm = (v: string | null | undefined) => (v ?? "").toUpperCase();
+  const scoped = items.filter((i) => norm(i.customerCode) === norm(customerCode));
+  return { rows: scoped.map(toRow), leaked: items.length - scoped.length };
+}
+
 interface PortalSourceResult<T> {
   state: "ok" | "not_configured" | "error";
   note: string | null;
@@ -200,9 +212,7 @@ async function portalScopedPull<Raw extends { customerCode?: string | null }, Ro
   try {
     const PAGE_LIMIT = 200;
     const { items, page: pageInfo } = await pull(target as never, customer.code);
-    const norm = (v: string | null | undefined) => (v ?? "").toUpperCase();
-    const scoped = items.filter((i) => norm(i.customerCode) === norm(customer.code));
-    const leaked = items.length - scoped.length;
+    const { rows, leaked } = scopePortalRows(customer.code, items, toRow);
     return {
       state: "ok",
       note:
@@ -214,7 +224,7 @@ async function portalScopedPull<Raw extends { customerCode?: string | null }, Ro
           .filter(Boolean)
           .join(";") || null,
       fetchedAt: new Date().toISOString(),
-      rows: scoped.map(toRow),
+      rows,
     };
   } catch (e) {
     if (e instanceof ErpNotConfiguredError || e instanceof ErpNotImplementedError) {
