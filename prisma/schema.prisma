@@ -355,6 +355,10 @@ enum ProviderType {
 enum MatchSource {
   CUSTOMER_MAPPING
   INTERNAL_PN
+  /// R4-5(§27):乾创 PartMfgMapping —— canonical 厂商 + exact MPN
+  QC_MFG_MFR_MPN
+  /// R4-5(§27):乾创 PartMfgMapping —— exact MPN
+  QC_MFG_MPN
   EXACT_MPN
   MFR_MPN
   DESCRIPTION

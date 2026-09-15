@@ -253,14 +253,58 @@ function toView(job: {
   };
 }
 
-/** 构造匹配上下文:本地主数据 + 三方 Provider(业务代码不感知 Mock/Http) */
-async function buildMatchContext(tenantId: string): Promise<MatchContext> {
-  const [parts, mappings] = await Promise.all([
-    prisma.part.findMany({ where: tenantWhere(tenantId), take: 5000 }),
-    prisma.customerPartMapping.findMany({ where: tenantWhere(tenantId), take: 5000 }),
+/**
+ * 构造匹配上下文(R4-5 §32 重写):**定向索引查询**取代全表 take:5000。
+ *
+ * - 精确通道(客户映射/内部料号/MFG 映射 MPN):从本批 BOM 行提取
+ *   internalPn[]/mpn[]/customerPn[],走索引 IN 查询 —— 任意规模(16K/20K+)
+ *   都不截断,第 5001 条以后照样命中;
+ * - MPN 通道经 **PartMfgMapping.manufacturerPartNoKey**(索引 + 归一键;
+ *   legacy Part.mpn 已回填映射,旧数据天然覆盖);
+ * - 相似度语料仍需要全库面 —— 加载上限 SIMILARITY_CORPUS_CAP,截断时
+ *   经 similarityCorpusTruncated **显式降级上报**,绝不静默。
+ */
+const SIMILARITY_CORPUS_CAP = 20_000;
+
+export async function buildMatchContext(
+  tenantId: string,
+  batchLines: { internalPn?: string | null; mpn?: string | null; customerPn?: string | null }[],
+): Promise<MatchContext> {
+  const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const mpnKeys = [...new Set(batchLines.map((l) => norm(l.mpn)).filter(Boolean))];
+  const internalPns = [...new Set(batchLines.map((l) => (l.internalPn ?? "").trim()).filter(Boolean))];
+
+  const [mfgMappings, partsByPn, mappings, corpusParts, corpusTotal] = await Promise.all([
+    // 定向:归一 MPN 键 → 映射(EXACT/非拒绝);索引 [tenantId, manufacturerPartNoKey]
+    mpnKeys.length
+      ? prisma.partMfgMapping.findMany({
+          where: tenantWhere(tenantId, {
+            manufacturerPartNoKey: { in: mpnKeys },
+            status: { in: ["CANDIDATE", "APPROVED"] as never[] },
+          }),
+          include: { part: true },
+        })
+      : Promise.resolve([]),
+    // 定向:内部料号精确(索引 [tenantId, internalPn] 唯一)
+    internalPns.length
+      ? prisma.part.findMany({
+          where: tenantWhere(tenantId, { internalPn: { in: internalPns, mode: "insensitive" as const } }),
+        })
+      : Promise.resolve([]),
+    // 客户映射:人工维护的小表,全量装载(无 take 截断)
+    prisma.customerPartMapping.findMany({ where: tenantWhere(tenantId) }),
+    // 相似度语料:上限 + 显式截断上报
+    prisma.part.findMany({ where: tenantWhere(tenantId), take: SIMILARITY_CORPUS_CAP }),
+    prisma.part.count({ where: tenantWhere(tenantId) }),
   ]);
 
-  const norm = (v: string | null) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // mfg 映射命中的料并入 refs(可能不在语料前 2 万,但必须能命中)
+  const partsMap = new Map<string, (typeof corpusParts)[number]>();
+  for (const p of corpusParts) partsMap.set(p.id, p);
+  for (const p of partsByPn) partsMap.set(p.id, p);
+  for (const m of mfgMappings) partsMap.set(m.part.id, m.part);
+  const parts = [...partsMap.values()];
+
   const refs = parts.map((p) => ({
     partId: p.id,
     internalPn: p.internalPn,
@@ -298,6 +342,50 @@ async function buildMatchContext(tenantId: string): Promise<MatchContext> {
     byInternalPn: new Map(refs.map((r) => [norm(r.internalPn), r])),
     byMpn,
     allParts: refs,
+    similarityCorpusTruncated:
+      corpusTotal > SIMILARITY_CORPUS_CAP ? { loaded: SIMILARITY_CORPUS_CAP, total: corpusTotal } : null,
+    byPartId: new Map(refs.map((r) => [r.partId, r])),
+    mfgByMpnKey: (() => {
+      const map = new Map<string, import("@/lib/domain/bom-match").MfgMappingRef[]>();
+      for (const m of mfgMappings) {
+        const ref: import("@/lib/domain/bom-match").MfgMappingRef = {
+          partId: m.partId,
+          internalPn: m.part.internalPn,
+          manufacturerPartNo: m.manufacturerPartNo,
+          rawManufacturer: m.rawManufacturer,
+          canonicalManufacturerId: m.canonicalManufacturerId,
+          canonicalManufacturerName: m.canonicalManufacturerName,
+          relationType: m.relationType,
+          status: m.status as never,
+          mappingSource: m.source,
+          identifierKind: m.identifierKind,
+          identifierMatchMode: m.identifierMatchMode,
+        };
+        map.set(m.manufacturerPartNoKey, [...(map.get(m.manufacturerPartNoKey) ?? []), ref]);
+      }
+      return map;
+    })(),
+    mfgByPartId: (() => {
+      const map = new Map<string, import("@/lib/domain/bom-match").MfgMappingRef[]>();
+      for (const m of mfgMappings) {
+        const ref = {
+          partId: m.partId,
+          internalPn: m.part.internalPn,
+          manufacturerPartNo: m.manufacturerPartNo,
+          rawManufacturer: m.rawManufacturer,
+          canonicalManufacturerId: m.canonicalManufacturerId,
+          canonicalManufacturerName: m.canonicalManufacturerName,
+          relationType: m.relationType,
+          status: m.status as never,
+          mappingSource: m.source,
+          identifierKind: m.identifierKind,
+          identifierMatchMode: m.identifierMatchMode,
+        };
+        map.set(m.partId, [...(map.get(m.partId) ?? []), ref]);
+      }
+      return map;
+    })(),
+    materialKindByPartId: new Map(parts.map((p) => [p.id, p.materialKind as string])),
     // F4:主数据读取经 MasterDataProvider(租户配置真源),不再直连 ezPLM 工厂
     ezplm: await getMasterDataProvider(tenantId),
     distributors: [getDigiKeyProvider(), getMouserProvider()],
@@ -366,7 +454,7 @@ export async function processNextBatch(
     issues: [],
   }));
 
-  const ctx = await buildMatchContext(session.tenantId);
+  const ctx = await buildMatchContext(session.tenantId, parsed);
   const results = await matchBomLines(parsed, ctx);
   const degraded = results.flatMap((r) => r.degraded);
 

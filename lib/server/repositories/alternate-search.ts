@@ -99,12 +99,35 @@ export async function searchAlternates(
       ? input.constraints
       : buildConstraintsFromParams(detail.parameters, subjectFootprint);
 
-  const localParts = await prisma.part.findMany({
-    where: tenantWhere(input.tenantId),
-    take: 5000,
-  });
+  /*
+   * R4-5(§32)定向查询:localHit 判定改走 PartMfgMapping.manufacturerPartNoKey
+   * (索引 + 归一键;legacy Part.mpn 已回填映射)——16K+ 主数据下
+   * 旧的全表 take:5000 会把第 5001 号料静默判成"本地没有"。
+   */
   const selfKey = normalizeMpn(input.mpn);
-  const localHit = localParts.some((p) => normalizeMpn(p.mpn ?? "") === selfKey);
+  const localHit =
+    (await prisma.partMfgMapping.findFirst({
+      where: tenantWhere(input.tenantId, { manufacturerPartNoKey: selfKey }),
+      select: { id: true },
+    })) !== null;
+  // 相似度语料(与 bom-import 同纪律):上限 2 万,截断走下方 note 显式提示
+  const SIMILARITY_CORPUS_CAP = 20_000;
+  const [localParts, corpusTotal] = await Promise.all([
+    prisma.part.findMany({
+      where: tenantWhere(input.tenantId),
+      select: { mpn: true, manufacturer: true, footprint: true, description: true },
+      take: SIMILARITY_CORPUS_CAP,
+    }),
+    prisma.part.count({ where: tenantWhere(input.tenantId) }),
+  ]);
+  const corpusTruncated = corpusTotal > SIMILARITY_CORPUS_CAP;
+  if (corpusTruncated) {
+    degraded.push({
+      provider: "LOCAL",
+      kind: "SIMILARITY_CORPUS_TRUNCATED",
+      message: `相似度语料截断:仅加载 ${SIMILARITY_CORPUS_CAP}/${corpusTotal} —— 精确命中(localHit 判定)不受影响`,
+    });
+  }
 
   const specs: CandidateSpec[] = [];
   const seen = new Set<string>([selfKey]);
