@@ -11,7 +11,7 @@ export default defineConfig({
     alias: { "@": path.resolve(__dirname, ".") },
   },
   test: {
-    include: ["tests/uat/qianchuang/**/*.test.ts"],
+    include: ["tests/uat/qianchuang/**/*.test.ts", "tests/uat/qianchuang/**/*.uat.test.ts"],
     testTimeout: 120_000,
     hookTimeout: 120_000,
   },
