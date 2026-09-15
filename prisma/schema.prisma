@@ -1868,6 +1868,35 @@ model QuoteVersion {
 }
 
 /// 报价行(SPEC §12 全部字段;金额 Decimal,币种随版本)
+/// R4-8(§45/§46):BOM 行成本选择 —— 人工的 Cost Selection 决定记录。
+/// 报价审批前的矩阵展示用它;提交审批时整行证据冻结进 QuoteVersion 快照。
+model BomCostSelection {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  bomVersionId       String
+  bomLineId          String
+  partId             String?
+  partMfgMappingId   String?
+  /// NormalizedMaterialPrice.source 值域(INTERNAL/SUPPLIER_QUOTE/DIGIKEY/…)
+  selectedSource     String
+  selectedSupplierId String?
+  unitCost           Decimal  @db.Decimal(18, 6)
+  currency           String
+  /// §44:SELECTED_BUY_QTY / SUGGESTED_BUY_QTY / DEMAND_QTY
+  priceQtyBasis      String
+  effectiveBuyQty    Decimal  @db.Decimal(18, 4)
+  evidenceRef        String
+  /// §37:引用非 APPROVED 报价时必须为 true(UI 显示 UNAPPROVED_SOURCE)
+  unapprovedSource   Boolean  @default(false)
+  note               String?
+  selectedById       String
+  selectedAt         DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([tenantId, bomLineId])
+  @@index([tenantId, bomVersionId])
+}
+
 model QuoteLine {
   id                    String            @id @default(cuid())
   tenantId              String
