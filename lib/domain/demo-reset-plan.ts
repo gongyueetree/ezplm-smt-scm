@@ -179,6 +179,8 @@ export const KEEP_MODELS = [
   // 主数据/配置性质,清库保留;租户清库脚本按 tenantId 删,不碰全局行
   "CanonicalManufacturerRef",
   "ManufacturerAlias",
+  // R4-4:UAT 导入批次是数据溯源记录(datasetVersion),清库保留
+  "ErpUatImportBatch",
   "PartTag",
   "PartTagLink",
   "CustomerPartMapping",

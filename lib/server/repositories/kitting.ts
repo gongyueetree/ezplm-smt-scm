@@ -53,7 +53,9 @@ export async function buildKittingReport(
   ]);
 
   const latestSnapByPart = new Map<string, (typeof snapshots)[number]>();
-  for (const s of snapshots) if (!latestSnapByPart.has(s.partId)) latestSnapByPart.set(s.partId, s);
+  for (const s of snapshots) {
+    if (s.partId && !latestSnapByPart.has(s.partId)) latestSnapByPart.set(s.partId, s);
+  }
 
   const input: KittingLineInput[] = lines.map((l) => {
     const partId = l.mpn ? partIdByMpn.get(l.mpn) : undefined;

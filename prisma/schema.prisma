@@ -1541,14 +1541,33 @@ model PartAlternate {
 model InventorySnapshot {
   id            String   @id @default(cuid())
   tenantId      String
-  partId        String
+  /// R4-4 起可空:ERP 库存引用主数据导出口径外的物料时,行保留、partId 空、
+  /// internalPn 记原始编码 —— 不补造 Part,不丢行(审计实测 2936/4455 行如此)
+  partId        String?
+  internalPn    String?
   qtyOnHand     Decimal  @db.Decimal(18, 4)
+  /// R4-4(§33):源数据只有「库存量」—— available/reserved **null=未知**,
+  /// 绝不写 available=onHand/reserved=0 假装真实 ERP 语义
+  availableQty  Decimal? @db.Decimal(18, 4)
+  reservedQty   Decimal? @db.Decimal(18, 4)
   /// 呆滞数量
   qtySlowMoving Decimal? @db.Decimal(18, 4)
   warehouse     String?
+  lotNo         String?
+  unit          String?
+  /// R4-4(§33)货主:CUSTOMER / ORGANIZATION / UNKNOWN;
+  /// 业务组织持有 = 公司自有库存,customerId 必空,**严禁**拿组织名查客户主数据
+  ownerType     String?
+  ownerNameRaw  String?
+  /// 货主=客户且经主数据/alias override 解析成功时回填;解析不到保持空 + 原始名保留
+  customerId    String?
+  /// 所属 UAT 导入批次(§39 datasetVersion 溯源)
+  importBatchId String?
   fetchedAt     DateTime
 
   @@index([tenantId, partId, fetchedAt])
+  @@index([tenantId, internalPn])
+  @@index([tenantId, importBatchId])
 }
 
 /// 在途 PO 行(GTB 扣减项;来源 ezPLM/ERP,只读缓存)
@@ -2253,23 +2272,58 @@ model ExcessSnapshot {
 /// 跨客户占用是业务事故,所以系统只提示可用量,占用与否由 PM 人工确认
 /// (见 lib/domain/gtb.ts:excessQty 的说明)。
 model ExcessLine {
-  tenantId     String
-  id           String         @id @default(cuid())
-  snapshotId   String
-  snapshot     ExcessSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  tenantId          String
+  id                String         @id @default(cuid())
+  snapshotId        String
+  snapshot          ExcessSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   /// 归属客户;为空表示不限客户
-  customerId   String?
-  partId       String?
-  internalPn   String?
-  mpn          String?
+  customerId        String?
+  partId            String?
+  internalPn        String?
+  mpn               String?
   /// 账面数量
-  qty          Decimal        @db.Decimal(18, 4)
+  qty               Decimal        @db.Decimal(18, 4)
   /// 其中**可动用**的数量(可能小于账面:部分已被锁定/待报废)
-  availableQty Decimal        @db.Decimal(18, 4)
-  notes        String?
+  availableQty      Decimal        @db.Decimal(18, 4)
+  notes             String?
+  /// ---- R4-4(§34):乾创 Excess 报表真实语义 ----
+  /// 最后业务发生时间 ≠ 最早入库时间;源无后者时本行无 earliestInboundAt 概念
+  lastBusinessAt    DateTime?
+  excessQtyInclOpo  Decimal?       @db.Decimal(18, 4)
+  moq               Decimal?       @db.Decimal(18, 4)
+  standardUnitPrice Decimal?       @db.Decimal(18, 6)
+  /// 原始客户名(脱敏不一致时解析不上客户主数据,原文保留作证据)
+  customerNameRaw   String?
+  customerPnRaw     String?
 
   @@index([tenantId, mpn])
   @@index([tenantId, customerId])
+  @@index([tenantId, internalPn])
+}
+
+/// R4-4(§39):乾创 UAT 导入批次 —— datasetVersion 可追溯可比较。
+/// 记录源文件哈希/映射版本/模式/alias override 哈希/行数/对账结果;
+/// 每条导入数据经 importBatchId 指回这里回答「这数出自哪一包」。
+model ErpUatImportBatch {
+  id                String   @id @default(cuid())
+  tenantId          String
+  /// 如 QCUAT-20260902-a1b2c3(日期取数据包业务日期 + 内容哈希前 6 位)
+  datasetVersion    String
+  profileId         String
+  /// STRICT_UAT / DEMO_LENIENT
+  mode              String
+  /// [{role,fileName,sha256,rows}](不含任何数据行)
+  fileManifest      Json
+  /// 各实体写入/跳过/未解析计数
+  counts            Json
+  /// 跨文件对账摘要(unresolved 数字;不含真实名称清单 —— 明细在私有产物)
+  reconciliation    Json
+  aliasOverrideHash String?
+  importedAt        DateTime @default(now())
+  createdById       String
+
+  @@unique([tenantId, datasetVersion])
+  @@index([tenantId, importedAt])
 }
 
 /// 缺料单来源。PR2-PROC-10。

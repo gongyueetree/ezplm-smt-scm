@@ -70,6 +70,12 @@ export const TenantSettingsSchema = z.object({
     .nullable()
     .default(null),
   matchConfidenceThreshold: z.number().min(0.5).max(1).default(0.9),
+  /**
+   * R4-4(§21):乾创「物料 MFG 维护单」是否直接视为 Approved AVL。
+   * 默认 **false(保守)**:导入映射 relationType=MAINTAINED、status=CANDIDATE,
+   * 走人工审批;客户书面确认「维护单=正式 AVL」后才置 true。
+   */
+  erpMfgMaintenanceAsApproved: z.boolean().default(false),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 
