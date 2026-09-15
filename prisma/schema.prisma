@@ -1708,7 +1708,7 @@ model ExternalPartSnapshot {
 
 /// 统一供应报价(SPEC §10 NormalizedOffer;线下 Excel 与三源 API 同构)
 model SupplierOffer {
-  id                 String       @id @default(cuid())
+  id                 String              @id @default(cuid())
   tenantId           String
   provider           ProviderType
   supplierId         String?
@@ -1718,21 +1718,28 @@ model SupplierOffer {
   manufacturer       String?
   description        String?
   packaging          String?
-  stock              Decimal?     @db.Decimal(18, 4)
-  moq                Decimal?     @db.Decimal(18, 4)
-  spq                Decimal?     @db.Decimal(18, 4)
+  stock              Decimal?            @db.Decimal(18, 4)
+  moq                Decimal?            @db.Decimal(18, 4)
+  spq                Decimal?            @db.Decimal(18, 4)
   leadTimeDays       Int?
   lifecycle          Lifecycle?
   rohs               Boolean?
   reach              Boolean?
   currency           String
+  /// R4-7(§37):报价审批态 —— Customer Quote 默认只用 APPROVED;
+  /// 引用 RECEIVED 必须显式标 UNAPPROVED_SOURCE(price-pool 消费)
+  status             SupplierOfferStatus @default(RECEIVED)
+  reviewedById       String?
+  reviewedAt         DateTime?
+  /// R4-7:来源 RFQ 线索(线下 Excel 回传/在线链接同一 canonical 落点)
+  procurementRfqId   String?
   /// R3-4:报价有效期(审计核对出 SupplierOffer 缺 validity —— 加列,不建平行模型)
   validUntil         DateTime?
   /// R3-4:供应商自述备注(来自免登录报价链接;展示用,非内部备注)
   supplierNote       String?
   sourceUpdatedAt    DateTime?
   sourceUrl          String?
-  createdAt          DateTime     @default(now())
+  createdAt          DateTime            @default(now())
 
   priceBreaks PriceBreak[]
 
@@ -1741,6 +1748,34 @@ model SupplierOffer {
 }
 
 /// 价格阶梯(确定性函数 getApplicablePriceBreak 的输入)
+/// R4-7(§37):供应商报价审批态。
+enum SupplierOfferStatus {
+  RECEIVED
+  REVIEWED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+/// R4-7(§41):每个供应商收到**不同的行清单** —— RFQ × Supplier 的行选择表。
+/// 不是第二套 RFQ:报价仍落 SupplierOffer/PriceBreak,比价仍走 ProcurementRFQ。
+model ProcurementRfqSupplierLine {
+  id               String   @id @default(cuid())
+  tenantId         String
+  procurementRfqId String
+  supplierId       String
+  partId           String?
+  internalPn       String?
+  mpn              String?
+  manufacturer     String?
+  description      String?
+  requestedQty     Decimal  @db.Decimal(18, 4)
+  createdById      String
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId, procurementRfqId, supplierId])
+}
+
 model PriceBreak {
   id              String        @id @default(cuid())
   tenantId        String

@@ -162,8 +162,7 @@ export async function collectMaterialPrices(q: PricePoolQuery): Promise<PricePoo
         validUntil: o.validUntil?.toISOString() ?? null,
         sourceUpdatedAt: o.sourceUpdatedAt?.toISOString() ?? null,
         evidenceRef: `SupplierOffer:${o.id}`,
-        // R4-7 起 SupplierQuote 有正式审批态;线下报价池当前默认 RECEIVED 档
-        approvalStatus: "RECEIVED",
+        approvalStatus: o.status,
       });
     }
   }
