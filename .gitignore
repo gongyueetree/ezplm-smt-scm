@@ -44,3 +44,7 @@ public/vendor/
 tests/fixtures/customer/*
 !tests/fixtures/customer/README.md
 tests/fixtures/golden/**/generated/
+
+# R4:客户真实 UAT 数据(原始 Excel 与私有对账产物,永不入库)
+tests/fixtures/customer-private/**
+uat-reference-overrides.json
