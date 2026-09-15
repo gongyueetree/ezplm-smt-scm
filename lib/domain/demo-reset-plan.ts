@@ -173,6 +173,8 @@ export const KEEP_MODELS = [
   "PartIdentifier",
   "PartProcessAttr",
   "PartSupplierRef",
+  // R4-2:Internal PN ↔ MFG 关系真源,主数据性质,清库保留
+  "PartMfgMapping",
   "PartTag",
   "PartTagLink",
   "CustomerPartMapping",

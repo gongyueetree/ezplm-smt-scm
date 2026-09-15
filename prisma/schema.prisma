@@ -895,7 +895,16 @@ model Part {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
+  /// R4-2:物料大类(§7)—— 只有 ELECTRONIC_COMPONENT 走元器件管线
+  /// (ezPLM/DigiKey/Mouser/lifecycle/alternate);PCB_BARE_BOARD 分流到
+  /// PCB sourcing。细分继续由 categoryL1/L2 承担,不膨胀枚举。
+  materialKind           MaterialKind @default(OTHER)
+  /// 分类来源与置信度必须保留(§11):ERP_MATERIAL_TYPE / ERP_MATERIAL_NAME / MFG_PN_PATTERN / MANUAL
+  materialKindSource     String?
+  materialKindConfidence Decimal?     @db.Decimal(4, 3)
+
   identifiers PartIdentifier[]
+  mfgMappings PartMfgMapping[]
   alternates  PartAlternate[]  @relation("PartToAlternates")
   alternateOf PartAlternate[]  @relation("AlternateToParts")
 
@@ -912,6 +921,129 @@ model Part {
   @@index([tenantId, manufacturer, mpn])
   @@index([tenantId, categoryL1, categoryL2])
   @@index([tenantId, origin, status])
+  @@index([tenantId, materialKind])
+}
+
+/// R4-2(§7):物料大类。刻意保持 7 值小枚举 —— 更细分类走 category/tag。
+enum MaterialKind {
+  ELECTRONIC_COMPONENT
+  PCB_BARE_BOARD
+  MECHANICAL
+  CABLE
+  ASSEMBLY
+  CONSUMABLE
+  OTHER
+}
+
+/// R4-2(§9):外部制造/加工标识的种类 —— 只有 COMPONENT_MPN 才允许进
+/// ezPLM/DigiKey/Mouser 元器件匹配;PCB_PART_NO 走 PCB sourcing/RFQ/历史采购。
+enum PartMfgIdentifierKind {
+  COMPONENT_MPN
+  PCB_PART_NO
+  MECHANICAL_PART_NO
+  ASSEMBLY_PART_NO
+  VENDOR_PART_NO
+  OTHER
+}
+
+/// R4-2(§10):MFG_PN 匹配模式。PATTERN(含 * 等通配)只可做候选/搜索提示,
+/// 禁止 exact API 查询与自动确认。
+enum PartMfgMatchMode {
+  EXACT
+  PATTERN
+  UNKNOWN
+}
+
+/// R4-2(§21):关系类型与状态分离 —— MAINTAINED 表示「出现在乾创 MFG 维护单」,
+/// 在客户确认业务语义前**不等于** Approved AVL。
+enum PartMfgRelationType {
+  PRIMARY
+  APPROVED
+  ALTERNATE
+  HISTORICAL
+  MAINTAINED
+}
+
+enum PartMfgMappingStatus {
+  CANDIDATE
+  APPROVED
+  REJECTED
+  OBSOLETE
+}
+
+enum PartMfgMappingSource {
+  ERP_MFG_MAINTENANCE
+  MANUAL_APPROVED
+  CUSTOMER_AVL
+  PO_HISTORY
+  IMPORT
+  EZPLM
+  LEGACY_BACKFILL
+}
+
+/// R4-3 将消费:制造商解析状态(此处先建列,解析器随 R4-3)
+enum MfgResolutionStatus {
+  RESOLVED
+  CANDIDATE
+  CONFLICT
+  UNRESOLVED
+}
+
+/// R4-2(§8):Internal Material ↔ 外部制造/加工标识(N:M 真源)。
+/// Part.mpn/manufacturer 降级为 preferred/compatibility 缓存(§6/§23);
+/// 只有 APPROVED+PRIMARY+人工确认 才允许同步回 Part.mpn;
+/// PO_HISTORY 永远不能自动覆盖 Part.mpn(§22)。
+model PartMfgMapping {
+  id       String @id @default(cuid())
+  tenantId String
+  partId   String
+  part     Part   @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  /// 原始串永久保留(证据;canonical 解析结果另存)
+  rawManufacturer       String?
+  rawManufacturerPartNo String
+
+  /// R4-3 ManufacturerResolver 写入;未解析时为空
+  canonicalManufacturerId   String?
+  canonicalManufacturerName String?
+
+  /// 展示用原样 MFG_PN;Key = 去非字母数字+大写(匹配/去重键,禁止用于展示)
+  manufacturerPartNo    String
+  manufacturerPartNoKey String
+  /// 制造商去重键(upper + 去非字母数字);无制造商时空串(唯一约束需要非 null)
+  manufacturerKey       String @default("")
+
+  materialKind        MaterialKind
+  identifierKind      PartMfgIdentifierKind
+  identifierMatchMode PartMfgMatchMode
+
+  relationType PartMfgRelationType
+  status       PartMfgMappingStatus
+  source       PartMfgMappingSource
+
+  sourceDocumentNo String?
+  sourceLineId     String?
+  sourceRow        Int?
+  sourceCreatedAt  DateTime?
+
+  firstSeenAt   DateTime?
+  lastSeenAt    DateTime?
+  evidenceCount Int       @default(1)
+
+  manufacturerResolutionStatus     MfgResolutionStatus @default(UNRESOLVED)
+  manufacturerResolutionConfidence Decimal?            @db.Decimal(4, 3)
+
+  confirmedById String?
+  confirmedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, partId, manufacturerPartNoKey, manufacturerKey])
+  @@index([tenantId, partId])
+  @@index([tenantId, manufacturerPartNoKey])
+  @@index([tenantId, status])
+  @@index([tenantId, source])
 }
 
 /// SMT 工艺属性(客户 docx:「SMT 工艺字段:包装规格、MSL 湿敏等级、盘装数量」)。
@@ -1308,31 +1440,31 @@ enum PinCompatibility {
 }
 
 model PartAlternate {
-  id              String   @id @default(cuid())
-  tenantId        String
-  partId          String
-  part            Part     @relation("PartToAlternates", fields: [partId], references: [id])
-  alternatePartId String
-  alternatePart   Part     @relation("AlternateToParts", fields: [alternatePartId], references: [id])
+  id                    String                @id @default(cuid())
+  tenantId              String
+  partId                String
+  part                  Part                  @relation("PartToAlternates", fields: [partId], references: [id])
+  alternatePartId       String
+  alternatePart         Part                  @relation("AlternateToParts", fields: [alternatePartId], references: [id])
   /// 替代等级/说明(如 完全替代/条件替代)。保留:历史数据都挂在它上面
-  grade           String?
+  grade                 String?
   /// E2 三维兼容性。默认 UNKNOWN —— **旧数据没核过就是没核过**,
   /// 迁移时不替它猜一个"看起来合理"的值。
   functionalEquivalence FunctionalEquivalence @default(UNKNOWN)
   packageCompatibility  PackageCompatibility  @default(UNKNOWN)
   pinCompatibility      PinCompatibility      @default(UNKNOWN)
   /// 判定依据(datasheet 章节、对比结论等)—— 没有依据的兼容级别不可信
-  reason          String?
+  reason                String?
   /// 依据来源:EZPLM / DIGIKEY / MOUSER / WEB / MANUAL
-  evidenceSource  String?
+  evidenceSource        String?
   /// 谁拍的板。工程确认过的替代关系才敢直接用
-  approvedById    String?
-  approvedAt      DateTime?
-  note            String?
-  createdAt       DateTime @default(now())
+  approvedById          String?
+  approvedAt            DateTime?
+  note                  String?
+  createdAt             DateTime              @default(now())
   /// **必须带默认值**:PartAlternate 在生产库里已经有数据,
   /// 加一个没有默认值的 NOT NULL 列会让迁移直接失败(项目的迁移安全守卫会拦)。
-  updatedAt       DateTime @default(now()) @updatedAt
+  updatedAt             DateTime              @default(now()) @updatedAt
 
   @@unique([tenantId, partId, alternatePartId])
   @@index([tenantId, functionalEquivalence])
@@ -2019,14 +2151,14 @@ enum ExcessSource {
 /// 快照式而非可变表 —— 「上个月说有 500 可用」必须能复现,
 /// 否则事后无法解释当时为什么少买了。
 model ExcessSnapshot {
-  tenantId    String
-  id          String       @id @default(cuid())
-  source      ExcessSource
+  tenantId         String
+  id               String       @id @default(cuid())
+  source           ExcessSource
   /// 快照对应的业务时点(不是导入时刻)
-  snapshotAt  DateTime
+  snapshotAt       DateTime
   /// 来自导入作业时关联;ERP 同步或人工录入为空
-  importJobId String?
-  /*
+  importJobId      String?
+  /**
    * E8:来源可追溯(客户 Q1:「ERP 有 Excess report 可以引用」)。
    * PM 在采购申请里看到的 Excess 必须能回答"这数出自哪一次、什么时候的 ERP 报表" ——
    * 否则少买了料谁也说不清依据。
@@ -2039,9 +2171,9 @@ model ExcessSnapshot {
   importedAt       DateTime?
   /// ERP 连接 id(经 API 同步时)
   erpConnectionId  String?
-  note        String?
-  createdById String
-  createdAt   DateTime     @default(now())
+  note             String?
+  createdById      String
+  createdAt        DateTime     @default(now())
 
   lines ExcessLine[]
 
@@ -2920,35 +3052,35 @@ enum QualityEventType {
 }
 
 model QualityIncident {
-  id             String         @id @default(cuid())
-  tenantId       String
-  code           String
-  title          String
+  id              String           @id @default(cuid())
+  tenantId        String
+  code            String
+  title           String
   /// 异常源:LOT / WO / FG / SHIPMENT / PO 的业务键
-  sourceRef      String
-  description    String?
-  severity       String?
-  status         IncidentStatus @default(OPEN)
+  sourceRef       String
+  description     String?
+  severity        String?
+  status          IncidentStatus   @default(OPEN)
   /// E6:事件类型。默认 OTHER —— 旧数据没有分类过,不替它猜一个。
-  eventType      QualityEventType @default(OTHER)
+  eventType       QualityEventType @default(OTHER)
   /// 客诉挂客户、来料/供应商问题挂供应商;都可空(过程异常两个都没有)
-  customerId     String?
-  supplierId     String?
-  partId         String?
-  mpn            String?
-  lotId          String?
+  customerId      String?
+  supplierId      String?
+  partId          String?
+  mpn             String?
+  lotId           String?
   /// SN 级留空是**常态**:没有 MES 就没有 SN,不编一个
-  sn             String?
-  detectedAt     DateTime?
-  ownerId        String?
-  resolution     String?
+  sn              String?
+  detectedAt      DateTime?
+  ownerId         String?
+  resolution      String?
   /// 关联的追溯分析(从追溯页发起时带上)
   traceAnalysisId String?
   /// 影响范围分析快照(算出来即固化,便于事后复盘)
-  impactSnapshot Json?
-  reportedById   String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  impactSnapshot  Json?
+  reportedById    String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   actions ContainmentAction[]
 
@@ -3123,21 +3255,21 @@ enum PortalAccountStatus {
 }
 
 model PortalAccount {
-  id           String    @id @default(cuid())
-  tenantId     String
-  customerId   String
-  email        String
+  id                String              @id @default(cuid())
+  tenantId          String
+  customerId        String
+  email             String
   /// R3-3 起可空:INVITED 账号尚无密码(管理员不再代设,消除线下传初始密码)
-  passwordHash String?
+  passwordHash      String?
   /// R3-3 起真源是 status;本列仅向后兼容保留,状态变更时同步写
-  active       Boolean   @default(true)
-  status       PortalAccountStatus @default(ACTIVE)
+  active            Boolean             @default(true)
+  status            PortalAccountStatus @default(ACTIVE)
   /// 客户最近一次自设密码时间(审计口径:管理员从不知道密码)
   passwordChangedAt DateTime?
-  invitedById  String
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  invitedById       String
+  lastLoginAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@unique([tenantId, email])
   @@index([tenantId, customerId])
@@ -3152,16 +3284,16 @@ enum PortalInviteStatus {
 }
 
 model PortalInvite {
-  id          String   @id @default(cuid())
+  id          String             @id @default(cuid())
   tenantId    String
   accountId   String
-  tokenHash   String   @unique
+  tokenHash   String             @unique
   status      PortalInviteStatus @default(PENDING)
   expiresAt   DateTime
   createdById String
   usedAt      DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@index([tenantId, accountId])
 }
@@ -3220,18 +3352,18 @@ model Ecn {
   priority EcnPriority @default(MEDIUM)
   status   EcnStatus   @default(DRAFT)
 
-  customerId  String?
-  productName String?
-  reason      String?
+  customerId        String?
+  productName       String?
+  reason            String?
   /// R3-5:提交评审时冻结的审批链 {stages, frozenAt} ——
   /// 评审中改租户配置不影响在途单;退回重提时重新冻结
-  workflowSnapshot Json?
+  workflowSnapshot  Json?
   /// 生效策略由**人工选择**;AI 推荐只是建议卡,不写入
   effectiveStrategy EcnEffectiveStrategy?
   effectiveAt       DateTime?
   dueDate           DateTime?
 
-  submittedAt DateTime?
+  submittedAt      DateTime?
   /// 发布即冻结:头 + 行 + 审批史的 Json 快照(与 Quote 快照同模式),此后只读
   releasedSnapshot Json?
   releasedAt       DateTime?
@@ -3270,7 +3402,7 @@ model EcnChangeLine {
   newInternalPn String?
   newMpn        String?
   /// 数量影响(正=增用,负=减用);未知留空不填 0
-  qtyImpact Decimal? @db.Decimal(18, 4)
+  qtyImpact     Decimal? @db.Decimal(18, 4)
 
   reason          String?
   engineeringNote String?
@@ -3284,14 +3416,14 @@ model EcnChangeLine {
 }
 
 model EcnApproval {
-  id       String   @id @default(cuid())
-  tenantId String
-  ecnId    String
-  ecn      Ecn      @relation(fields: [ecnId], references: [id])
-  stage    EcnStage
+  id          String   @id @default(cuid())
+  tenantId    String
+  ecnId       String
+  ecn         Ecn      @relation(fields: [ecnId], references: [id])
+  stage       EcnStage
   /// APPROVED / REJECTED
-  decision  String
-  comment   String?
+  decision    String
+  comment     String?
   decidedById String
   decidedAt   DateTime @default(now())
 
@@ -3301,13 +3433,13 @@ model EcnApproval {
 /// T2(flag ecn.customerNotice):每客户一条告知记录。
 /// 「合同条款」只是自由文本备注 —— **不建合同模型**;发送经既有 OutboundMessage,不伪造。
 model EcnCustomerNotice {
-  id         String  @id @default(cuid())
-  tenantId   String
-  ecnId      String
-  ecn        Ecn     @relation(fields: [ecnId], references: [id])
-  customerId String
-  required   Boolean @default(false)
-  contractNote String?
+  id                String    @id @default(cuid())
+  tenantId          String
+  ecnId             String
+  ecn               Ecn       @relation(fields: [ecnId], references: [id])
+  customerId        String
+  required          Boolean   @default(false)
+  contractNote      String?
   /// DRAFT / SENT / REPLIED —— SENT 只能由真实发送写入
   status            String    @default("DRAFT")
   expectedReplyAt   DateTime?
@@ -3341,24 +3473,24 @@ enum SupplierActionStatus {
 
 /// 免登录确认请求。**原始 token 不入库**,只存 SHA-256;单次响应,条件更新防重放。
 model SupplierActionRequest {
-  id         String               @id @default(cuid())
-  tenantId   String
-  kind       SupplierActionKind
-  supplierId String
+  id                String               @id @default(cuid())
+  tenantId          String
+  kind              SupplierActionKind
+  supplierId        String
   /// 关联实体(PO_CONFIRM=purchaseOrderId;OPO_ETA=supplierId,行集在响应时快照)
   relatedEntityType String
   relatedEntityId   String
-  tokenHash  String               @unique
-  expiresAt  DateTime
-  status     SupplierActionStatus @default(PENDING)
+  tokenHash         String               @unique
+  expiresAt         DateTime
+  status            SupplierActionStatus @default(PENDING)
 
-  respondedAt       DateTime?
+  respondedAt      DateTime?
   /// 响应人自述(记录用,不作身份凭据)
-  respondedByName   String?
-  respondedByEmail  String?
-  responsePayload   Json?
-  responseIp        String?
-  responseUa        String?
+  respondedByName  String?
+  respondedByEmail String?
+  responsePayload  Json?
+  responseIp       String?
+  responseUa       String?
 
   note        String?
   createdById String
@@ -3498,24 +3630,24 @@ model RateLimitBucket {
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  tenantId   String
+  id           String     @id @default(cuid())
+  tenantId     String
   /// 关联的内部责任人。外部主体操作时 = 相关内部负责人(如邀请人/链接创建人),
   /// **实际操作者看 actorType/actorId**(R3-1:修正门户登录/供应商响应的归因污染)
-  userId     String
+  userId       String
   /// R3-1:实际操作主体类型。空 = 历史行,视同 INTERNAL_USER
-  actorType  ActorType?
+  actorType    ActorType?
   /// 实际操作主体 id(INTERNAL_USER=userId;PORTAL_ACCOUNT=portalAccountId;
   /// SUPPLIER_LINK=supplierActionRequestId;SYSTEM/INTEGRATION=进程标识)
-  actorId    String?
+  actorId      String?
   /// 人读的操作者标识(如门户邮箱、供应商自述姓名)—— 展示用,不是身份凭据
   actorDisplay String?
-  action     String
-  entityType String
-  entityId   String
-  before     Json?
-  after      Json?
-  createdAt  DateTime @default(now())
+  action       String
+  entityType   String
+  entityId     String
+  before       Json?
+  after        Json?
+  createdAt    DateTime   @default(now())
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
@@ -3581,20 +3713,20 @@ model IntegrationSyncRecord {
   /// 幂等键:**首次生成后不再变**,重试必须复用 —— 这是"提交后断网"不重复建单的唯一保证
   idempotencyKey String?
 
-  attemptCount  Int       @default(0)
-  errorCode     String?
-  errorMessage  String?
+  attemptCount    Int       @default(0)
+  errorCode       String?
+  errorMessage    String?
   /// ERP 侧数据时间(读取方向);与本地时间分开存
   sourceUpdatedAt DateTime?
   /// 成功那一刻发出去/拉回来的内容快照 —— 事后对账用,不再从活数据反推
-  syncedSnapshot Json?
-  lastAttemptAt  DateTime?
-  syncedAt       DateTime?
-  nextRetryAt    DateTime?
+  syncedSnapshot  Json?
+  lastAttemptAt   DateTime?
+  syncedAt        DateTime?
+  nextRetryAt     DateTime?
   /// 附注(如 PARTIAL_RESPONSE 拉取的行数、FX 占位说明)
-  note String?
+  note            String?
   /// closed-loop P1-10:关联 id —— 业务动作→本记录→Lab 请求日志 一条链
-  correlationId String?
+  correlationId   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3716,7 +3848,6 @@ model RawBomRow {
   @@index([tenantId, importJobId, disposition])
 }
 
-
 /// E6:SN 级追溯的**数据模型准备**(客户 Q12:「最好 SN 级别,但 SN 需要和 MES 关联」)。
 ///
 /// 明确不声称已完成:本系统没有 MES,也**不产生 SN**。
@@ -3724,24 +3855,23 @@ model RawBomRow {
 /// 没有 MES 时它就是空的,界面显示「当前粒度:批次级」。
 /// **绝不自动生成虚构 SN。**
 model FinishedGoodsSerial {
-  id             String   @id @default(cuid())
-  tenantId       String
-  sn             String
+  id            String   @id @default(cuid())
+  tenantId      String
+  sn            String
   /// 该 SN 属于哪一批成品(批次级追溯的锚点)
-  finishedLotId  String?
-  workOrderId    String?
-  productId      String?
+  finishedLotId String?
+  workOrderId   String?
+  productId     String?
   /// MES 侧主键 —— 回查时要能对回去
-  mesExternalId  String?
+  mesExternalId String?
   /// 数据来自哪里:MES_IMPORT / MANUAL。没有第三种 —— 系统不生成 SN
-  source         String   @default("MES_IMPORT")
-  createdAt      DateTime @default(now())
+  source        String   @default("MES_IMPORT")
+  createdAt     DateTime @default(now())
 
   @@unique([tenantId, sn])
   @@index([tenantId, finishedLotId])
   @@index([tenantId, workOrderId])
 }
-
 
 /// E7:外发邮件(客户 Q3:发送 = 公司 SMTP;回执 = 已读回执)。
 ///
@@ -3757,35 +3887,35 @@ enum OutboundMessageState {
 }
 
 model OutboundMessage {
-  id           String               @id @default(cuid())
-  tenantId     String
+  id                    String               @id @default(cuid())
+  tenantId              String
   /// 业务场景:SUPPLIER_RFQ / PO / CALL_MATERIAL / OPO_REMINDER
-  kind         String
+  kind                  String
   /// 关联单据,便于回查
-  refType      String?
-  refId        String?
-  subject      String
-  body         String
-  state        OutboundMessageState @default(DRAFT)
+  refType               String?
+  refId                 String?
+  subject               String
+  body                  String
+  state                 OutboundMessageState @default(DRAFT)
   /// 是否请求已读回执(Disposition-Notification-To)
-  readReceiptRequested Boolean      @default(false)
+  readReceiptRequested  Boolean              @default(false)
   /// **收到**已读回执的时间。为空**不等于**对方没看 —— 多数客户端不回
   readReceiptReceivedAt DateTime?
   /// 追踪像素被加载的时间(如启用)。同样只是弱证据
-  openTrackedAt DateTime?
-  queuedAt     DateTime?
-  sentAt       DateTime?
+  openTrackedAt         DateTime?
+  queuedAt              DateTime?
+  sentAt                DateTime?
   /// 发送失败原因原文,直接显示给用户
-  failureReason String?
+  failureReason         String?
   /// SMTP 侧消息 id,排查时要对得上
-  providerMessageId String?
-  createdById  String
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  providerMessageId     String?
+  createdById           String
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
-  recipients MessageRecipient[]
+  recipients  MessageRecipient[]
   attachments MessageAttachment[]
-  events     MessageDeliveryEvent[]
+  events      MessageDeliveryEvent[]
 
   @@index([tenantId, kind, state])
 }
@@ -3833,33 +3963,31 @@ model MessageDeliveryEvent {
   @@index([tenantId, messageId])
 }
 
-
 /// E8:汇率(客户 Q8:「ERP 系统有汇率显示,请引用」)。
 ///
 /// **不再找外部汇率 API** —— 客户已明确来源是 ERP。
 /// 在拿到金蝶接口与口径之前(O1/O3),这张表只会由人工导入填充,
 /// 且换算结果一律标注为「换算参考价」,不冒充供应商正式报价。
 model FxRate {
-  id             String   @id @default(cuid())
-  tenantId       String
-  sourceCurrency String
-  targetCurrency String
+  id              String    @id @default(cuid())
+  tenantId        String
+  sourceCurrency  String
+  targetCurrency  String
   /// 汇率值。字符串保精度 —— 汇率参与金额换算,绝不走浮点
-  rate           Decimal  @db.Decimal(18, 8)
+  rate            Decimal   @db.Decimal(18, 8)
   /// 汇率类型(即期/月度锁定/集团内部价…),ERP 原文;口径待客户明确
-  rateType       String?
-  effectiveDate  DateTime
+  rateType        String?
+  effectiveDate   DateTime
   /// KINGDEE / MANUAL。**没有第三种** —— 系统不自行推算汇率
-  source         String   @default("MANUAL")
+  source          String    @default("MANUAL")
   sourceUpdatedAt DateTime?
-  fetchedAt      DateTime @default(now())
-  createdById    String
-  createdAt      DateTime @default(now())
+  fetchedAt       DateTime  @default(now())
+  createdById     String
+  createdAt       DateTime  @default(now())
 
   @@unique([tenantId, sourceCurrency, targetCurrency, effectiveDate, rateType])
   @@index([tenantId, sourceCurrency, targetCurrency])
 }
-
 
 /// F1:租户级配置与 feature flag(产品化基座,KICKOFF Round2)。
 ///
