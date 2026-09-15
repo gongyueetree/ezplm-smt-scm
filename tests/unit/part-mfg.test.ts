@@ -17,10 +17,12 @@ import {
 } from "@/lib/domain/part-mfg";
 
 describe("键规则(与迁移 SQL regexp_replace 完全一致;禁止用于展示)", () => {
-  it("upper + 去非字母数字;中文括号等一并剔除", () => {
+  it("upper + 去标点空白,保留字母数字含 CJK(纯 ASCII 规则会把中文厂商剥成空串)", () => {
     expect(mfgPartNoKey("GRM155R71C104KA88D")).toBe("GRM155R71C104KA88D");
     expect(mfgPartNoKey("rc0603fr-07 10kl")).toBe("RC0603FR0710KL");
-    expect(manufacturerKeyOf("YAGEO(国巨)")).toBe("YAGEO");
+    expect(manufacturerKeyOf("YAGEO(国巨)")).toBe("YAGEO国巨");
+    expect(manufacturerKeyOf("风华高科")).toBe("风华高科");
+    expect(manufacturerKeyOf("muRata")).toBe("MURATA");
     expect(manufacturerKeyOf(null)).toBe("");
   });
 });

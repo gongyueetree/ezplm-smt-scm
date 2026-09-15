@@ -30,7 +30,8 @@
     "test:golden": "vitest run -c vitest.golden.config.ts",
     "test:golden:slow": "GOLDEN_SLOW=1 vitest run -c vitest.golden.config.ts",
     "uat:qianchuang:analyze": "tsx scripts/uat/qianchuang/analyze.ts",
-    "test:uat:qianchuang": "vitest run -c vitest.uat.config.ts"
+    "test:uat:qianchuang": "vitest run -c vitest.uat.config.ts",
+    "uat:qianchuang:import": "tsx scripts/uat/qianchuang/import.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",

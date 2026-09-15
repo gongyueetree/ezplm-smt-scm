@@ -103,7 +103,9 @@ export default async function MaterialsPage({
       })
     : [];
   const latestByPart = new Map<string, (typeof snapshots)[number]>();
-  for (const s of snapshots) if (!latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  for (const s of snapshots) {
+    if (s.partId && !latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  }
 
   const [tags, l2Options, tagLinks] = await Promise.all([
     prisma.partTag.findMany({

@@ -156,6 +156,7 @@ export async function inventoryForParts(
   });
   const map = new Map<string, { qtyOnHand: number; fetchedAt: Date }>();
   for (const r of rows) {
+    if (!r.partId) continue; // R4-4:主数据外库存行 partId 空,不参与按料聚合
     const prev = map.get(r.partId);
     // 同料多仓合计;fetchedAt 取最旧的(诚实:整行数据至少旧到这个时点)
     map.set(r.partId, {

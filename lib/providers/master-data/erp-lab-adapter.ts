@@ -30,6 +30,7 @@ function toCanonical(m: ErpMaterial): CanonicalPart {
     internalPn: m.internalPn,
     mpn: m.mpn,
     manufacturer: m.manufacturer,
+    manufacturerId: null, // Lab 主数据无 ezPLM 厂商 ID(诚实 null)
     description: m.description,
     footprint: m.footprint,
     category: null,

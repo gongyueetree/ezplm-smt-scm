@@ -71,8 +71,10 @@ describe("Migration 安全性", () => {
       for (const st of statements(m.sql)) {
         if (!/ADD\s+COLUMN/i.test(st)) continue;
         // 逐个 ADD COLUMN 片段判断
-        for (const frag of st.split(/,(?=\s*ADD\s+COLUMN)/i)) {
-          if (!/ADD\s+COLUMN/i.test(frag)) continue;
+        for (const rawFrag of st.split(/,(?=\s*ADD\s+COLUMN)/i)) {
+          if (!/ADD\s+COLUMN/i.test(rawFrag)) continue;
+          // 同一语句里跟在后面的 ALTER COLUMN(如 DROP NOT NULL 放宽)不属于本片段
+          const frag = rawFrag.split(/,\s*ALTER\s+COLUMN/i)[0];
           if (/NOT\s+NULL/i.test(frag) && !/DEFAULT/i.test(frag)) {
             offenders.push(`${m.name}: ${frag.trim().slice(0, 90)}`);
           }

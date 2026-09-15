@@ -16,7 +16,9 @@ export async function inventoryMetrics(tenantId: string, now: string) {
     orderBy: { fetchedAt: "desc" },
   });
   const latestByPart = new Map<string, (typeof snapshots)[number]>();
-  for (const s of snapshots) if (!latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  for (const s of snapshots) {
+    if (s.partId && !latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  }
 
   const rows: InventoryAgingRow[] = parts.map((p) => {
     const snap = latestByPart.get(p.id);

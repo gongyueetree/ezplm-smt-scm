@@ -99,7 +99,9 @@ export default async function InventoryPage({
     orderBy: { fetchedAt: "desc" },
   });
   const latestByPart = new Map<string, (typeof snapshots)[number]>();
-  for (const s of snapshots) if (!latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  for (const s of snapshots) {
+    if (s.partId && !latestByPart.has(s.partId)) latestByPart.set(s.partId, s);
+  }
 
   /*
    * N-11「显示需求」:**没有直接做成一列**。

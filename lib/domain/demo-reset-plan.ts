@@ -175,6 +175,12 @@ export const KEEP_MODELS = [
   "PartSupplierRef",
   // R4-2:Internal PN ↔ MFG 关系真源,主数据性质,清库保留
   "PartMfgMapping",
+  // R4-3:标准制造商引用(全局表,无 tenantId)与别名(含 GLOBAL 行)——
+  // 主数据/配置性质,清库保留;租户清库脚本按 tenantId 删,不碰全局行
+  "CanonicalManufacturerRef",
+  "ManufacturerAlias",
+  // R4-4:UAT 导入批次是数据溯源记录(datasetVersion),清库保留
+  "ErpUatImportBatch",
   "PartTag",
   "PartTagLink",
   "CustomerPartMapping",

@@ -150,6 +150,17 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["ENGINEERING", "PM", "PROCUREMENT", "MANAGEMENT"],
       },
       {
+        path: "/materials/manufacturer-review",
+        label: "制造商解析评审",
+        icon: "gear",
+        plannedPr: "R4-3",
+        desc:
+          "乾创 ERP 原始 MFG 写法 → 标准制造商(ezPLM 真源)。批准生成租户级别名;" +
+          "MPN 证据与相似匹配只出候选,冲突一律人工裁决,系统不静默修正。",
+        implemented: true,
+        roles: ["ENGINEERING", "MANAGEMENT"],
+      },
+      {
         path: "/materials/alternates",
         label: "替代料查询",
         icon: "db",
