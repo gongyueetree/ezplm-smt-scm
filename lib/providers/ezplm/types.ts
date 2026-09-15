@@ -13,6 +13,8 @@ export const CanonicalPartSchema = z.object({
   internalPn: z.string().min(1).nullable(),
   mpn: z.string().nullable(),
   manufacturer: z.string().nullable(),
+  /// R4-3:ezPLM 制造商稳定 ID(Manufacturer Master 真源 §12);API 未给时 null
+  manufacturerId: z.string().nullable().default(null),
   description: z.string().nullable(),
   footprint: z.string().nullable(),
   /** 器件分类(ezPLM 提供;用于 UI 徽标与后续按品类定参数硬约束) */

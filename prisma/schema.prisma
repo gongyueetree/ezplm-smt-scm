@@ -989,6 +989,73 @@ enum MfgResolutionStatus {
   UNRESOLVED
 }
 
+/// R4-3(§12/§13):标准制造商引用/缓存 —— **ezPLM Manufacturer Master 为真源**。
+/// 全局表(无 tenantId):行业标准制造商身份跨租户一致;本系统只存稳定 ID +
+/// 必要缓存字段,不复制 ezPLM 数据体系。ezplmManufacturerId 可空 =
+/// 尚未与 ezPLM 对上号(CURATED 引导名单/本地缓存来源),对上后回填。
+model CanonicalManufacturerRef {
+  id                  String    @id @default(cuid())
+  ezplmManufacturerId String?   @unique
+  canonicalName       String
+  /// 归一键(upper+去非字母数字),匹配用,禁止展示
+  normalizedName      String    @unique
+  nameZh              String?
+  /// EZPLM=经 ezPLM 数据对上;CURATED=行业引导名单(待与 ezPLM 对号)
+  origin              String    @default("CURATED")
+  syncedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  aliases ManufacturerAlias[]
+}
+
+enum ManufacturerAliasScope {
+  GLOBAL
+  TENANT
+}
+
+enum ManufacturerAliasSource {
+  CURATED
+  MANUAL
+  MPN_EVIDENCE
+  IMPORT
+}
+
+enum ManufacturerAliasStatus {
+  APPROVED
+  CANDIDATE
+  REJECTED
+}
+
+/// R4-3(§14):制造商别名。GLOBAL=行业通用(TI→Texas Instruments);
+/// TENANT=某客户 ERP 写法(YAGEO(国巨)→YAGEO),**绝不污染其它租户**。
+/// tenantId 空串 = GLOBAL(唯一约束需要非 null)。
+/// §20:只有 APPROVED 的别名参与确定性解析;LLM/自动系统只许提建议,
+/// 禁止静默创建永久别名。
+model ManufacturerAlias {
+  id              String                   @id @default(cuid())
+  /// "" = GLOBAL;非空 = 该租户私有
+  tenantId        String                   @default("")
+  rawName         String
+  /// 归一键(upper+去非字母数字)
+  normalizedAlias String
+  canonicalRefId  String
+  canonicalRef    CanonicalManufacturerRef @relation(fields: [canonicalRefId], references: [id])
+  scope           ManufacturerAliasScope
+  source          ManufacturerAliasSource
+  status          ManufacturerAliasStatus  @default(CANDIDATE)
+  confidence      Decimal?                 @db.Decimal(4, 3)
+  evidenceCount   Int                      @default(1)
+  confirmedById   String?
+  confirmedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([tenantId, normalizedAlias])
+  @@index([tenantId, status])
+  @@index([canonicalRefId])
+}
+
 /// R4-2(§8):Internal Material ↔ 外部制造/加工标识(N:M 真源)。
 /// Part.mpn/manufacturer 降级为 preferred/compatibility 缓存(§6/§23);
 /// 只有 APPROVED+PRIMARY+人工确认 才允许同步回 Part.mpn;

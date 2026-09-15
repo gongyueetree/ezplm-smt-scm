@@ -201,6 +201,7 @@ export class HttpEzplmProvider implements EzplmPartsProvider {
       internalPn: null,
       mpn: p.mpn,
       manufacturer: p.manufacturer?.name ?? null,
+      manufacturerId: p.manufacturer?.id ?? null,
       description: p.description ?? null,
       footprint: p.footprint?.name ?? null,
       category: p.category?.name ?? null,

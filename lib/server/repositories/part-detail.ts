@@ -453,6 +453,7 @@ export async function getPartDetail(tenantId: string, mpn: string): Promise<Part
       internalPn: local.internalPn,
       mpn: local.mpn,
       manufacturer: local.manufacturer,
+      manufacturerId: null, // 本地缓存无 ezPLM 厂商 ID
       description: local.description,
       footprint: local.footprint,
       category: null, // 本地 Part 表没有分类字段;不猜

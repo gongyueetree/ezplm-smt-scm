@@ -13,9 +13,14 @@ import type {
   PartMfgRelationType,
 } from "@prisma/client";
 
-/** 匹配/去重键:upper + 去非字母数字。与迁移 SQL 的 regexp_replace 完全一致。禁止用于展示。 */
+/**
+ * 匹配/去重键:upper + 只保留字母数字(**含 CJK**,\p{L}\p{N})。
+ * 与迁移 SQL 的 regexp_replace(upper(x),'[^[:alnum:]]','','g') 一致。
+ * 纯 ASCII 剥离会把「风华高科」这类中文厂商剥成空串 —— 必须保留 CJK。
+ * 禁止用于展示。
+ */
 export function mfgPartNoKey(v: string | null | undefined): string {
-  return (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  return (v ?? "").toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 /** 制造商去重键(同规则;空制造商 → 空串,唯一约束需要非 null) */
