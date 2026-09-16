@@ -1407,26 +1407,41 @@ model PartDocument {
 
 /// 物料的默认供应商引用(**关联 Supplier 主数据,不写自由文本**)
 model PartSupplierRef {
-  id             String   @id @default(cuid())
-  tenantId       String
-  partId         String
-  part           Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  tenantId          String
+  partId            String
+  part              Part      @relation(fields: [partId], references: [id], onDelete: Cascade)
   /// 跨聚合引用:按 schema 顶部备案 B,supplierId 用**受控标量**而非 FK
   /// (租户隔离由应用层 tenant scope + 复合唯一约束保证)。
   /// 关键是"引用主数据 ID 而不是写自由文本",这一点已满足。
-  supplierId     String
-  supplierPn     String?
+  supplierId        String
+  supplierPn        String?
   /// 参考单价:**仅初始参考**,不是正式报价。正式价来自 DigiKey/Mouser/ezPLM/线下报价/历史采购价
-  referencePrice Decimal? @db.Decimal(18, 6)
-  currency       String   @default("CNY")
-  isDefault      Boolean  @default(false)
-  note           String?
-  createdById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  referencePrice    Decimal?  @db.Decimal(18, 6)
+  currency          String    @default("CNY")
+  isDefault         Boolean   @default(false)
+  note              String?
+  // ---- R4-6(§30/§31):采购策略层(复用本表扩展,不建平行模型) ----
+  /// 策略作用域:空 = Internal PN 级;非空 = Internal PN + 该 MFG 件级(§31)。
+  /// 唯一性由应用层 upsert 保证(PG 复合唯一遇 NULL 视为互异,不能靠约束)。
+  partMfgMappingId  String?
+  priority          Int       @default(100)
+  isPreferred       Boolean   @default(false)
+  isApproved        Boolean   @default(false)
+  isBlocked         Boolean   @default(false)
+  moq               Decimal?  @db.Decimal(18, 4)
+  spq               Decimal?  @db.Decimal(18, 4)
+  leadTimeDays      Int?
+  allocationPercent Decimal?  @db.Decimal(5, 2)
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  @@unique([tenantId, partId, supplierId])
+  @@unique([tenantId, partId, supplierId, partMfgMappingId])
   @@index([tenantId, supplierId])
+  @@index([tenantId, partId, isBlocked])
 }
 
 /// 建料过程留痕:重复检查结果、AI 提取证据、审核记录。
