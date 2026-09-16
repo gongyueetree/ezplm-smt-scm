@@ -294,7 +294,84 @@ export async function commitUatPackage(
       }
       bump("excessRows", excessRows.length);
 
-      // ---- PO → MFG 证据(§22;PO 单据本体归 R4-8) ----
+      // ---- R4-9(§49/§50):ERP PO 单据落库(source=ERP_IMPORT) ----
+      // 供应商名经 主数据/alias override 解析;解析不上的单据整单跳过并计数
+      // (supplierId 是必填外键 —— 不造占位供应商,待 override 补齐后重导)
+      const supplierIdByName = new Map<string, string>();
+      for (const su of await tx.supplier.findMany({
+        where: tenantWhere(tenantId, {}),
+        select: { id: true, name: true, code: true },
+      })) {
+        supplierIdByName.set(key(su.name), su.id);
+        supplierIdByName.set(key(su.code), su.id);
+      }
+      const overrideSupplier = new Map(
+        Object.entries(overrides?.suppliers ?? {}).map(([n, code]) => [key(n), key(code)]),
+      );
+      const poByNumber = new Map<string, typeof plan.data.purchaseOrders.records>();
+      for (const r of plan.data.purchaseOrders.records) {
+        poByNumber.set(r.erpPoNumber, [...(poByNumber.get(r.erpPoNumber) ?? []), r]);
+      }
+      for (const [erpPoNumber, poLines] of poByNumber) {
+        const supRaw = key(poLines[0].supplierNameRaw);
+        const supplierId =
+          supplierIdByName.get(supRaw) ??
+          (overrideSupplier.has(supRaw) ? supplierIdByName.get(overrideSupplier.get(supRaw)!) : undefined);
+        if (!supplierId) {
+          bump("erpPoSkippedUnresolvedSupplier");
+          continue;
+        }
+        const existingPo = await tx.purchaseOrder.findFirst({
+          where: tenantWhere(tenantId, { erpPoNumber }),
+          select: { id: true },
+        });
+        if (existingPo) {
+          bump("erpPoDeduped");
+          continue; // 同 ERP 单号已导入(幂等)
+        }
+        const po = await tx.purchaseOrder.create({
+          data: tenantData(tenantId, {
+            poNo: `ERP-${erpPoNumber}`,
+            supplierId,
+            currency: "CNY",
+            status: "EXPORTED" as never, // 历史单:已在 ERP 成立;不走内部审批机
+            source: "ERP_IMPORT",
+            erpPoNumber,
+            erpOrderDate: poLines[0].orderDate ? new Date(poLines[0].orderDate) : null,
+            erpDocStatus: poLines[0].docStatus,
+            erpCloseStatus: poLines[0].closeStatus,
+            createdById: session.userId,
+          }),
+        });
+        for (const l of poLines) {
+          await tx.purchaseOrderLine.create({
+            data: tenantData(tenantId, {
+              purchaseOrderId: po.id,
+              lineNo: l.sourceLineNo,
+              partId: partIdByPn.get(key(l.internalPn)) ?? null,
+              mpn: l.rawManufacturerPartNo,
+              manufacturer: l.rawManufacturer,
+              description: l.materialName,
+              qty: l.qty ?? "0",
+              unitPrice: l.unitPrice,
+              currency: "CNY",
+              requestedDeliveryDate: l.requestedDeliveryDate ? new Date(l.requestedDeliveryDate) : null,
+              sourceLineNo: l.sourceLineNo,
+              sourceRow: l.sourceRow,
+              erpReceivedQty: l.receivedQty,
+              erpMaterialReceivedQty: l.materialReceivedQty,
+              erpRemainingQty: l.remainingQty,
+              isGift: l.isGift,
+              remark1: l.remark1,
+              remark2: l.remark2,
+            }),
+          });
+          bump("erpPoLines");
+        }
+        bump("erpPoCreated");
+      }
+
+      // ---- PO → MFG 证据(§22;PO 单据本体见上) ----
       const kindByPnForPo = new Map(
         plan.data.materials.records.map((m) => [key(m.internalPn), m.materialKind]),
       );

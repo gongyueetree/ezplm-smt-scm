@@ -167,8 +167,97 @@ export async function collectMaterialPrices(q: PricePoolQuery): Promise<PricePoo
     }
   }
 
-  // ---- HISTORICAL_PO(§51):R4-9 ERP PO 落库后接入 ----
-  notes.push("HISTORICAL_PO 来源待 R4-9(ERP PO 单据落库)接入 —— 当前不提供历史采购价,不用假数据");
+  // ---- HISTORICAL_PO(§51):真实成交价(PO.unitPrice ≠ 供应商报价,分开保存) ----
+  if (part) {
+    const histLines = await prisma.purchaseOrderLine.findMany({
+      where: tenantWhere(q.tenantId, { partId: part.id, unitPrice: { not: null } }),
+      include: { purchaseOrder: { select: { id: true, erpPoNumber: true, poNo: true, supplierId: true, erpOrderDate: true, source: true, createdAt: true } } },
+      orderBy: { id: "desc" },
+      take: 200,
+    });
+    for (const l of histLines) {
+      const po = l.purchaseOrder;
+      const purchaseDate = po.erpOrderDate ?? po.createdAt;
+      prices.push({
+        source: "HISTORICAL_PO",
+        supplierId: po.supplierId,
+        provider: null,
+        partId: part.id,
+        partMfgMappingId: null,
+        internalPn: part.internalPn,
+        canonicalManufacturerId: null,
+        manufacturer: l.manufacturer,
+        mpn: l.mpn,
+        currency: l.currency,
+        unitPrice: l.unitPrice!.toString(),
+        minQty: "1",
+        maxQty: null,
+        moq: null,
+        spq: null,
+        leadTimeDays: null,
+        quotedAt: purchaseDate.toISOString(),
+        validUntil: null,
+        sourceUpdatedAt: purchaseDate.toISOString(),
+        evidenceRef: `PO:${po.erpPoNumber ?? po.poNo}#${l.lineNo}(实际成交,${po.source})`,
+        approvalStatus: null,
+      });
+    }
+  }
 
   return { qtyBasis: basis, prices, notes };
+}
+
+/** §51:历史采购价查询 —— Last / Lowest / Highest,按料(可选供应商/MPN/日期窗) */
+export async function historicalPurchaseStats(q: {
+  tenantId: string;
+  partId: string;
+  supplierId?: string | null;
+  mpn?: string | null;
+  from?: string | null;
+  to?: string | null;
+}): Promise<{
+  count: number;
+  last: { unitPrice: string; currency: string; date: string; evidenceRef: string } | null;
+  lowest: { unitPrice: string; currency: string; date: string; evidenceRef: string } | null;
+  highest: { unitPrice: string; currency: string; date: string; evidenceRef: string } | null;
+  note: string;
+}> {
+  const lines = await prisma.purchaseOrderLine.findMany({
+    where: tenantWhere(q.tenantId, {
+      partId: q.partId,
+      unitPrice: { not: null },
+      ...(q.mpn ? { mpn: { equals: q.mpn, mode: "insensitive" as const } } : {}),
+      ...(q.supplierId ? { purchaseOrder: { supplierId: q.supplierId } } : {}),
+    }),
+    include: { purchaseOrder: { select: { erpPoNumber: true, poNo: true, erpOrderDate: true, createdAt: true, source: true } } },
+    take: 1000,
+  });
+  const rows = lines
+    .map((l) => ({
+      unitPrice: l.unitPrice!.toString(),
+      currency: l.currency,
+      date: (l.purchaseOrder.erpOrderDate ?? l.purchaseOrder.createdAt).toISOString().slice(0, 10),
+      evidenceRef: `PO:${l.purchaseOrder.erpPoNumber ?? l.purchaseOrder.poNo}#${l.lineNo}`,
+    }))
+    .filter((r) => (!q.from || r.date >= q.from) && (!q.to || r.date <= q.to));
+  if (rows.length === 0) {
+    return { count: 0, last: null, lowest: null, highest: null, note: "无历史成交记录" };
+  }
+  // 跨币种不混比(既有纪律):统计只在主币种集合内做,混币时如实说明
+  const currencies = new Set(rows.map((r) => r.currency));
+  const note =
+    currencies.size > 1
+      ? `存在多币种历史(${[...currencies].join("/")})—— Low/High 仅在同币种内可比,未做 FX 归一(O3 未答)`
+      : "";
+  const main = rows.filter((r) => r.currency === rows[0].currency);
+  const by = (cmp: (a: number, b: number) => boolean) =>
+    main.reduce((a, b) => (cmp(Number(b.unitPrice), Number(a.unitPrice)) ? b : a));
+  const last = [...rows].sort((a, b) => b.date.localeCompare(a.date))[0];
+  return {
+    count: rows.length,
+    last,
+    lowest: by((x, y) => x < y),
+    highest: by((x, y) => x > y),
+    note,
+  };
 }

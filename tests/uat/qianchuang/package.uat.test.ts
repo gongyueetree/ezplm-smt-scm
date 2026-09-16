@@ -37,7 +37,8 @@ describe("UAT Package 计划(STRICT_UAT)", () => {
     // 未解析引用 > 0(真实数据不是 100% RI;不自动补造)
     expect(r.inventoryRowsOrphan).toBeGreaterThan(1000);
     expect(r.poSuppliersUnique).toBeGreaterThan(50);
-    expect(r.poSuppliersResolved).toBe(0); // override 未提供时如实 0
+    // override 只覆盖零星测试映射;大量供应商名仍未解析(正式对照表待乾创)
+    expect(r.poSuppliersUnique - r.poSuppliersResolved).toBeGreaterThan(50);
     // PO MFG 证据存在
     expect(r.poMfgEvidenceRows).toBeGreaterThan(100);
 
