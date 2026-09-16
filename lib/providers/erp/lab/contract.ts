@@ -222,6 +222,23 @@ export const LabInventoryLotSchema = z.object({
 });
 export type LabInventoryLot = z.infer<typeof LabInventoryLotSchema>;
 
+/** R4-10:Internal PN ↔ MFG/MPN 关系(主仓 PartMfgMapping 的 ERP 侧数据源) */
+export const LabMaterialMfgMappingSchema = z.object({
+  externalId: z.string(),
+  materialCode: z.string(),
+  internalPn: z.string().optional(),
+  manufacturer: z.string().optional(),
+  mpn: z.string(),
+  relationType: z.string().optional(),
+  status: z.string().optional(),
+  source: z.string(),
+  sourceDocumentNo: z.string().optional(),
+  sourceRow: z.number().int().optional(),
+  observedAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type LabMaterialMfgMapping = z.infer<typeof LabMaterialMfgMappingSchema>;
+
 /** Lab `/api/erp` 的 RPC 操作名 —— 与 `api/erp.ts` 的 switch 分支逐字一致 */
 export const LAB_OPERATIONS = [
   "testConnection",
@@ -236,6 +253,7 @@ export const LAB_OPERATIONS = [
   "pullSalesOrders",
   "pullInventoryMovements",
   "pullInventoryLots",
+  "pullMaterialMfgMappings",
   "createPurchaseOrder",
   "updateEta",
   "receivePurchaseOrder",

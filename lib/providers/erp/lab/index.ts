@@ -36,6 +36,7 @@ import {
   type ErpReceiveInputMain,
   type ErpInventoryLot,
   type ErpInventoryMovement,
+  type ErpMaterialMfgMappingRecord,
   type ErpSalesOrderRecord,
   type ErpSupplierRecord,
   type ErpWorkOrder,
@@ -47,6 +48,7 @@ import {
   LabCustomerSchema,
   LabInventoryLotSchema,
   LabInventoryMovementSchema,
+  LabMaterialMfgMappingSchema,
   LabSalesOrderSchema,
   LabWorkOrderSchema,
   LabEnvelopeSchema,
@@ -386,6 +388,25 @@ export class HttpErpLabProvider implements ErpProvider {
       receivedAt: opt(l.receivedAt),
       expiresAt: opt(l.expiresAt),
       status: opt(l.status),
+    }));
+  }
+
+  // R4-10:MFG 关系拉取
+  async pullMaterialMfgMappings(_c: ErpConnectionConfig, input: { cursor?: string | null; limit?: number; since?: string | null; materialCode?: string | null }): Promise<ErpPage<ErpMaterialMfgMappingRecord>> {
+    const p = await this.rpc("pullMaterialMfgMappings", labPageSchema(LabMaterialMfgMappingSchema), { input: this.pullInput(input) });
+    return this.toPage(p, (m) => ({
+      externalId: m.externalId,
+      materialCode: m.materialCode,
+      internalPn: opt(m.internalPn),
+      manufacturer: opt(m.manufacturer),
+      mpn: m.mpn,
+      relationType: opt(m.relationType),
+      status: opt(m.status),
+      source: m.source,
+      sourceDocumentNo: opt(m.sourceDocumentNo),
+      sourceRow: m.sourceRow ?? null,
+      observedAt: opt(m.observedAt),
+      updatedAt: opt(m.updatedAt),
     }));
   }
 
