@@ -139,6 +139,8 @@ export const PURGE_MODELS = [
   "PortalInvite",
   "ScrapRecord",
   "ApiUsageLog",
+  // R4-7:RFQ×供应商行清单是询价过程单据,清库重来
+  "ProcurementRfqSupplierLine",
   "ExternalPartSnapshot", // 三方数据缓存,清掉会重新拉,不是主数据
 ] as const;
 
