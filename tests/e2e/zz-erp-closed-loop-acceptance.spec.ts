@@ -98,6 +98,8 @@ test("〔1〕读取面:Material/Inventory/Excess/FX/OpenPO/WO/SO/Movements/Lots 
     // R3-7:门户 Transactions/Lots 数据源
     "pullInventoryMovements",
     "pullInventoryLots",
+    // R4-10:MFG 关系
+    "pullMaterialMfgMappings",
   ]) {
     const { status, body } = await labRpc(page, op, { input: { limit: 3 } });
     expect(status, op).toBe(200);

@@ -104,6 +104,9 @@ export function createSkeletonProvider(
     async pullInventoryLots() {
       return nope("pullInventoryLots");
     },
+    async pullMaterialMfgMappings() {
+      return nope("pullMaterialMfgMappings");
+    },
     async receivePurchaseOrder() {
       return nope("receivePurchaseOrder");
     },

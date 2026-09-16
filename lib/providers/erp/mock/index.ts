@@ -283,6 +283,12 @@ export class MockErpProvider implements ErpProvider {
     ]);
   }
 
+  async pullMaterialMfgMappings() {
+    return page([
+      { externalId: "MFGM-0001", materialCode: "EZ-DEMO-001", internalPn: "EZ-DEMO-001", manufacturer: "Murata", mpn: "GRM155R71C104KA88D(示例)", relationType: "MAINTAINED", status: "CANDIDATE", source: "ERP_MFG_MAINTENANCE", sourceDocumentNo: "MFG-DEMO-1", sourceRow: 2, observedAt: null, updatedAt: "2026-08-01T00:00:00.000Z" },
+    ]);
+  }
+
   async pullSalesOrders() {
     return page([
       {

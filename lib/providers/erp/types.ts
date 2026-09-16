@@ -147,6 +147,23 @@ export const ErpInventoryLotSchema = z.object({
 });
 export type ErpInventoryLot = z.infer<typeof ErpInventoryLotSchema>;
 
+/** R4-10:Internal PN ↔ MFG/MPN 关系(ERP 侧;主仓 PartMfgMapping 数据源) */
+export const ErpMaterialMfgMappingSchema = z.object({
+  externalId: z.string(),
+  materialCode: z.string(),
+  internalPn: z.string().nullable().default(null),
+  manufacturer: z.string().nullable().default(null),
+  mpn: z.string(),
+  relationType: z.string().nullable().default(null),
+  status: z.string().nullable().default(null),
+  source: z.string(),
+  sourceDocumentNo: z.string().nullable().default(null),
+  sourceRow: z.number().int().nullable().default(null),
+  observedAt: z.string().nullable().default(null),
+  updatedAt: z.string().nullable().default(null),
+});
+export type ErpMaterialMfgMappingRecord = z.infer<typeof ErpMaterialMfgMappingSchema>;
+
 /** F4:ERP 侧客户档案(对齐 Lab ErpCustomer) */
 export const ErpCustomerRecordSchema = z.object({
   externalId: z.string(),
@@ -398,6 +415,8 @@ export interface ErpProvider {
   /** R3-7:门户 Transactions/Lots 数据源(金蝶 NOT_IMPLEMENTED,Lab 供测试数据) */
   pullInventoryMovements(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpInventoryMovement>>;
   pullInventoryLots(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpInventoryLot>>;
+  /** R4-10:MFG 关系拉取(金蝶待文档;Lab 供测试数据) */
+  pullMaterialMfgMappings(config: ErpConnectionConfig, input: PullInput): Promise<ErpPage<ErpMaterialMfgMappingRecord>>;
   /** closed-loop:收货(幂等键纪律与 createPurchaseOrder 相同) */
   receivePurchaseOrder(
     config: ErpConnectionConfig,

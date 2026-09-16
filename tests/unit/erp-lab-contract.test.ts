@@ -19,6 +19,7 @@ import {
   LAB_SCENARIO_CODES,
   LabInventoryLotSchema,
   LabInventoryMovementSchema,
+  LabMaterialMfgMappingSchema,
   LabConnectionResultSchema,
   LabCustomerSchema,
   LabEnvelopeSchema,
@@ -33,7 +34,7 @@ import {
 } from "@/lib/providers/erp/lab/contract";
 
 describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)", () => {
-  it("15 个 RPC 操作名逐字锁定(closed-loop 增加收货;R3-7 增加异动/批次)", () => {
+  it("16 个 RPC 操作名逐字锁定(R4-10 增加 MFG 关系)", () => {
     expect(LAB_OPERATIONS).toEqual([
       "testConnection",
       "pullMaterials",
@@ -47,10 +48,19 @@ describe("操作名与场景码(与 Lab api/erp.ts、scenario-engine.ts 对齐)"
       "pullSalesOrders",
       "pullInventoryMovements",
       "pullInventoryLots",
+      "pullMaterialMfgMappings",
       "createPurchaseOrder",
       "updateEta",
       "receivePurchaseOrder",
     ]);
+  });
+
+  it("R4-10:MFG 关系 schema 字段锁定(mpn/materialCode/source 必填,其余可选)", () => {
+    const m = LabMaterialMfgMappingSchema.parse({
+      externalId: "MFGM-1", materialCode: "EZ-X", mpn: "GRM155", source: "ERP_MFG_MAINTENANCE",
+    });
+    expect(m.mpn).toBe("GRM155");
+    expect(LabMaterialMfgMappingSchema.safeParse({ externalId: "x", materialCode: "m", source: "s" }).success).toBe(false);
   });
 
   // R3-7:异动/批次形状锁定
