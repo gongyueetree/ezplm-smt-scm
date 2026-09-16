@@ -194,21 +194,33 @@ export async function runSync(
     };
   }
 
-  // 取本地现值(仅物料实体需要;其余实体一期只预览)
+  // 先逐行映射拿业务主键(某行失败不拖垮整批)
+  const preMapped = erpRows.map((row) => {
+    const m = mapRow(row, mappings);
+    return { m, bizKey: bizKeyOf(input.entityType, m.values) };
+  });
+
+  /*
+   * 取本地现值(仅物料实体需要):R4-5(§32)定向查询 ——
+   * 只查本批 ERP 行涉及的 internalPn(索引 IN),取代全表 take:5000。
+   * 16K+ 主数据下旧写法会让第 5001 号料的差异判定静默失真(local 视为不存在)。
+   */
   const localByKey = new Map<string, { values: Record<string, string | null>; origin: string }>();
   if (input.entityType === "MATERIAL") {
-    const parts = await prisma.part.findMany({
-      where: tenantWhere(session.tenantId),
-      select: {
-        internalPn: true,
-        mpn: true,
-        manufacturer: true,
-        description: true,
-        footprint: true,
-        origin: true,
-      },
-      take: 5000,
-    });
+    const keys = [...new Set(preMapped.map((x) => x.bizKey).filter((k): k is string => !!k))];
+    const parts = keys.length
+      ? await prisma.part.findMany({
+          where: tenantWhere(session.tenantId, { internalPn: { in: keys } }),
+          select: {
+            internalPn: true,
+            mpn: true,
+            manufacturer: true,
+            description: true,
+            footprint: true,
+            origin: true,
+          },
+        })
+      : [];
     for (const p of parts) {
       localByKey.set(p.internalPn, {
         origin: p.origin,
@@ -223,12 +235,9 @@ export async function runSync(
     }
   }
 
-  // 逐行映射 + 差异;**某行失败不拖垮整批**
   const diffs: DiffResult[] = [];
   const mapped: { bizKey: string; values: Record<string, string | null> }[] = [];
-  for (const row of erpRows) {
-    const m = mapRow(row, mappings);
-    const bizKey = bizKeyOf(input.entityType, m.values);
+  for (const { m, bizKey } of preMapped) {
     if (m.errors.length > 0 || !bizKey) {
       diffs.push({
         bizKey: bizKey || "(无业务主键)",

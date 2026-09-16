@@ -22,6 +22,10 @@ import type { ParsedBomLine } from "./bom-parse";
 export type MatchSourceValue =
   | "CUSTOMER_MAPPING"
   | "INTERNAL_PN"
+  /** R4-5(§27):乾创 PartMfgMapping —— canonical 厂商 + exact MPN 命中 */
+  | "QC_MFG_MFR_MPN"
+  /** R4-5(§27):乾创 PartMfgMapping —— exact MPN 命中(厂商未定/未一致) */
+  | "QC_MFG_MPN"
   | "EXACT_MPN"
   | "MFR_MPN"
   | "DESCRIPTION"
@@ -37,7 +41,9 @@ export type MatchSourceValue =
 export const SOURCE_CONFIDENCE: Record<MatchSourceValue, number> = {
   CUSTOMER_MAPPING: 0.98,
   INTERNAL_PN: 0.97,
+  QC_MFG_MFR_MPN: 0.96,
   MFR_MPN: 0.96,
+  QC_MFG_MPN: 0.94,
   EXACT_MPN: 0.95,
   EZPLM: 0.8,
   DIGIKEY: 0.75,
@@ -96,6 +102,23 @@ export interface CustomerMappingRef {
   manufacturer: string | null;
 }
 
+/** R4-5:乾创 MFG 映射引用(repository 定向预取,匹配层不碰库) */
+export interface MfgMappingRef {
+  partId: string;
+  internalPn: string;
+  manufacturerPartNo: string;
+  rawManufacturer: string | null;
+  canonicalManufacturerId: string | null;
+  canonicalManufacturerName: string | null;
+  relationType: "PRIMARY" | "APPROVED" | "ALTERNATE" | "HISTORICAL" | "MAINTAINED";
+  status: "CANDIDATE" | "APPROVED" | "REJECTED" | "OBSOLETE";
+  mappingSource: string;
+  identifierKind: string;
+  identifierMatchMode: "EXACT" | "PATTERN" | "UNKNOWN";
+}
+
+export type MaterialRouting = "COMPONENT" | "NON_COMPONENT" | "UNKNOWN";
+
 export interface MatchContext {
   /** 客户料号映射(标准化 customerPn → 映射) */
   customerMappings?: Map<string, CustomerMappingRef>;
@@ -103,8 +126,20 @@ export interface MatchContext {
   byInternalPn?: Map<string, LocalPartRef>;
   /** 本地物料:按标准化 MPN 索引(同 MPN 多厂商时多条) */
   byMpn?: Map<string, LocalPartRef[]>;
-  /** 全量本地物料,供描述模糊匹配 */
+  /** 相似度语料(可能截断 —— 截断必须经 similarityCorpusTruncated 显式上报) */
   allParts?: LocalPartRef[];
+  /** 语料被截断时给出总量(诚实降级;精确通道不受影响) */
+  similarityCorpusTruncated?: { loaded: number; total: number } | null;
+  /** R4-5:partId → LocalPartRef(mfg 映射候选还原成料) */
+  byPartId?: Map<string, LocalPartRef>;
+  /** R4-5:normalizeMpn(MFG_PN) → 乾创映射(EXACT 且非 REJECTED/OBSOLETE) */
+  mfgByMpnKey?: Map<string, MfgMappingRef[]>;
+  /** R4-5:partId → 该料的可用 MFG 关系(内部料号命中后展示成组,§27) */
+  mfgByPartId?: Map<string, MfgMappingRef[]>;
+  /** R4-5:partId → MaterialKind(PCB/元器件分流,§28) */
+  materialKindByPartId?: Map<string, string>;
+  /** R4-5:BOM 原始厂商 → canonical(注入 ManufacturerResolver 结果;可选) */
+  resolveMfr?: (raw: string | null) => { id: string; name: string } | null;
   ezplm?: EzplmPartsProvider;
   distributors?: DistributorProvider[];
   /** 询价数量(取三方阶梯价用);缺省取 BOM 行数量 */
@@ -122,6 +157,13 @@ export interface MatchResult {
   requiresManualDecision: true;
   /** 三方降级信息(provider 不可用时,不阻断整单) */
   degraded: { provider: string; kind: string; message: string }[];
+  /**
+   * R4-5(§28):分流 —— NON_COMPONENT(如 PCB 裸板)跳过 ezPLM/DigiKey/Mouser
+   * 元器件通道;UNKNOWN=行未命中本地料,无法判定,保守走元器件通道
+   */
+  routing: MaterialRouting;
+  /** R4-5(§27):内部料号命中时,该料的 MFG 关系组(一料多厂展示) */
+  mfgParts: MfgMappingRef[];
 }
 
 function keyOf(v: string | null | undefined): string {
@@ -235,7 +277,35 @@ export async function matchBomLine(
   const byInternal = line.internalPn ? ctx.byInternalPn?.get(keyOf(line.internalPn)) : undefined;
   if (byInternal) candidates.push(fromLocal(byInternal, "INTERNAL_PN", SOURCE_CONFIDENCE.INTERNAL_PN));
 
-  // ③④ 精确 MPN / Manufacturer + MPN
+  // ②b R4-5(§27):内部料号命中 → 该料的 MFG 关系组(一料多厂交人工挑)
+  const mfgParts: MfgMappingRef[] = byInternal
+    ? (ctx.mfgByPartId?.get(byInternal.partId) ?? [])
+    : [];
+
+  // ③pre R4-5(§27 步骤 3/4):乾创 PartMfgMapping 精确 MPN 通道。
+  // PATTERN 映射不参与 exact 匹配(§10);PO_HISTORY 候选置信度封顶 0.75(§22)。
+  if (line.mpn && ctx.mfgByMpnKey) {
+    const mappings = ctx.mfgByMpnKey.get(keyOf(line.mpn)) ?? [];
+    const resolved = ctx.resolveMfr?.(line.manufacturer ?? null) ?? null;
+    for (const m of mappings) {
+      if (m.identifierMatchMode !== "EXACT") continue;
+      const part = ctx.byPartId?.get(m.partId);
+      if (!part) continue;
+      const mfrAligned =
+        (resolved && m.canonicalManufacturerId && resolved.id === m.canonicalManufacturerId) ||
+        (line.manufacturer ? manufacturerMatches(m.canonicalManufacturerName ?? m.rawManufacturer, line.manufacturer) : false);
+      const source: MatchSourceValue = mfrAligned ? "QC_MFG_MFR_MPN" : "QC_MFG_MPN";
+      let confidence = SOURCE_CONFIDENCE[source];
+      let reason = `乾创 MFG 关系(${m.relationType}/${m.status},来源 ${m.mappingSource})`;
+      if (m.mappingSource === "PO_HISTORY" && m.status === "CANDIDATE") {
+        confidence = Math.min(confidence, 0.75); // 不达批量确认线(§22)
+        reason += " · PO 历史证据,置信度封顶 0.75";
+      }
+      candidates.push({ ...fromLocal(part, source, confidence), matchReason: reason });
+    }
+  }
+
+  // ③④ 精确 MPN / Manufacturer + MPN(preferred 缓存通道,兼容旧数据)
   if (line.mpn) {
     const hits = ctx.byMpn?.get(keyOf(line.mpn)) ?? [];
     for (const p of hits) {
@@ -313,8 +383,33 @@ export async function matchBomLine(
 
   const localHit = candidates.some((c) => c.confidence >= LOCAL_HIT_CONFIDENCE);
 
+  if (ctx.similarityCorpusTruncated) {
+    degraded.push({
+      provider: "LOCAL",
+      kind: "SIMILARITY_CORPUS_TRUNCATED",
+      message: `相似度语料截断:仅加载 ${ctx.similarityCorpusTruncated.loaded}/${ctx.similarityCorpusTruncated.total} —— 精确通道(内部料号/MFG 映射/客户映射)不受影响`,
+    });
+  }
+
+  // R4-5(§28)分流:命中的本地料非元器件(PCB 裸板/结构件/组件)→
+  // 跳过 ezPLM/DigiKey/Mouser 元器件通道(板厂编号不是元器件 MPN)
+  const primaryLocal = candidates.find((c) => c.partId && !SIMILAR_SOURCES.has(c.source));
+  const primaryKind = primaryLocal?.partId
+    ? ctx.materialKindByPartId?.get(primaryLocal.partId)
+    : undefined;
+  const routing: MaterialRouting =
+    primaryKind === undefined ? "UNKNOWN" : primaryKind === "ELECTRONIC_COMPONENT" ? "COMPONENT" : "NON_COMPONENT";
+  const componentChannelAllowed = routing !== "NON_COMPONENT";
+  if (!componentChannelAllowed) {
+    degraded.push({
+      provider: "ROUTING",
+      kind: "NON_COMPONENT_SKIP",
+      message: `物料大类 ${primaryKind}:跳过元器件数据源(ezPLM/DigiKey/Mouser)—— 走 PCB/结构采购通道`,
+    });
+  }
+
   // ⑥ ezPLM 候选(本地已高置信命中则跳过,省接口调用)
-  if (!localHit && ctx.ezplm && line.mpn) {
+  if (componentChannelAllowed && !localHit && ctx.ezplm && line.mpn) {
     try {
       const part = await ctx.ezplm.getPartByMpn({
         mpn: line.mpn,
@@ -349,7 +444,7 @@ export async function matchBomLine(
    * 再按相似度排序取前几个。ezPLM 的封装命名与 KiCad 同源(SOT-23-5 / TQFP-48_7x7mm_P0.5mm),
    * 所以封装能直接参与打分。
    */
-  if (!localHit && ctx.ezplm && similarityQuery.value && candidates.length < (ctx.similarityLimit ?? 5)) {
+  if (componentChannelAllowed && !localHit && ctx.ezplm && similarityQuery.value && candidates.length < (ctx.similarityLimit ?? 5)) {
     try {
       const found = await ctx.ezplm.searchParts({
         keyword: similarityQuery.value,
@@ -395,7 +490,7 @@ export async function matchBomLine(
   }
 
   // ⑦ DigiKey / Mouser 候选(带正式价格:有 MPN 走 getOffersByMpn)
-  if (!localHit && ctx.distributors?.length && line.mpn) {
+  if (componentChannelAllowed && !localHit && ctx.distributors?.length && line.mpn) {
     const qty = ctx.quantity ?? line.qty ?? 1;
     for (const d of ctx.distributors) {
       try {
@@ -435,6 +530,8 @@ export async function matchBomLine(
     candidates: dedupeCandidates(candidates),
     requiresManualDecision: true,
     degraded,
+    routing,
+    mfgParts,
   };
 }
 
