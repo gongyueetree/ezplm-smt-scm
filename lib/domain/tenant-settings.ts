@@ -76,6 +76,10 @@ export const TenantSettingsSchema = z.object({
    * 走人工审批;客户书面确认「维护单=正式 AVL」后才置 true。
    */
   erpMfgMaintenanceAsApproved: z.boolean().default(false),
+  /** R4-8(§30v1):报价提交是否允许存在无成本证据的 BOM 物料行。默认 false(拦下)。 */
+  quoteAllowMissingCost: z.boolean().default(false),
+  /** R4-6(§26v2):分销商价是否进 Overall Low/High 区间。默认 true(参考面更全,来源仍逐条标注)。 */
+  includeDistributorInPriceRange: z.boolean().default(true),
 });
 export type TenantSettings = z.infer<typeof TenantSettingsSchema>;
 

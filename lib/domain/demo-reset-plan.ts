@@ -141,6 +141,8 @@ export const PURGE_MODELS = [
   "ApiUsageLog",
   // R4-7:RFQ×供应商行清单是询价过程单据,清库重来
   "ProcurementRfqSupplierLine",
+  // R4-8:成本选择是测试期业务决定,清库重来
+  "BomCostSelection",
   "ExternalPartSnapshot", // 三方数据缓存,清掉会重新拉,不是主数据
 ] as const;
 

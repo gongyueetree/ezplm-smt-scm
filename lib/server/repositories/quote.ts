@@ -26,6 +26,8 @@ import {
   type QuoteStatusValue,
 } from "@/lib/domain/quote-status";
 import { checkTasksBeforeSubmit, type TaskRow } from "@/lib/domain/quote-tasks";
+import { buildCostEvidenceForQuoteLines } from "@/lib/server/repositories/cost-matrix";
+import { getTenantSettings } from "@/lib/server/tenant-settings";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import { pickQuoteTemplate } from "@/lib/domain/quote-template";
@@ -385,6 +387,38 @@ export async function submitQuoteForApproval(
     return { ok: false, code: taskCheck.code, message: taskCheck.message };
   }
 
+  /*
+   * R4-8(§30v1/§46):Cost Completeness Gate + 成本证据冻结。
+   * 关联 BOM 的行必须有人工成本选择;缺失时按租户配置拦下(默认拦)。
+   */
+  const bomLineIds = version.lines
+    .map((l) => l.bomLineId)
+    .filter((v): v is string => !!v);
+  let costEvidence: unknown = null;
+  if (bomLineIds.length > 0) {
+    // 成本证据的两条合法来源:R4-8 成本矩阵选择,或既有采购比价选择已把
+    // purchaseCost 写进报价行(quote-from-bom 旧链路)。二者皆无才算缺失。
+    const selectedRows = await prisma.bomCostSelection.findMany({
+      where: tenantWhere(session.tenantId, { bomLineId: { in: bomLineIds } }),
+      select: { bomLineId: true },
+    });
+    const covered = new Set(selectedRows.map((r) => r.bomLineId));
+    for (const l of version.lines) {
+      if (l.bomLineId && l.purchaseCost !== null) covered.add(l.bomLineId);
+    }
+    const missing = bomLineIds.filter((id) => !covered.has(id)).length;
+    const selections = covered.size;
+    const { settings } = await getTenantSettings(session.tenantId);
+    if (missing > 0 && !settings.quoteAllowMissingCost) {
+      return {
+        ok: false,
+        code: "missing_cost",
+        message: `成本覆盖 ${selections}/${bomLineIds.length},缺 ${missing} 行成本选择 —— 补齐成本矩阵后再提交(租户可配 quoteAllowMissingCost 放行)`,
+      };
+    }
+    costEvidence = await buildCostEvidenceForQuoteLines(session.tenantId, bomLineIds);
+  }
+
   const summary = summarizeQuote(toCalcLines(version.lines), { currency: version.currency });
   const { doc, docLines } = await buildDocFields(session.tenantId, version);
   const snapshot = buildQuoteSnapshot({
@@ -405,7 +439,11 @@ export async function submitQuoteForApproval(
       where: tenantWhere(session.tenantId, { id: versionId }),
       data: {
         status: "PENDING_APPROVAL",
-        submittedSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+        submittedSnapshot: {
+          ...(snapshot as object),
+          // §46:提交时冻结的采购成本证据(候选/阶梯/Low-High/选中/依据)
+          costEvidence,
+        } as unknown as Prisma.InputJsonValue,
         submittedAt: new Date(),
       },
     });
