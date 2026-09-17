@@ -13,6 +13,7 @@
  *   否则"最低价 12.5"看起来像是比过一圈的结论。
  */
 import Decimal from "decimal.js";
+import { isUsablePrice } from "./price-guard";
 
 export interface CompareOfferInput {
   supplierName: string;
@@ -76,7 +77,9 @@ export function buildCompareSummary(offers: readonly CompareOfferInput[]): Compa
   }
 
   return [...byMpn.entries()].map(([mpn, list]) => {
-    const priced = list.filter((o) => toDec(o.unitPrice) !== null);
+    // R0-8:toDec("0") 返回 Decimal(0) 而非 null,若只判 null,
+    // 一行 0 价会被当成真实报价并选成最低价(客户在前期版本上撞到的正是这个)。
+    const priced = list.filter((o) => toDec(o.unitPrice) !== null && isUsablePrice(o.unitPrice));
 
     // 按币种分组各自算极值 —— 没有汇率源就绝不跨币种比大小
     const currencies = [...new Set(priced.map((o) => o.currency.toUpperCase()))].sort();

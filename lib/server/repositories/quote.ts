@@ -6,6 +6,7 @@
  * 本层不得另起一套判断(否则规则会在两处漂移)。
  */
 import { ApprovalDecision, Prisma } from "@prisma/client";
+import { hasUsableCost } from "@/lib/domain/price-guard";
 import {
   BUILTIN_LABOR_TEMPLATES,
   summarizeQuote,
@@ -404,7 +405,9 @@ export async function submitQuoteForApproval(
     });
     const covered = new Set(selectedRows.map((r) => r.bomLineId));
     for (const l of version.lines) {
-      if (l.bomLineId && l.purchaseCost !== null) covered.add(l.bomLineId);
+      // R0-8:存进库的 0.000000 不算「已有成本证据」 —— 否则缺成本的行
+      // 会静默通过提交门禁,而快照里是一行 0 元成本。
+      if (l.bomLineId && hasUsableCost(l.purchaseCost)) covered.add(l.bomLineId);
     }
     const missing = bomLineIds.filter((id) => !covered.has(id)).length;
     const selections = covered.size;
