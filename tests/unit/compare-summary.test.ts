@@ -148,3 +148,24 @@ describe("按 MPN 分组", () => {
     expect(rows.find((r) => r.mpn === "A")!.byCurrency[0].highest!.unitPrice).toBe("1");
   });
 });
+
+describe("R0-8 零价格不得成为最低价", () => {
+  it("0 价报价不计入 priced,不会被选成 lowest", () => {
+    const rows = buildCompareSummary([
+      offer({ supplierName: "报了0的", unitPrice: "0" }),
+      offer({ supplierName: "真实报价", unitPrice: "9.5" }),
+    ]);
+    expect(rows).toHaveLength(1);
+    const cny = rows[0].byCurrency.find((c) => c.currency === "CNY")!;
+    expect(cny.lowest!.supplierName).toBe("真实报价");
+    expect(cny.offerCount).toBe(1);
+  });
+
+  it("全部为 0 价 → 视为无报价,而不是「最低价 0 元」", () => {
+    const rows = buildCompareSummary([
+      offer({ supplierName: "A", unitPrice: "0" }),
+      offer({ supplierName: "B", unitPrice: "0.0000" }),
+    ]);
+    expect(rows[0].byCurrency).toEqual([]);
+  });
+});

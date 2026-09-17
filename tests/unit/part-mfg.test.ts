@@ -4,6 +4,8 @@
  * 才可同步 preferred(§23);PATTERN 不可作 preferred;MAINTAINED 默认保守(§21);
  * PCB 不进元器件管线(§28);键规则与迁移 SQL 一致。
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   PO_HISTORY_DEFAULTS,
@@ -78,5 +80,45 @@ describe("§28 元器件/PCB 分流", () => {
     expect(materialKindAllowsComponentProviders("ELECTRONIC_COMPONENT")).toBe(true);
     expect(materialKindAllowsComponentProviders("PCB_BARE_BOARD")).toBe(false);
     expect(materialKindAllowsComponentProviders("ASSEMBLY")).toBe(false);
+  });
+});
+
+describe("R0-1 键规则:TS 与迁移 SQL 必须同源", () => {
+  /**
+   * 这条缺陷之所以能活到生产,是因为 TS 规则与 PG 规则各写一处、谁也不校验谁。
+   * 迁移是产物(不是生产源码),可以安全地断言其内容 —— 参照 migration-safety.test.ts 的先例。
+   */
+  const sqlPath = "prisma/migrations/20260915210329_r4_3_key_recompute/migration.sql";
+
+  it("迁移 SQL 用 [[:alnum:]](UTF-8 下保留 CJK),不是剥 ASCII 的 [^0-9A-Z]", () => {
+    const raw = readFileSync(join(process.cwd(), sqlPath), "utf8");
+    // 注释里会引用旧规则作为说明,断言只看可执行语句
+    const sql = raw
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("--"))
+      .join("\n");
+    expect(sql).toContain("[^[:alnum:]]");
+    expect(sql).not.toContain("[^0-9A-Z]");
+    // 两列都必须按同一规则重算,否则厂商键与料号键会再次分叉
+    expect(sql).toContain('"manufacturerPartNoKey"');
+    expect(sql).toContain('"manufacturerKey"');
+  });
+
+  it("TS 侧保留 CJK,且与 SQL 语义一致的样本逐一对齐", () => {
+    // 形如 PG: regexp_replace(upper(x), '[^[:alnum:]]', '', 'g')
+    const pgEquivalent = (v: string) => v.toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
+    for (const s of [
+      "RC0402FR-07-10KL(风华)",
+      "风华高科",
+      "YAGEO(国巨)",
+      "GRM188R71H104KA93D",
+      "CL05B104KO5NNNC-TR",
+      "村田 GRM155",
+      "",
+    ]) {
+      expect(mfgPartNoKey(s)).toBe(pgEquivalent(s));
+    }
+    // 关键性质:中文不得被剥成空串(旧 ASCII 规则的致命后果)
+    expect(mfgPartNoKey("风华高科")).not.toBe("");
   });
 });

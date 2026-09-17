@@ -7,6 +7,7 @@
  * Lowest/Highest 定义(§26 v2):当前 Price Qty Basis 下"有效且可使用"候选的
  * 最低/最高单价;排除 过期/被拒/Blocked 供应商/币种非法/数量不适用。
  */
+import { isUsablePrice } from "./price-guard";
 
 export type PriceSource =
   | "INTERNAL"
@@ -71,7 +72,14 @@ export interface UsableFilterInput {
 
 export interface PriceExclusion {
   price: NormalizedMaterialPrice;
-  reason: "EXPIRED" | "REJECTED" | "BLOCKED_SUPPLIER" | "INVALID_CURRENCY" | "QTY_NOT_APPLICABLE";
+  reason:
+    | "EXPIRED"
+    | "REJECTED"
+    | "BLOCKED_SUPPLIER"
+    | "INVALID_CURRENCY"
+    | "QTY_NOT_APPLICABLE"
+    /** R0-8:0 或负价 —— 缺失被当成 0 的典型,绝不能参与「最低价」 */
+    | "NON_POSITIVE_PRICE";
 }
 
 /**
@@ -87,6 +95,12 @@ export function usablePrices(
   const usable: NormalizedMaterialPrice[] = [];
   const excluded: PriceExclusion[] = [];
   for (const p of prices) {
+    // R0-8:先判价格本身是否可用 —— 0/负/不可解析一律出池。
+    // priceRange 用裸 Number() 比大小,放 0 进来会直接把「最低价」变成 0 元。
+    if (!isUsablePrice(p.unitPrice)) {
+      excluded.push({ price: p, reason: "NON_POSITIVE_PRICE" });
+      continue;
+    }
     if (p.approvalStatus === "REJECTED") {
       excluded.push({ price: p, reason: "REJECTED" });
       continue;

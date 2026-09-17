@@ -3,6 +3,7 @@
  * 纪律:tenant 守卫 + 事务内 AuditLog;异常判定与选型校验一律走领域函数,本层只落库。
  */
 import type { Prisma } from "@prisma/client";
+import { checkUsablePrice } from "@/lib/domain/price-guard";
 import {
   evaluateFlags,
   persistedProgress,
@@ -186,6 +187,13 @@ export async function importOfflineQuote(session: SessionRef, input: ImportOffli
     select: { id: true, sourcingMode: true },
   });
   if (!prfq) return null;
+
+  // R0-8:线下报价同样不得落 0 —— 解析层(supplier-quote-parse)已拒,
+  // 这里是落库前的不变量兜底;REF-3 会把本通道并入价格池,届时更不能带 0 进去。
+  for (const l of input.lines) {
+    const check = checkUsablePrice(l.unitPrice);
+    if (!check.ok) throw new Error(`线下报价落库被拒:${check.message}(MPN=${l.mpn})`);
+  }
 
   return prisma.$transaction(async (tx) => {
     const quote = await tx.supplierQuote.create({
@@ -414,6 +422,12 @@ export async function upsertSupplierOffer(
     priceBreaks: { minQty: number; unitPrice: string }[];
   },
 ) {
+  // R0-8:最后一道 —— 任何调用方都不得把 0/负/不可解析的价格写进报价池。
+  // 路由层已用 zod 校验,这里是不变量兜底(写库前 fail closed,不静默落 0)。
+  for (const pb of input.priceBreaks) {
+    const check = checkUsablePrice(pb.unitPrice);
+    if (!check.ok) throw new Error(`供应商报价落库被拒:${check.message}(minQty=${pb.minQty})`);
+  }
   return prisma.$transaction(async (tx) => {
     const offer = await tx.supplierOffer.create({
       data: tenantData(session.tenantId, {

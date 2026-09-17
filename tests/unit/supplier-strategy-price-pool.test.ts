@@ -165,3 +165,32 @@ describe("§44 数量依据 + §26v2 可用集/Low/High(§55 多项)", () => {
     expect(priceFreshness(price({ validUntil: "2020-01-01T00:00:00Z" }))).toBe("EXPIRED");
   });
 });
+
+describe("R0-8 价格池:0 价不得可用、更不得成为最低价", () => {
+  it("unitPrice = 0 被排除,原因是 NON_POSITIVE_PRICE", () => {
+    const { usable, excluded } = usablePrices(
+      [price({ unitPrice: "0", minQty: "1" }), price({ unitPrice: "1.30", minQty: "1" })],
+      { qty: 10 },
+    );
+    expect(usable).toHaveLength(1);
+    expect(usable[0].unitPrice).toBe("1.30");
+    expect(excluded.map((e) => e.reason)).toContain("NON_POSITIVE_PRICE");
+  });
+
+  it("0.000000 与负价同样被排除", () => {
+    const { usable } = usablePrices(
+      [price({ unitPrice: "0.000000", minQty: "1" }), price({ unitPrice: "-2", minQty: "1" })],
+      { qty: 10 },
+    );
+    expect(usable).toHaveLength(0);
+  });
+
+  it("priceRange 拿不到 0 价 —— 最低价必须是真实报价", () => {
+    const { usable } = usablePrices(
+      [price({ unitPrice: "0", minQty: "1" }), price({ unitPrice: "9.50", minQty: "1" })],
+      { qty: 10 },
+    );
+    const r = priceRange(usable, { includeDistributorInRange: true });
+    expect(r.low?.unitPrice).toBe("9.50");
+  });
+});

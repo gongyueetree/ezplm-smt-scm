@@ -10,6 +10,8 @@ import {
   type MatchContext,
   type MfgMappingRef,
 } from "@/lib/domain/bom-match";
+import { mfgPartNoKey } from "@/lib/domain/part-mfg";
+import { normalizeMpn } from "@/lib/providers/common/mpn";
 
 function part(partId: string, internalPn: string, mpn: string | null = null): LocalPartRef {
   return {
@@ -109,6 +111,32 @@ describe("§27 乾创 MFG 映射通道", () => {
     });
     expect(r.candidates[0].confidence).toBeLessThanOrEqual(0.75);
     expect(r.candidates[0].matchReason).toContain("PO 历史证据");
+  });
+
+  it("R0-1:含中文的 MFG_PN 必须命中 —— 查询键规则须与写入侧/迁移 SQL 一致", async () => {
+    // 真实乾创数据里 52,256 条 MFG_PN 中有 510 条含非 ASCII 字符。
+    // 库内 PartMfgMapping.manufacturerPartNoKey 由 mfgPartNoKey 写入(保留 CJK),
+    // 若匹配侧改用剥 ASCII 的 normalizeMpn,这些行永远查不出来且**不报错**。
+    const raw = "RC0402FR-07-10KL(风华)";
+    const dbKey = mfgPartNoKey(raw); // = 写入侧与 r4_3 迁移 SQL 的键
+    const r = await matchBomLine(line({ mpn: raw }) as never, {
+      byPartId: new Map([["p1", p1]]),
+      mfgByMpnKey: new Map([
+        [dbKey, [mapping({ partId: "p1", internalPn: "10-01-0001", manufacturerPartNo: raw })]],
+      ]),
+      materialKindByPartId: new Map([["p1", "ELECTRONIC_COMPONENT"]]),
+    });
+    expect(r.candidates.filter((c) => c.source.startsWith("QC_MFG"))).toHaveLength(1);
+    expect(r.candidates[0].partId).toBe("p1");
+  });
+
+  it("R0-1:两套键规则对 CJK 结果不同 —— 用错即静默失配(记录差异本身)", () => {
+    const raw = "RC0402FR-07-10KL(风华)";
+    expect(mfgPartNoKey(raw)).toBe("RC0402FR0710KL风华");
+    expect(normalizeMpn(raw)).toBe("RC0402FR0710KL");
+    expect(mfgPartNoKey(raw)).not.toBe(normalizeMpn(raw));
+    // 纯 ASCII 输入下两者必须等价(所以缺陷只在含 CJK 时暴露,测试长期未抓到)
+    expect(mfgPartNoKey("GRM188R71H104KA93D")).toBe(normalizeMpn("GRM188R71H104KA93D"));
   });
 
   it("§10:PATTERN 映射不参与 exact 匹配", async () => {

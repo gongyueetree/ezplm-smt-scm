@@ -107,3 +107,32 @@ describe("列识别", () => {
     expect(parseSupplierOfferGrid([]).errors[0].message).toContain("未能解析出表格");
   });
 });
+
+describe("R0-8 零价格守卫", () => {
+  it("单价为 0 的行必须被拒并给出原因,不得落成 0 价阶梯", () => {
+    const r = parseSupplierOfferGrid([
+      HEAD,
+      ["SUP-A", "STM32", "ST", "CNY", "", "", "", "1", "0"],
+    ]);
+    expect(r.groups).toHaveLength(0);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/大于 0/);
+  });
+
+  it("0.0000 同样被拒 —— 客户在前期版本上撞到的就是这种写法", () => {
+    const r = parseSupplierOfferGrid([
+      HEAD,
+      ["SUP-A", "HS1MB", "Yangjie", "CNY", "", "", "", "400", "0.0000"],
+    ]);
+    expect(r.groups).toHaveLength(0);
+    expect(r.errors[0].message).toMatch(/大于 0/);
+  });
+
+  it("负价仍被拒;正常价不受影响", () => {
+    const bad = parseSupplierOfferGrid([HEAD, ["SUP-A", "X", "ST", "CNY", "", "", "", "1", "-1"]]);
+    expect(bad.groups).toHaveLength(0);
+    const good = parseSupplierOfferGrid([HEAD, ["SUP-A", "X", "ST", "CNY", "", "", "", "1", "0.0001"]]);
+    expect(good.errors).toEqual([]);
+    expect(good.groups).toHaveLength(1);
+  });
+});

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUsablePrice } from "@/lib/domain/price-guard";
 import { z } from "zod";
 import { badRequest, forbidden, requireSession } from "@/lib/server/api";
 import { prisma } from "@/lib/server/db";
@@ -16,7 +17,13 @@ const Input = z.object({
   spq: z.number().int().nonnegative().nullable().optional(),
   leadTimeDays: z.number().int().nonnegative().nullable().optional(),
   priceBreaks: z
-    .array(z.object({ minQty: z.number().int().nonnegative(), unitPrice: z.string() }))
+    .array(
+      z.object({
+        minQty: z.number().int().nonnegative(),
+        // R0-8:单价必须为正 —— 0 不是「便宜」,是「没填」(CLAUDE.md B5)
+        unitPrice: z.string().refine(isUsablePrice, { message: "单价必须大于 0" }),
+      }),
+    )
     .min(1),
 });
 
