@@ -1,6 +1,6 @@
 import type { IconName } from "@/lib/routes";
 
-/** 图标路径抽取自 legacy-static/v5.2.1/customer-confirmation/nav-contract.js */
+/** 图标路径抽取自原型 v5.2.1 的 customer-confirmation/nav-contract.js(legacy-static 已归档移出仓库,见 README) */
 const ICON_PATHS: Record<IconName, string> = {
   home: '<path d="M3 11l9-8 9 8M5 9v12h14V9M9 21v-6h6v6" stroke-linecap="round" stroke-linejoin="round"/>',
   db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
