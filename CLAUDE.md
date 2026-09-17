@@ -9,8 +9,11 @@
 - `docs/SPEC.pdf` — GPT《Next.js 全栈重构实施规范》,PR1–PR9 的功能基线(首个会话先将其转写为 `docs/SPEC.md` 便于后续引用)
 - `docs/INTEGRATION_PLAN.md` — 升级整合方案:架构决策、资产迁移地图、客户需求→PR 映射(§3)、与 ezPLM 融合策略(§7)
 - `docs/customer-feedback/` — 客户测试的功能清单 xlsx 与逐页意见 docx(验收对照原件)
-- `legacy-static/` — 静态原型(仅视觉与业务逻辑参考,禁止继续修改)
-- `reference/nestjs-v15/` — 旧后端 Prisma schema(42 表),PR1 需产出与规范模型的合并对照表
+- ~~`legacy-static/`~~ — 静态原型,**2026-09-17 已归档移出仓库**(REF-0 决策,8MB/141 文件,无构建依赖)。
+  仍是客户验收的视觉对照原件,需要时按二者之一取回:仓外副本 `../archive/legacy-static-v5.2.1/`,
+  或 `git checkout archive/legacy-static-last -- legacy-static/`。**取回后仍禁止修改,也不得再提交回仓库。**
+- ~~`reference/nestjs-v15/`~~ — 旧后端 Prisma schema。**已确认永久缺失**(INTEGRATION_PLAN §九 2026-07-27),
+  合并对照路径作废;`docs/SPEC.md` §4 的模型清单为唯一 schema 基线。
 
 ## 硬性约束(违反即返工)
 1. Next.js App Router + React + TypeScript;Server/Client Components + Route Handlers;PostgreSQL + Prisma。
