@@ -31,6 +31,12 @@
 另有 **2 个安全/纪律级问题**:`assertTenantScopedMutation` 在生产路径**零调用**(§11.3);
 Agent 运行与审批两个端点**无任何角色守卫**(§4.4)。
 
+> **2026-09-17 增补 P0-5**:客户对前期版本 BOM2BUY 的测试反馈到达后,逐条核实本仓库,
+> 发现**零价格守卫在 4 条路径中只有 1 条生效**,且存了 `0.000000` 能通过报价提交完整性门禁 ——
+> 客户截图里"`$0.0000` 计入合计"的缺陷经"线下 offer 导入"路径在本仓库同样会发生。
+> 详见 [CUSTOMER_FEEDBACK_2026-09-17.md §0.4](CUSTOMER_FEEDBACK_2026-09-17.md),backlog 项 R0-8。
+> 同一份反馈另增 4 项 P1 与 2 项 P2,并把 **P0-1 升为最高优先级**(客户要求匹配率 95+%)。
+
 规模底数:生产代码 **76,810 行**(app 32,203 / lib 41,411 / components 1,062 / scripts 2,134),
 测试 **26,244 行**,`schema.prisma` **4,232 行 / 125 model / 80 enum / 57 migration**。
 
@@ -480,10 +486,10 @@ CI 门禁([.github/workflows/ci.yml](../../.github/workflows/ci.yml))实跑:
 
 | 级别 | 数量 | 代表 |
 |---|---|---|
-| **P0 correctness** | 7 | CJK 键失配、量纲不比、候选只填封装、审批抹字段、报价通道分叉、Agent 端点无角色守卫、`assertTenantScopedMutation` 零调用 |
-| **P1 architectural duplication** | 14 | 7 套 MPN 归一、5 处厂商归一、3 套替代料引擎、10 份列映射词表、15 处结果对象构造、双 ERP 同步栈、单复数命名分叉、缺失 application 层 |
-| **P2 maintainability** | 12 | 34 个页面直连 Prisma、8 个混合型 repository、`routes.ts` 十职合一、`demo-reset-plan` 强耦合(21 次提交)、Provider 工厂三份复制 memo、17 个导出三套约定 |
-| **P3 cleanup** | 9 | `legacy-static/`、21 个孤儿端点、死组件与死模块、20+ 条陈旧分支、`@prisma/client` 版本 `^` 漂移 |
+| **P0 correctness** | 8 | CJK 键失配、量纲不比、候选只填封装、审批抹字段、报价通道分叉、Agent 端点无角色守卫、`assertTenantScopedMutation` 零调用、**零价格守卫只接上 1/4 路径** |
+| **P1 architectural duplication** | 18 | 7 套 MPN 归一、5 处厂商归一、3 套替代料引擎、10 份列映射词表、15 处结果对象构造、双 ERP 同步栈、单复数命名分叉、缺失 application 层、**聚合粒度分层**、**核对未完成即可对外询价**、**比价导出缺数量列**、**无 MPN 行被硬丢且不告知** |
+| **P2 maintainability** | 14 | 34 个页面直连 Prisma、8 个混合型 repository、`routes.ts` 十职合一、`demo-reset-plan` 强耦合(21 次提交)、Provider 工厂三份复制 memo、17 个导出三套约定、**客户报价单 26 列导出契约未固化**、**损耗率不可配** |
+| **P3 cleanup** | 9 | `legacy-static/`(**已执行归档**)、21 个孤儿端点、死组件与死模块、20+ 条陈旧分支、`@prisma/client` 版本 `^` 漂移 |
 
 **依赖版本漂移(第十七节点名的)已确认存在**:
 `prisma` = `7.9.0`(精确)、`@prisma/adapter-pg` = `7.9.0`(精确)、
@@ -506,4 +512,9 @@ CI 门禁([.github/workflows/ci.yml](../../.github/workflows/ci.yml))实跑:
 4. **`lib/integration/erp/` 是样板,不是目标。** 它已经是 `profiles → sources → canonical → normalization`
    的分层,REF-1+ 应把其它 context 拉向这个形状,而不是反过来改它。
 
-**REF-0 到此为止,等人工确认后再开始 REF-1。**
+**REF-0 到此为止。**
+
+> **2026-09-17 更新**:三件待决事项已全部确认(接受 REF-0.5/REF-0.8;线下报价同权参与比价;
+> `legacy-static` 归档移出并已执行),下一步从 **REF-0.5** 开工 ——
+> 建议内部顺序 R0-1 → R0-8 → 其余,因为这两项直接对应客户验收面(匹配率 95+%、零价计入合计)。
+> 决策记录见 [MIGRATION_PLAN.md §0′](MIGRATION_PLAN.md)。

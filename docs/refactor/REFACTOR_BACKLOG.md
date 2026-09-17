@@ -4,7 +4,10 @@
 > **Risk** 指"做这件事的风险",不是"不做的风险"。
 > P0 = 正确性(已产生或将产生错误业务结果)· P1 = 架构性重复 · P2 = 可维护性 · P3 = 清理。
 
-**统计:P0 × 7 · P1 × 14 · P2 × 12 · P3 × 9 = 42 项。**
+**统计:P0 × 8 · P1 × 18 · P2 × 14 · P3 × 9 = 49 项。**
+
+> 2026-09-17 增补 7 项(R0-8 / R1-15…R1-18 / R2-13 / R2-14),来源为客户对前期版本 BOM2BUY 的测试反馈,
+> 逐条对本仓库核实后得出 —— 分析见 [CUSTOMER_FEEDBACK_2026-09-17.md](CUSTOMER_FEEDBACK_2026-09-17.md)。
 
 ---
 
@@ -87,6 +90,22 @@
 - **Migration**: 若统一到 `SupplierOffer`,需数据迁移;**REF-0 不决定,进商务/产品确认**(录入通道语义是业务问题)。
 - **Tests**: 四条通道各写一条报价 → 断言全部出现在价格池与比价集(或按既定语义显式排除并有 UI 标注);阶梯价往返不失真。
 - **Acceptance**: "这条价格会不会参与比价"可由数据本身回答,而非由录入通道决定。
+
+## R0-8 · 零价格只在 4 条路径中的 1 条被拦住
+
+- **Priority**: P0(客户已在前期版本上实际撞到;本仓库同类路径未设防)
+- **Problem**: CLAUDE.md B5 与 R4 §58 都明令「绝不按 0 落库 / blank→0 禁止」,但只有**供应商报价文件上传**一条路径真正执行。其余路径 `0` 畅通无阻,并一路进到比价与报价:
+  - [supplier-offer-import.ts:126-129](../../lib/domain/supplier-offer-import.ts) 判的是 `< 0`,**`0` 合法** → 0 价阶梯写入 `PriceBreak`;
+  - [price-pool.ts:82-114](../../lib/domain/price-pool.ts) `usablePrices` **无零值检查**,`priceRange` 用裸 `Number()` 比较 → **0 被选成最低价**;
+  - [compare-summary.ts:79](../../lib/domain/compare-summary.ts) `toDec("0")` 返回 `Decimal(0)` 非 null → 0 价成为 `lowest` 并进导出;
+  - [procurement-flags.ts:66-71](../../lib/domain/procurement-flags.ts) 只 flag `price > limit`,0 永不触发;
+  - [quote.ts:407-417](../../lib/server/repositories/quote.ts) 提交完整性门禁判 `purchaseCost !== null` → 存了 `0.000000` **照样通过提交**。
+- **Files**: 上述五处 + `lib/domain/offers.ts:213,281`(0 价仍参与排名,只是价格分为 0)
+- **Risk**: 低。加守卫可能让既有 0 价数据行变为"被拒绝",需先**只报不拦**跑一轮统计存量。
+- **Target**: 单一 `assertUsablePrice()`,在**解析 / 落库 / 入池 / 比价 / 提交**五道口共用;0 与空一律进 `skipped` 并记原因,与 `supplier-quote-parse` 现有口径一致。
+- **Migration**: 无 schema。需一次存量扫描:`PriceBreak.unitPrice = 0` 的行数与归属供应商(只出聚合计数)。
+- **Tests**: ① offer 批量导入 0 价 → 行被拒并记原因;② 价格池含 0 价 → 不被选为最低价;③ 比价总表 0 价不计为 `lowest`;④ `purchaseCost = 0` **不能**通过报价提交门禁;⑤ 既有"单价缺失跳过"的用例不回归。
+- **Acceptance**: 五道口共用同一守卫;客户截图那类 `$0.0000` 计入合计的场景有回归用例钉死。
 
 ---
 
@@ -174,6 +193,40 @@
 - **Tests**: 工具 I/O 经声明 schema 校验;LLM 失败**不得**记为 `SUCCEEDED`(当前会,见 ARCHITECTURE_AUDIT §4.5);`idempotencyKey` 生效,重复 POST 不产生重复 run。
 - **Acceptance**: 枚举两侧一致;OCR 要么纳入 Agent 体系要么显式声明为非 Agent LLM 用途并有同等留痕。
 
+## R1-15 · 聚合粒度分层(标准 BOM 逐位号 / 询价采购按 MPN+制造商 / 多 BOM 跨 BOM)
+
+- **Priority**: P1 · **Problem**: BOM 按位号逐行存储,而询价单/采购单直接照搬 BOM 行 → 同一 MPN 被询价七次、采购单物料重复(客户 F9 与第四节的直接诉求)。本仓库**两个方向都有风险**:`replaceLines`([purchase-order.ts:131-190](../../lib/server/repositories/purchase-order.ts))删后重建**无 MPN 唯一性检查**、`parsePoBulkText` **无重复检测**(该合的没合);而三处去重键**不含制造商**(不该合的会合)。
+- **Risk**: 中高。聚合会改变采购单行数与金额分布。
+- **Target**: 三层显式语义 —— 标准 BOM/客户报价单逐位号保留;询价/比价/采购按 `(canonicalMpn, canonicalManufacturerId)` 聚合并合并数量;多 BOM 对比跨 BOM 聚合。
+- **Migration**: **必须排在 REF-1 之后** —— 先有 Canonical Identity 才能用正确的键聚合。
+- **Tests**: 同 MPN 多位号 → 标准 BOM 保留 N 行、询价单 1 行且数量为合计;同 MPN 不同制造商 → **不合并**;采购单重复行被拒并提示。
+- **Acceptance**: 客户截图那种"七行同一 MPN"的询价单不再产生;同时同 MPN 两制造商不被塌缩。
+
+## R1-16 · BOM 核对未完成禁止对外询价
+
+- **Priority**: P1 · **Problem**: 客户流程调整第 1 条明确"禁止直接向 Digikey、Mouser 发起询价,BOM 必须完成人工核对,核对无误后由审核人流转至采购"。本仓库有逐行确认与批量确认([bom-detail.ts:211](../../lib/server/repositories/bom-detail.ts)),但**无此守卫** —— 可在未核对状态直接触发寻源。
+- **Risk**: 低(加门禁),但会改变现有操作动线,需 UI 明示原因。
+- **Target**: 寻源入口前置校验"该 BOM 版本全部行已决策";未通过时返回可读原因与待办计数,**不静默失败**。
+- **Tests**: 未完成核对 → 寻源接口 422 且带待办行数;完成后放行;批量确认后即时放行。
+- **Acceptance**: 对外 API 调用不可能发生在核对完成之前。
+
+## R1-17 · 比价导出缺数量列,放大后的采购数量在导出文件里不可见
+
+- **Priority**: P1 · **Problem**: `purchaseQty = calculateRoundedPurchaseQty(demandQty,{moq,spq})` 后**按放大数量取价与算总价**([offers.ts:127-135](../../lib/domain/offers.ts));UI 如实并列显示了需求与采购数量,`price-pool` 还把口径显式化为 `SELECTED_BUY_QTY/SUGGESTED_BUY_QTY/DEMAND_QTY` 并持久化 —— **但比价导出没有任何数量列**([compare-export/route.ts:106-117](../../app/api/procurement/rfq/[id]/compare-export/route.ts))。客户拿到的正是导出文件,这就是"报价数量与需求数量不一致"观感的直接来源。
+- **Risk**: 低(纯增列)。
+- **Target**: 导出补 `需求数量 / 报价(采购)数量 / 数量口径` 三列,口径值直接用既有 `priceQtyBasis` 枚举。
+- **Tests**: 导出含三列;MOQ 放大场景下两个数量不同且口径列为 `SUGGESTED_BUY_QTY`。
+- **Acceptance**: 导出文件可自证"为什么这个数量" —— 不需要回系统里看。
+
+## R1-18 · 无 MPN / 无匹配行在报价与寻源中被硬丢且不告知
+
+- **Priority**: P1(与"账本不允许静默丢行"的既有纪律自相矛盾)
+- **Problem**: ① [quote-from-bom.ts:34](../../lib/server/repositories/quote-from-bom.ts) 过滤掉 `decision === "NO_MATCH"` 的行 —— **正是需要采购补全 MPN 与价格的那些行永远不会变成 QuoteLine**,且返回的 note 只统计缺成本行,**不告知丢了几行**;② [sourcing/route.ts:40](../../app/api/procurement/rfq/[id]/sourcing/route.ts) `filter(l => l.mpn)`,进度按 `targets.length` 计算 → 无 MPN 行**连分母都被抹掉**。客户 F4/F5 明确要求这些行必须保留。
+- **Risk**: 中。保留这些行会改变报价行数与完整性门禁的分母。
+- **Target**: 新增"待补全(NEEDS_COMPLETION)"行状态;报价与寻源都保留该类行、计入分母、在 UI 与导出如实标注;提交门禁按既有纪律拒绝含未补全行的提交(而不是悄悄不算)。
+- **Tests**: 含 NO_MATCH 行的 BOM 生成报价 → 行保留且标待补全;寻源进度分母含无 MPN 行;丢行数在返回值里可见。
+- **Acceptance**: 从 BOM 到报价的行数变化**可对账**,与导入账本恒等式同一纪律。
+
 ---
 
 # P2 — Maintainability
@@ -192,6 +245,8 @@
 | **R2-10** | 导出接口 17 个三套约定 | `/export`、`-export`、`?export=1` | 低 | 单一约定 | — |
 | **R2-11** | `column-mapping.ts` 零直接单测 | 7 消费者依赖,是本轮升级基座 | 低 | 补单测(**REF-2 前置**) | 表头打分、精确优先、必填缺失、多行扫描各有用例 |
 | **R2-12** | Prisma 模型归属未记录 | 125 model 单文件,51 次提交 | 低 | `PRISMA_MODEL_OWNERSHIP.md`(**本轮只出文档,不拆物理文件**) | 每个 model 落到唯一 context |
+| **R2-13** | 客户报价单导出契约未固化 | 客户模板 26 列 + 表头区 6 项 + 表尾(合计/单板报价);`QuoteLine` 缺 MOQ/SPQ/LT/供应商列,`note` 只有 1 个(模板有 4 个备注列);**第二组数量列**对应多数量档报价,模型缺位 | 中 | 固化为导出契约 + golden 夹具;多数量档需 `QuoteVersion` 级 schema 增量 | 导出文件与客户模板逐列对齐,金样锁定 |
+| **R2-14** | 损耗率不可配 | `DEFAULT_SCRAP_RATE="0"`、`scrapRateConfirmed` 硬编 `false`([gtb.ts:14,49](../../lib/domain/gtb.ts)),唯一入口是 GTB 试算器的自由文本框;F2 要求"按损耗规则自动算" | 低 | 租户 / 客户 / 品类级损耗规则,保留"未确认即标注"的既有诚实口径 | 报价数量可由需求数量 + 规则确定性推出,且口径可追 |
 
 ## R2-12 补充:Prisma 模型归属(按 ARCHITECTURE_AUDIT §1 的 11 个 context)
 

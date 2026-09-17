@@ -15,7 +15,7 @@
 
 | 项 | 大小 | 分级 | 依据 | 删除条件 |
 |---|---|---|---|---|
-| `legacy-static/` | 8.0 MB / 141 文件 | **LEGACY_REFERENCE** | 代码中仅 [nav-icon.tsx:3](../../components/shell/nav-icon.tsx) 一句注释引用;README 后半部分整段描述它 | **不删**。它是客户验收的视觉对照原件。建议移出仓库归档(单独 tag/附件),移出前确认设计 token 已全部落到 `app/globals.css` 与 `components/ui` |
+| ~~`legacy-static/`~~ | 8.0 MB / 141 文件 | **已归档移出(2026-09-17)** | 代码中仅一句注释引用,无构建/部署依赖 | ✅ **已执行**(PR #88)。未销毁,双路径可取回:仓外副本 `../archive/legacy-static-v5.2.1/`(141 文件,已校验数量一致);或 `git checkout archive/legacy-static-last -- legacy-static/`。取回后仍禁止修改、不得再提交回仓库 |
 | `reference/nestjs-v15/` | **目录不存在** | ARCHIVE(记录) | INTEGRATION_PLAN §九 2026-07-27 已确认"旧后端文件永久缺失,合并对照路径作废" | 无需动作;但 README / CLAUDE.md《权威文档》段仍列它 → 应加一句"已确认缺失" |
 | `docs/design/` · `docs/customer-feedback/` | — | **ARCHIVE** | 验收对照原件 | 永久保留 |
 | `tests/fixtures/customer-private/` | — | **ACTIVE(私有)** | gitignore 生效,零 git 跟踪 | 永不入库 |
