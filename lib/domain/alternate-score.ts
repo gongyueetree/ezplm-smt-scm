@@ -216,6 +216,15 @@ export function scoreAlternate(candidate: CandidateSpec, options: ScoreOptions):
   }
   const missing = rows.filter((r) => r.verdict === "缺失").map((r) => r.label);
   if (missing.length > 0) warnings.push(`以下参数候选未提供,无法判定:${missing.join("、")}`);
+  /*
+   * R0-2:量纲对不上的参数必须显式告警。
+   * 它和"没提供"不是一回事 —— 两边都给了值,但口径不同(比如一边 MHz 一边 MB),
+   * 静默跳过会让人以为这些参数已经比过了。
+   */
+  const incomparable = rows.filter((r) => r.verdict === "不可比").map((r) => r.label);
+  if (incomparable.length > 0) {
+    warnings.push(`以下参数两侧量纲不一致,未参与比对:${incomparable.join("、")}`);
+  }
 
   /*
    * 结论可信 = 三者中的**短板**主导:

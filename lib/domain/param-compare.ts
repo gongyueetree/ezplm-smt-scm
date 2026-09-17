@@ -27,7 +27,7 @@ export interface ParsedParam {
 }
 
 /** 判定结论 */
-export type ParamVerdict = "一致" | "更优" | "部分覆盖" | "有差异" | "缺失" | "未知";
+export type ParamVerdict = "一致" | "更优" | "部分覆盖" | "有差异" | "缺失" | "未知" | "不可比";
 
 export interface ParamComparison {
   /** 0–100;未知时为 null(不能当 0 参与加权) */
@@ -37,6 +37,14 @@ export interface ParamComparison {
 }
 
 const NUM = String.raw`-?\d+(?:\.\d+)?`;
+
+/**
+ * R0-2:单位允许出现的字符。
+ * 必须含欧姆符号 —— 此前字符类里没有它,`100 mΩ` 解析失败后落进文本分支,
+ * 变成"字符串相等给 100,否则 0",电阻类参数实际上从未被数值比较过。
+ * Ω 有两个常见码位:U+03A9(希腊大写)与 U+2126(欧姆符号),都要认。
+ */
+const UNIT_CHARS = "a-zA-Z\u00b5\u03bc%\u00b0\u03a9\u2126";
 
 /** 数量级前缀 → 倍率(用于 KB/MB、kHz/MHz 之间的换算) */
 const SCALE: Record<string, number> = {
@@ -55,7 +63,7 @@ function normalizeRaw(raw: string): string {
 
 /** 拆出「数值 + 单位」,并把量纲前缀折算进数值 */
 function parseMagnitude(token: string): { value: number; unit: string } | null {
-  const m = token.match(new RegExp(`^(${NUM})\\s*([a-zA-Zµμ%°]*)$`));
+  const m = token.match(new RegExp(`^(${NUM})\\s*([${UNIT_CHARS}]*)$`));
   if (!m) return null;
   const value = Number(m[1]);
   if (!Number.isFinite(value)) return null;
@@ -84,7 +92,7 @@ export function parseParamValue(raw: string | null | undefined): ParsedParam | n
 
   // 区间:a to b / a~b / a - b(带可选统一单位)
   const rangeMatch = text.match(
-    new RegExp(`^(${NUM})\\s*(?:to|~|至|-)\\s*(${NUM})\\s*([a-zA-Zµμ%°]*)$`, "i"),
+    new RegExp(`^(${NUM})\\s*(?:to|~|至|-)\\s*(${NUM})\\s*([${UNIT_CHARS}]*)$`, "i"),
   );
   if (rangeMatch) {
     const unit = rangeMatch[3] ?? "";
@@ -148,6 +156,28 @@ export function compareParam(
 
   if (!required) return { score: null, verdict: "未知", detail: "原型号未给出该参数,无法比对" };
   if (!actual) return { score: null, verdict: "缺失", detail: "候选未提供该参数" };
+
+  /*
+   * R0-2:量纲不同 → **拒绝比较**,而不是比数值。
+   *
+   * 量纲前缀在解析时已折算进数值,于是 `72 MHz` 与 `72 MB` 都变成 72e6,
+   * 旧实现只读 .number,把它们判成「一致 / 100 分」。ParsedParam.unit 一直存着
+   * 单位,却没有任何调用点读过它。
+   *
+   * 口径**刻意保守**:只有两侧都标了单位且不同才判不可比;
+   * 一侧没标单位时仍按数值比 —— 本仓库的参数数据经常只在一侧带单位,
+   * 一律判不可比会把大量本来有效的比较打成未知(宁可少判,不可错判)。
+   * 严格的 QuantityIR(按量纲分类而非按单位字符串)属 REF-4。
+   */
+  const ru = required.unit ?? "";
+  const au = actual.unit ?? "";
+  if (ru !== "" && au !== "" && ru !== au) {
+    return {
+      score: null,
+      verdict: "不可比",
+      detail: `量纲不同(${ru} vs ${au}),不做数值比较 —— 需人工确认参数口径`,
+    };
+  }
 
   if (required.kind === "range" && actual.kind === "range") {
     const [rl, rh] = required.range!;

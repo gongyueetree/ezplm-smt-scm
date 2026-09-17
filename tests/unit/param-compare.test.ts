@@ -135,3 +135,40 @@ describe("matchParamName:ezPLM 属性命名不统一,按主名对齐", () => {
     expect(matchParamName("", "工作温度")).toBe(false);
   });
 });
+
+describe("R0-2 量纲:只比数值不比单位会把不同量纲判成一致", () => {
+  it("同量纲跨前缀仍然相等(不能因为加了量纲校验就误伤)", () => {
+    expect(compareParam("72 MHz", "72000000 Hz").score).toBe(100);
+    expect(compareParam("3.3 V", "3300 mV").score).toBe(100);
+    expect(compareParam("10 kΩ", "10000 Ω").score).toBe(100);
+    expect(compareParam("64 KB", "64000 B").score).toBe(100);
+  });
+
+  it("**不同量纲必须拒绝比较** —— 72 MHz 与 72 MB 都折算成 72e6,数值相等但毫无意义", () => {
+    const r = compareParam("72 MHz", "72 MB");
+    expect(r.score).toBeNull();
+    expect(r.verdict).toBe("不可比");
+    expect(r.detail).toContain("量纲");
+  });
+
+  it("电压与电流不可比;频率与容量不可比", () => {
+    expect(compareParam("5 V", "5 A").verdict).toBe("不可比");
+    expect(compareParam("1 MHz", "1 MB").verdict).toBe("不可比");
+  });
+
+  it("区间同样受管:-40~85°C 与 -40~85V 不可比", () => {
+    expect(compareParam("-40~85°C", "-40~85V").verdict).toBe("不可比");
+  });
+
+  it("一侧无单位时保守放行(本仓库数据常只在一侧标单位),不因此判不可比", () => {
+    expect(compareParam("100", "100 V").score).toBe(100);
+    expect(compareParam("100 V", "100").score).toBe(100);
+    expect(compareParam("2", "2").score).toBe(100);
+  });
+
+  it("不可比是**第三态**:score 为 null,不参与技术分加权,也不是 0 分", () => {
+    const r = compareParam("72 MHz", "72 MB");
+    expect(r.score).not.toBe(0);
+    expect(r.score).toBeNull();
+  });
+});
