@@ -47,9 +47,9 @@ REF-0.8 交付:① `tests/shadow/` 对拍框架;② `lib/domain/column-mapping.t
 
 | PR | 内容 | 前置 | 迁移风险 | schema |
 |---|---|---|---|---|
-| **REF-0** | 架构审计(本轮,**不改生产代码**) | — | 无 | 无 |
-| **REF-0.5** | P0 修复 + 回归用例(R0-1…R0-6 + **R0-8 零价守卫**;R0-7 先补失败用例,实施在 REF-3) | REF-0 确认 | 低 | 无 |
-| **REF-0.8** | 对拍/shadow 基建 + 缺失基座单测 + flag 基建 | REF-0.5 | 无(只加测试) | 无 |
+| **REF-0** ✅ | 架构审计(#87,**不改生产代码**) | — | 无 | 无 |
+| **REF-0.5** ✅ | P0 修复 + 回归用例(#89 #90)(R0-1…R0-6 + **R0-8 零价守卫**;R0-7 先补失败用例,实施在 REF-3) | REF-0 确认 | 低 | 无 |
+| **REF-0.8** ✅ | 对拍/shadow 基建 + 缺失基座单测 + flag 基建(#91) | REF-0.5 | 无(只加测试与脚手架) | 无 |
 | **REF-1** | Canonical Part Identity + Manufacturer Registry | REF-0.8 | **高**(归一键变化) | 别名 seed + key 重算 |
 | **REF-2** | BOM Normalization V2(参考 bom2buy) | REF-1 | 高 | 无 |
 | **REF-3** | Supplier Mapping V2 + NormalizedOffer 收敛 | REF-1 | 高(含 R0-7) | 待定,需商务确认 |
@@ -81,18 +81,44 @@ REF-0.8 交付:① `tests/shadow/` 对拍框架;② `lib/domain/column-mapping.t
 
 **差异只允许两类**:① 明确修复的旧 bug;② 人工批准的新规则。**其它差异一律阻止 flip。**
 
-### Feature flags
+### Feature flags —— **已实现**([lib/domain/refactor-flags.ts](../../lib/domain/refactor-flags.ts))
 
-| flag | 覆盖 | 默认 |
-|---|---|---|
-| `BOM_NORMALIZER_V2` | REF-2 | off |
-| `ALTERNATE_ENGINE_V2` | REF-4 | off |
-| `SUPPLIER_MAPPING_V2` | REF-3 | off |
-| `PART_IDENTITY_V2` | REF-1 | off |
+| flag | 环境变量 | 覆盖 | 默认 |
+|---|---|---|---|
+| `PART_IDENTITY_V2` | `REFACTOR_PART_IDENTITY_V2` | REF-1 | off |
+| `BOM_NORMALIZER_V2` | `REFACTOR_BOM_NORMALIZER_V2` | REF-2 | off |
+| `SUPPLIER_MAPPING_V2` | `REFACTOR_SUPPLIER_MAPPING_V2` | REF-3 | off |
+| `ALTERNATE_ENGINE_V2` | `REFACTOR_ALTERNATE_ENGINE_V2` | REF-4 | off |
 
-**放在租户设置还是 env?** —— 建议 **env 级**(部署期开关),不进 `TenantSettings`:
+**放在租户设置还是 env?** —— 定为 **env 级**(部署期开关),不进 `TenantSettings`:
 这些是迁移期脚手架,不是业务功能开关,不应污染租户配置面,也不应出现在设置 UI 上。
 迁移完成即连同旧实现一起删除。
+
+判定纪律:默认全关;只认 `1/true/on/yes`(大小写不敏感);**认不出的值一律当关**
+并标 `UNRECOGNIZED_OFF` 保留原值 —— 拼错的开关不该表现得和"没设"一模一样。
+
+### 对拍框架 —— **已实现**([lib/domain/shadow-compare.ts](../../lib/domain/shadow-compare.ts))
+
+```ts
+const { result } = await shadowRun({
+  label: "bom:standard/standard-cn.csv",
+  old: () => oldImpl(input),   // 生产结果;它抛错原样抛出
+  next: () => newImpl(input),  // 只记录;抛错不外溢
+});
+// result 永远是 old 的结果 —— 行为不变
+```
+
+- `diffValues` 深度逐字段比较,结果按 path 排序(报告可复现);
+- **默认脱敏**:diff 只含字段路径与类型/长度摘要,不含值内容(R4 §4);
+  需要看值时显式 `redact: false`,且只在本地;
+- 截断显式上报 `total` / `truncated` —— 不让人以为"只有这么点差异";
+- `summarizeShadowRuns` 给出 `topPaths` 与 `readyToFlip`;
+  **`NEXT_FAILED` 同样阻断 flip** —— 没有差异不等于跑通了。
+
+输入语料由 [tests/shadow/corpus.ts](../../tests/shadow/corpus.ts) 统一枚举
+(与金样套件共用同一份发现逻辑,新增夹具两边同时覆盖);
+框架在真实语料上的自检见 `tests/golden/shadow-harness.golden.test.ts`,
+它同时是 REF-1..REF-4 的现成模板 —— 把 `next` 换成 V2 实现即可。
 
 ### 每个模块的迁移四步
 
