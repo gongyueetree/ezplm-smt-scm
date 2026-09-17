@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getQuoteAgent } from "@/lib/agents/quote-agent";
 import { notFound, requireSession } from "@/lib/server/api";
+import { requirePermission } from "@/lib/server/permissions";
 import { persistAgentRun } from "@/lib/server/repositories/agent-run";
 import { getQuoteVersion } from "@/lib/server/repositories/quote";
 
@@ -14,6 +15,9 @@ export const runtime = "nodejs";
 export async function POST(_req: Request, { params }: { params: Promise<{ versionId: string }> }) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
+  // R0-6:此前只有 requireSession —— 任何已登录用户都能触发外部模型调用(有成本)
+  const perm = await requirePermission(auth.session, "quote.agent.run");
+  if (!perm.ok) return perm.response;
   const { versionId } = await params;
 
   const version = await getQuoteVersion(auth.session, versionId);

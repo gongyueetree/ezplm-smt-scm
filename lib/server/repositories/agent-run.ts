@@ -2,7 +2,7 @@
  * AgentRun 落库通道(SPEC §13:AgentRun 记录全要素)。
  * Agent 自身不碰数据库;运行结果由本模块落库,写提案落 AgentApproval(PENDING)。
  */
-import type { Prisma } from "@prisma/client";
+import type { AgentApproval, Prisma } from "@prisma/client";
 import type { AgentRunResult } from "@/lib/agents/types";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
@@ -91,11 +91,20 @@ export async function getAgentRun(session: SessionRef, runId: string) {
   });
 }
 
-/** 人工对确认卡片作出决定;批准后由调用方执行实际写入 */
+/**
+ * 人工对确认卡片作出决定。
+ *
+ * R0-4:批准所触发的**实际写入必须与状态翻转同事务**。
+ * 原实现先提交 status=APPROVED,再由路由逐行写库 —— 中途失败就会留下
+ * 「卡片已批准、但业务数据没写(或只写了一半)」,而且因为 `alreadyDecided`
+ * 再也重试不了。现在写入经 `applyInTx` 在同一事务内先执行:
+ * 它抛错 → 整个事务回滚 → 卡片**仍是 PENDING**,可以重试。
+ */
 export async function decideAgentApproval(
   session: SessionRef,
   approvalId: string,
   decision: "APPROVED" | "REJECTED",
+  applyInTx?: (tx: Prisma.TransactionClient, approval: AgentApproval) => Promise<void>,
 ) {
   const approval = await prisma.agentApproval.findFirst({
     where: tenantWhere(session.tenantId, { id: approvalId }),
@@ -106,6 +115,8 @@ export async function decideAgentApproval(
   }
 
   await prisma.$transaction(async (tx) => {
+    // 先写业务数据,再翻状态:失败则一起回滚,卡片留在 PENDING
+    if (decision === "APPROVED" && applyInTx) await applyInTx(tx, approval);
     await tx.agentApproval.updateMany({
       where: tenantWhere(session.tenantId, { id: approvalId }),
       data: { status: decision, decidedById: session.userId, decidedAt: new Date() },

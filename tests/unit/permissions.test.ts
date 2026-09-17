@@ -124,3 +124,26 @@ describe("explainPermissions:回答「他为什么有这个权限」", () => {
     }
   });
 });
+describe("R0-6 AI 写提案:运行与批准分权", () => {
+  it("PM 可以跑 Agent 出建议,但默认**不能批准**写入", () => {
+    const pm = effectivePermissions(["PM"]);
+    expect(hasPermission(pm, "quote.agent.run")).toBe(true);
+    expect(hasPermission(pm, "quote.agent.approve")).toBe(false);
+  });
+
+  it("批准权默认只给 MANAGEMENT", () => {
+    expect(effectivePermissions(["MANAGEMENT"]).has("quote.agent.approve")).toBe(true);
+    for (const r of ["PM", "PROCUREMENT", "ENGINEERING", "SUPPLIER"] as const) {
+      expect(effectivePermissions([r]).has("quote.agent.approve")).toBe(false);
+    }
+  });
+
+  it("两个权限串都在目录里 —— 路由守卫引用的不能是空字符串", () => {
+    expect(PERMISSIONS).toContain("quote.agent.run");
+    expect(PERMISSIONS).toContain("quote.agent.approve");
+  });
+
+  it("SUPPLIER 依旧只有 trace.view,不因新增权限被顺带放开", () => {
+    expect(ROLE_DEFAULT_PERMISSIONS.SUPPLIER).toEqual(["trace.view"]);
+  });
+});

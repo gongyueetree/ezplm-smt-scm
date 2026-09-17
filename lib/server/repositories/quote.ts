@@ -7,6 +7,7 @@
  */
 import { ApprovalDecision, Prisma } from "@prisma/client";
 import { hasUsableCost } from "@/lib/domain/price-guard";
+import { buildQuoteLinePatch, type QuoteLinePatchInput } from "@/lib/domain/quote-line-patch";
 import {
   BUILTIN_LABOR_TEMPLATES,
   summarizeQuote,
@@ -258,6 +259,73 @@ export async function upsertQuoteLine(
   });
 
   return { ok: true, data: { id } };
+}
+
+export interface QuoteLinePatchRequest {
+  lineNo: number;
+  patch: QuoteLinePatchInput;
+}
+
+/**
+ * R0-4:在**调用方的事务内**按字段级 patch 更新报价行 —— 只改显式给出的字段。
+ *
+ * 与 `upsertQuoteLine` 的区别见 lib/domain/quote-line-patch.ts:
+ * 整行保存仍走 upsert(未给的字段就是要清空);只改几个参数的场景走这里。
+ * 本函数**不创建行** —— 创建是 upsert 的语义;找不到行按 missing 返回,由调用方决定怎么报。
+ *
+ * 冻结守卫照旧:PENDING/APPROVED 下参数全冻结(CLAUDE.md 报价规则 4)。
+ */
+export async function patchQuoteLinesInTx(
+  tx: Prisma.TransactionClient,
+  session: SessionRef,
+  versionId: string,
+  requests: QuoteLinePatchRequest[],
+  kind: MutationKind = "edit_line",
+): Promise<{ applied: number; missing: number[]; skipped: number[] }> {
+  const version = await tx.quoteVersion.findFirst({
+    where: tenantWhere(session.tenantId, { id: versionId }),
+    select: { id: true, status: true },
+  });
+  if (!version) throw new Error("报价版本不存在或不属于当前租户");
+
+  const guard = checkParameterMutation(version.status as QuoteStatusValue, kind);
+  if (!guard.ok) throw new Error(guard.message!);
+
+  let applied = 0;
+  const missing: number[] = [];
+  const skipped: number[] = [];
+
+  for (const req of requests) {
+    const data = buildQuoteLinePatch(req.patch);
+    // 空 patch 不写库 —— 写一行"什么都没改"的 update 只会污染审计
+    if (Object.keys(data).length === 0) {
+      skipped.push(req.lineNo);
+      continue;
+    }
+    const existing = await tx.quoteLine.findFirst({
+      where: tenantWhere(session.tenantId, { quoteVersionId: versionId, lineNo: req.lineNo }),
+      select: { id: true },
+    });
+    if (!existing) {
+      missing.push(req.lineNo);
+      continue;
+    }
+    await tx.quoteLine.updateMany({
+      where: tenantWhere(session.tenantId, { id: existing.id }),
+      data: data as Prisma.QuoteLineUpdateManyMutationInput,
+    });
+    await writeAudit(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: "QUOTE_LINE_PATCH",
+      entityType: "QuoteLine",
+      entityId: existing.id,
+      // 审计记录**改了哪几个字段**,而不是整行 —— 否则看不出这次到底动了什么
+      after: { versionId, lineNo: req.lineNo, changedFields: Object.keys(data), ...data },
+    });
+    applied += 1;
+  }
+  return { applied, missing, skipped };
 }
 
 /**
