@@ -194,3 +194,20 @@ describe("R0-8 价格池:0 价不得可用、更不得成为最低价", () => {
     expect(r.low?.unitPrice).toBe("9.50");
   });
 });
+
+describe("R0-7 线下报价同权进池(决策已定,实施在 REF-3)", () => {
+  /*
+   * 决策记录见 docs/refactor/CUSTOMER_FEEDBACK_2026-09-17.md §3:
+   * 线下 / 人工录入的报价必须与 API 报价**同权参与比价**。
+   *
+   * 现状缺口:通用 Excel 录入落 SupplierQuote + SupplierQuoteLine(单价、无阶梯),
+   * 而价格池只读 SupplierOffer + PriceBreak —— 走哪条通道录入,
+   * 决定了这个价格会不会参与比价。
+   *
+   * 这里**不写假的红灯**(常红的用例会瘫痪 CI,也会教人忽略红色)。
+   * 用 todo 如实登记待办:它会出现在测试输出里,REF-3 实施时替换为真实断言。
+   */
+  it.todo("SupplierQuoteLine 经 mapper 进入 NormalizedMaterialPrice,与 SupplierOffer 同权参与 priceRange");
+  it.todo("单一价格以 minQty = moq ?? 1 表示成一档阶梯(沿用 supplier-action 既有先例)");
+  it.todo("线下报价必有 validUntil,过期自动失效且不参与比价");
+});
