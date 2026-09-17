@@ -16,6 +16,7 @@ import {
 } from "@/lib/domain/bom-parse";
 import { computeProgress, nextBatchSlice, shouldUseImportJob } from "@/lib/domain/import-batching";
 import { validateBomLines, type ValidationReport } from "@/lib/domain/bom-validate";
+import { mfgPartNoKey } from "@/lib/domain/part-mfg";
 import { getMasterDataProvider } from "@/lib/providers/master-data";
 import { getDigiKeyProvider } from "@/lib/providers/digikey";
 import { getMouserProvider } from "@/lib/providers/mouser";
@@ -271,7 +272,10 @@ export async function buildMatchContext(
   batchLines: { internalPn?: string | null; mpn?: string | null; customerPn?: string | null }[],
 ): Promise<MatchContext> {
   const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
-  const mpnKeys = [...new Set(batchLines.map((l) => norm(l.mpn)).filter(Boolean))];
+  // R0-1:查 PartMfgMapping 必须用**写入侧同一把键**(mfgPartNoKey,保留 CJK),
+  // 不能用上面剥 ASCII 的 norm —— 否则含中文的 MFG_PN 查不出任何映射且不报错。
+  // 其余映射(byMpn / byInternalPn / customerMappings)两侧都用 norm,保持原样。
+  const mpnKeys = [...new Set(batchLines.map((l) => mfgPartNoKey(l.mpn)).filter(Boolean))];
   const internalPns = [...new Set(batchLines.map((l) => (l.internalPn ?? "").trim()).filter(Boolean))];
 
   const [mfgMappings, partsByPn, mappings, corpusParts, corpusTotal] = await Promise.all([

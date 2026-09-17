@@ -14,6 +14,7 @@ import type { EzplmPartsProvider } from "@/lib/providers/ezplm";
 import type { DistributorProvider } from "@/lib/providers/common/distributor";
 import { ProviderError } from "@/lib/providers/common/errors";
 import { manufacturerMatches, normalizeMpn } from "@/lib/providers/common/mpn";
+import { mfgPartNoKey } from "@/lib/domain/part-mfg";
 import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
 import { getApplicablePriceBreak } from "./offers";
 import { rankBySimilarity, type SimilarityQuery } from "./similarity";
@@ -170,6 +171,18 @@ function keyOf(v: string | null | undefined): string {
   return normalizeMpn(v ?? "");
 }
 
+/**
+ * R0-1:乾创 MFG 映射通道**专用**的键 —— 必须与写入侧 `PartMfgMapping.manufacturerPartNoKey`
+ * 以及迁移 r4_3 的 `regexp_replace(upper(x),'[^[:alnum:]]','','g')` 完全同规则(保留 CJK)。
+ *
+ * 不能复用上面的 `keyOf`:`normalizeMpn` 剥掉所有非 ASCII,
+ * 真实数据里 52,256 条 MFG_PN 有 510 条含中文,用 ASCII 键去查 CJK 键**永远查不到且不报错**。
+ * 其余通道(ezPLM / 分销商 / 客户料号 / 内部料号)两侧都用 ASCII 规则,保持原样不动。
+ */
+function mfgKeyOf(v: string | null | undefined): string {
+  return mfgPartNoKey(v);
+}
+
 function fromLocal(part: LocalPartRef, source: MatchSourceValue, confidence: number): MatchCandidate {
   return {
     source,
@@ -285,7 +298,7 @@ export async function matchBomLine(
   // ③pre R4-5(§27 步骤 3/4):乾创 PartMfgMapping 精确 MPN 通道。
   // PATTERN 映射不参与 exact 匹配(§10);PO_HISTORY 候选置信度封顶 0.75(§22)。
   if (line.mpn && ctx.mfgByMpnKey) {
-    const mappings = ctx.mfgByMpnKey.get(keyOf(line.mpn)) ?? [];
+    const mappings = ctx.mfgByMpnKey.get(mfgKeyOf(line.mpn)) ?? [];
     const resolved = ctx.resolveMfr?.(line.manufacturer ?? null) ?? null;
     for (const m of mappings) {
       if (m.identifierMatchMode !== "EXACT") continue;
