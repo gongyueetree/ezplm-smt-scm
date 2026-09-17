@@ -48,6 +48,18 @@ export const PERMISSIONS = [
   "quality.view",
   "quality.create",
   "quality.manage",
+  /*
+   * R0-6:AI 写提案(SPEC §13 / CLAUDE.md 约束 3)。
+   *
+   * 这两个端点此前**只有 requireSession**,任何已登录的租户用户都能触发 Agent
+   * 运行并批准 AI 写入 —— 人工确认闭环形同虚设。
+   *
+   * 沿用「提议与批准分离」的既有做法(参照隔离处置 propose/approve):
+   * run 给 PM(报价是 PM 的活),approve 默认只给 MANAGEMENT,
+   * 需要下放时经 UserPermission 单独授予。
+   */
+  "quote.agent.run",
+  "quote.agent.approve",
   // 权限本身的管理权 —— 默认只给 MANAGEMENT
   "settings.permissions.manage",
 ] as const;
@@ -88,7 +100,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, readonly Permission[]> =
     "erp.connection.view",
     "erp.sync.preview",
   ],
-  PM: ["material.view", "trace.view", "trace.export", "erp.connection.view"],
+  PM: [
+    "material.view",
+    "trace.view",
+    "trace.export",
+    "erp.connection.view",
+    // 报价是 PM 的活,可以跑 Agent 出建议;但**批准写入**默认不给(见 PERMISSIONS 注释)
+    "quote.agent.run",
+  ],
   MANAGEMENT: [...PERMISSIONS],
   SUPPLIER: ["trace.view"],
 };

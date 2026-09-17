@@ -18,6 +18,7 @@ import {
   type ScoredAlternate,
   type SubstitutionMode,
 } from "@/lib/domain/alternate-score";
+import { fillValuesFromAttributes, type PartAttributeRow } from "@/lib/domain/alternate-param-fill";
 import { summarizeMarket, type MarketSummary } from "@/lib/domain/market-summary";
 import { matchParamName } from "@/lib/domain/param-compare";
 import type { NormalizedOffer } from "@/lib/providers/common/normalized-offer";
@@ -115,7 +116,7 @@ export async function searchAlternates(
   const [localParts, corpusTotal] = await Promise.all([
     prisma.part.findMany({
       where: tenantWhere(input.tenantId),
-      select: { mpn: true, manufacturer: true, footprint: true, description: true },
+      select: { id: true, mpn: true, manufacturer: true, footprint: true, description: true },
       take: SIMILARITY_CORPUS_CAP,
     }),
     prisma.part.count({ where: tenantWhere(input.tenantId) }),
@@ -158,6 +159,7 @@ export async function searchAlternates(
     localParts
       .filter((p) => p.mpn && normalizeMpn(p.mpn) !== selfKey)
       .map((p) => ({
+        id: p.id,
         mpn: p.mpn!,
         manufacturer: p.manufacturer,
         footprint: p.footprint,
@@ -165,16 +167,70 @@ export async function searchAlternates(
       })),
     { limit: 8, minScore: 0.4 },
   );
+  /*
+   * R0-3:本地候选也要带上**真实参数**。
+   *
+   * 此前 valuesFrom 只填封装,其余一律 null —— LOCAL 候选的 technical
+   * 恒等于封装单项分,四个维度里只有一维是真的。本地物料的参数就在
+   * PartAttributeValue 里,一次批量取回即可(按 partId IN,走既有索引)。
+   */
+  const localIds = localRanked.map((r) => r.target.id).filter((x): x is string => Boolean(x));
+  const attrRows = localIds.length
+    ? await prisma.partAttributeValue.findMany({
+        where: tenantWhere(input.tenantId, { partId: { in: localIds } }),
+        select: {
+          partId: true,
+          value: true,
+          source: true,
+          confirmed: true,
+          definition: { select: { label: true, unit: true } },
+        },
+      })
+    : [];
+  const attrsByPart = new Map<string, PartAttributeRow[]>();
+  for (const a of attrRows) {
+    const list = attrsByPart.get(a.partId) ?? [];
+    list.push({
+      label: a.definition.label,
+      value: a.value,
+      unit: a.definition.unit,
+      source: a.source,
+      confirmed: a.confirmed,
+    });
+    attrsByPart.set(a.partId, list);
+  }
+
+  let localWithParams = 0;
   for (const r of localRanked) {
+    const values = valuesFrom({
+      footprint: r.target.footprint ?? null,
+      description: r.target.description ?? null,
+    });
+    const filled = fillValuesFromAttributes(constraints, attrsByPart.get(r.target.id) ?? []);
+    for (const [k, v] of Object.entries(filled.values)) {
+      if (v !== null) values[k] = v;
+    }
+    if (Object.keys(filled.sources).length > 0) localWithParams += 1;
     add({
       mpn: r.target.mpn,
       manufacturer: r.target.manufacturer ?? null,
       description: r.target.description ?? null,
       defaultSource: "LOCAL",
-      values: valuesFrom({
-        footprint: r.target.footprint ?? null,
-        description: r.target.description ?? null,
-      }),
+      values,
+      // 逐参数标注取数来源:AI 提取未确认的值按 AI_SEARCH 低权重计
+      valueSources: filled.sources,
+    });
+  }
+  /*
+   * 诚实 UI:本地候选**一个参数都没取到**时必须说出来。
+   * 否则界面照样显示四个维度,而技术分其实只反映封装一项 —— 看起来像"比过了"。
+   */
+  if (localRanked.length > 0 && localWithParams === 0 && constraints.some((c) => c.key !== "package")) {
+    degraded.push({
+      provider: "LOCAL",
+      kind: "NO_PARAMETER_DATA",
+      message:
+        "本地候选没有可用的物料属性,技术分仅基于封装 —— 其余参数记为「缺失」,不代表已比对通过",
     });
   }
 

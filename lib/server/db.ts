@@ -9,13 +9,64 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { checkTenantScopedMutation, TenantScopeError } from "@/lib/server/tenant-scope";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+/**
+ * R0-5:租户谓词拦截器的告警去重与计数。
+ *
+ * 只记 `模型.操作` 与原因 —— **绝不记 where 内容**(里面是业务主键与条件,
+ * 属 R4 §4 明令不得进日志的那类)。同一处只报一次,避免刷屏。
+ */
+const tenantScopeWarned = new Set<string>();
+const tenantScopeViolationCounts = new Map<string, number>();
+
+/** 供运维/测试读取"只报不拦"这一轮暴露出的存量 */
+export function tenantScopeViolationReport(): { site: string; count: number }[] {
+  return [...tenantScopeViolationCounts.entries()]
+    .map(([site, count]) => ({ site, count }))
+    .sort((a, b) => b.count - a.count);
+}
 
 function createClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL 未配置(仅存服务端环境变量)");
-  const created = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const enforce = process.env.TENANT_SCOPE_ENFORCE === "1";
+  const base = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  /*
+   * R0-5:把 CLAUDE.md 硬性约束 4 真正接进运行时。
+   *
+   * 原先 assertTenantScopedMutation 全仓零调用 —— 守卫只写在纸上。
+   * 逐个调用点加断言既易漏又难维护,所以在数据层统一拦截:
+   * 任何 update/delete/updateMany/deleteMany/upsert,where 里必须有租户谓词。
+   *
+   * 默认**只报不拦**(把存量暴露出来而不炸生产);
+   * 设 TENANT_SCOPE_ENFORCE=1 切为抛错。
+   */
+  const created = base.$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          const violation = checkTenantScopedMutation(
+            model,
+            operation,
+            (args as { where?: unknown })?.where,
+          );
+          if (violation) {
+            const site = `${violation.model}.${violation.action}:${violation.reason}`;
+            tenantScopeViolationCounts.set(site, (tenantScopeViolationCounts.get(site) ?? 0) + 1);
+            if (enforce) throw new TenantScopeError(violation.message);
+            if (!tenantScopeWarned.has(site)) {
+              tenantScopeWarned.add(site);
+              console.warn(`[tenant-scope] ${violation.message}`);
+            }
+          }
+          return query(args);
+        },
+      },
+    },
+  }) as unknown as PrismaClient;
   // 开发下热重载会重复求值本模块,挂到 global 上避免连接数爆掉
   if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = created;
   return created;
