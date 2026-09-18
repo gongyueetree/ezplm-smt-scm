@@ -6,36 +6,18 @@
  */
 import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
 import type { ParsedBomLine } from "./bom-parse";
+import { parseReferences } from "@/modules/bom/domain/reference-designator";
+import { footprintKey } from "@/modules/bom/domain/package-normalize";
 
-/** 位号串展开:"R1,R2"、"R1-R5"、"C1~C3"、"R1 R2"、"R1-5" */
+/**
+ * 位号串展开:"R1,R2"、"R1-R5"、"C1~C3"、"R1 R2"、"R1-5"。
+ *
+ * REF-2a:转调 canonical `parseReferences`。对既有写法结果不变;
+ * 新增支持全角分号、连接号/全角波浪/省略号等范围符(此前 `R1–R10` 只算 1 个)。
+ * @deprecated 请直接用 `modules/bom/domain/reference-designator.parseReferences`。
+ */
 export function expandRefDes(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  const tokens = raw
-    .replace(/[;、，]/g, ",")
-    .split(/[,\s]+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-
-  const out: string[] = [];
-  for (const token of tokens) {
-    const range = token.match(/^([A-Za-z]+)(\d+)\s*[-~—]\s*([A-Za-z]*)(\d+)$/);
-    if (range) {
-      const [, prefix, startStr, endPrefix, endStr] = range;
-      // "R1-C5" 这种前缀不一致的不做展开,原样保留(避免臆造位号)
-      if (endPrefix && endPrefix.toUpperCase() !== prefix.toUpperCase()) {
-        out.push(token.toUpperCase());
-        continue;
-      }
-      const start = Number(startStr);
-      const end = Number(endStr);
-      if (Number.isFinite(start) && Number.isFinite(end) && end >= start && end - start <= 10000) {
-        for (let n = start; n <= end; n++) out.push(`${prefix.toUpperCase()}${n}`);
-        continue;
-      }
-    }
-    out.push(token.toUpperCase());
-  }
-  return out;
+  return parseReferences(raw).refs;
 }
 
 export type BomIssueLevel = "error" | "warning";
@@ -154,10 +136,11 @@ export interface FootprintLookup {
   (mpn: string): string | undefined;
 }
 
-/** 封装归一:去空格与分隔符、大写。"0603" ≡ "0603";"SOIC-16" ≡ "SOIC16" */
+/** 封装归一:去空格与分隔符、大写。"0603" ≡ "0603";"SOIC-16" ≡ "SOIC16"
+ * @deprecated 请直接用 `modules/bom/domain/package-normalize.footprintKey`。 */
 export function normalizeFootprint(raw: string | null | undefined): string {
-  if (!raw) return "";
-  return raw.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // REF-2a:转调 canonical footprintKey(与 MPN 键同一套字符规则)
+  return footprintKey(raw);
 }
 
 /** 封装不一致:BOM 行封装与主数据封装不同 */

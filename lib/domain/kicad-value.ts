@@ -14,6 +14,7 @@
  *   猜错型号会一路错到询价和报价;
  * - 判不准就返回 null,**不给低质量的猜测**。
  */
+import { KICAD_CLASS_SEGMENT } from "@/modules/bom/domain/package-normalize";
 
 export type RefDesClass = "passive" | "active" | "connector" | "electromechanical" | "unknown";
 
@@ -135,8 +136,11 @@ export interface KicadFootprint {
 const DIMENSION_SEGMENT =
   /^(\d+(\.\d+)?x\d+(\.\d+)?mm|P\d.*|EP\d.*|.*Metric|Vertical|Horizontal|Handsolder\w*|\d+(\.\d+)?mm)$/i;
 
-/** 器件类别前缀字母(C_0603 里的 C),单独成段时丢弃 */
-const CLASS_SEGMENT = /^(C|R|L|D|LED|FB|Q|U|SW|J)$/i;
+/**
+ * 器件类别前缀字母(C_0603 里的 C),单独成段时丢弃。
+ * REF-2a:与 part-spec 合一(此前本处缺 CP/FL,`CP_Elec_6.3x5.4` 两处得到不同封装代码)。
+ */
+const CLASS_SEGMENT = KICAD_CLASS_SEGMENT;
 
 /**
  * 解析 KiCad 封装串。

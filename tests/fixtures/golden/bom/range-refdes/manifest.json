@@ -1,0 +1,18 @@
+{
+  "file": "range-refdes.csv",
+  "description": "REF-2a 抓出的缺陷:位号计数不展开范围、且不认全角逗号,续行合并误判「上一行还差位号」,把独立物料静默吞进上一行 —— 账本照样平衡,恒等式抓不到。构造:第 2 行 C1,C2 数量 4(确实只列了 2 个)→ 第 3 行 C3,C4 是真 PDF 折行,应并入;它的存在使自校准选择「合并模式」。第 4 行 R1-R10 数量 10(展开后恰好 10 个,不缺)→ 第 5 行 TP1 是独立测试点,不得并入。第 6 行 C5,C6 用**全角逗号**、数量 2(恰好 2 个,不缺)→ 第 7 行 C7 是独立备用电容,不得并入。修复前(main)实测:识别 3 / 合并 3(TP1 与 C7 被吞);修复后:识别 5 / 合并 1。第 5、7 行缺数量,如实记为 withIssues 2 —— 修复前它们被吞掉,这两个问题也跟着消失了。",
+  "expected": {
+    "totalRows": 6,
+    "recognized": 5,
+    "mergedIntoPrevious": 1,
+    "nonBusiness": 0,
+    "needsReview": 0,
+    "withIssues": 2,
+    "mustBalance": true,
+    "rowChecks": [
+      { "sourceRow": 3, "disposition": "MERGED_INTO_PREVIOUS" },
+      { "sourceRow": 5, "disposition": "RECOGNIZED" },
+      { "sourceRow": 7, "disposition": "RECOGNIZED" }
+    ]
+  }
+}
