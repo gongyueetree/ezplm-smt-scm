@@ -175,6 +175,21 @@
 - **Tests**: 金样回归按构造期望断言(禁快照);账本恒等式 `totalRows = recognized + mergedIntoPrevious + nonBusiness + needsReview` 逐文件成立。
 - **Acceptance**: 差异为零或逐条经人工批准;15MB/17000 行 E2E(`zz-e9`)不回归。
 
+> **REF-2c 进展**:管线拆分**已完成(V2 在 flag 后,默认关)**。
+>
+> - `modules/bom/domain/normalizer/`:`types` / `cells`(数量、页脚、MPN 守卫)/ `stages`(读格 → 非业务行 →
+>   位号续行 → 无键行 → 信息量 → MPN 决议 → 成行,7 个具名纯函数)/ `pipeline`(显式编排 + 自校准)/ `ledger`(对账)。
+>   **规则逐字未改,只改结构**;V2 不再原地改上一行对象(续行/描述折行返回新对象)。
+>   类型、单元格规则、账本从 bom-parse 原样迁出并转出,调用方零改动。
+> - 自校准额外报告 `plainAgreement` / `mergedAgreement`(V1 算了但丢掉),为界面解释"为什么合并"留好数据。
+> - **生产接线**:唯一入口 `toStandardLinesTraced`,`REFACTOR_BOM_NORMALIZER_V2=1` 走 V2;V1 `buildLines` 标 @deprecated 保留作对拍基准。
+> - **对拍证据**(`tests/golden/bom-normalizer-v2.golden.test.ts`,进 CI):公共金样全语料、种子 10 500 行、
+>   **分支覆盖型模糊语料 1500 张**(断言 7 种去向与两种自校准结果都真的出现过)—— 全部逐字段 MATCH;
+>   **突变测试 7/7 被抓到**(续行判据 `<`→`<=`、描述覆盖、不查厂商、信息量改看解析后数量、丢 DNP 提示、打平即合并、无键分支短路)。
+> - flag 打开跑全量:unit 1879 通过、golden 49 通过、BOM e2e 8 个 spec 22 通过(含 12MB/17000 行 `zz-e9`;已核实 Playwright 把 flag 传进服务端进程)。
+> - **未做**:flag 默认翻开与删除 V1 —— 按 MIGRATION_PLAN §2 "差异清零 → 翻转 → 观察 → 删除"分步走,不在本 PR。
+>   原计划的 13 阶段中,文件抽取(file-parse)、列映射(tabular)已是独立模块;持久化与匹配留在 repositories/bom-import、bom-match,属 REF-5。
+
 ## R1-4 · 位号解析统一 · **R1-5** 封装归一统一 · **R1-6** 列映射词表数据化
 
 - **Priority**: P1(三项同属"归一族",可并入 REF-2)
