@@ -205,6 +205,7 @@ rfq-excel 自带 `dec()`([:82](lib/domain/rfq-excel.ts:82))。
 | **Canonical 目标** | `TabularColumnMapping`(引擎)+ 每域**声明式词表**(数据,不是代码);`ProviderResponseMapping` 另立 |
 | **参考资产** | bom2buy `COLUMN_DICT`:10 字段 **113 别名(51 条含中文)**;两趟匹配**精确优先于子串**并带显式优先级序,专门防 `customer part number` 被 `part number` 抢走;`columnInference.ts` 按列内容采样 60 格做证据反查(`STRONG=0.7`),且**表头已明确的列受保护不被推翻**;`料号` 单独出现 = MPN,与 `型号/MPN` 并存时 = 内部料号(`INTERNAL_PN_WITH_MPN_PRESENT`)—— 恰好是本仓 D5 语义冲突的正解 |
 | **不要抄的债** | bom2buy 在 `components/App.tsx:160-174` 本地重实现了 `findHeaderRow` 并 shadow 掉 import,被测版本在 UI 路径上是死代码 |
+| **REF-2b 状态** | ✅ 12 份词表已迁为数据(`modules/tabular/vocabularies`),跨表异义 14 条登记理由并快照;2 条待客户确认 |
 | **删除条件** | 各域词表迁为数据并有快照测试;`app/api/scrap/route.ts` 的内联词表移出路由;E2 保持独立(ERP profile 是合同契约,**不应**与 BOM 词表合并),但两者共用同一 `detectMapping` 语义或显式声明为何不共用 |
 
 ---
