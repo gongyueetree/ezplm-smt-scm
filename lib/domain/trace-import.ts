@@ -12,7 +12,18 @@
  * - 数量必须是有效数值且 > 0 —— 0 数量的收料/发料行没有业务含义;
  * - 同一文件重复导入靠幂等键防重(键在数据层算)。
  */
-import { cellText, detectMapping, missingFields, type MappingResult } from "./column-mapping";
+import {
+  cellText,
+  detectVocabularyMapping,
+  missingFields,
+  type ColumnVocabulary,
+  type MappingResult,
+} from "@/modules/tabular/domain/column-mapping";
+import {
+  TRACE_RECEIPT_VOCABULARY,
+  TRACE_SHIPMENT_VOCABULARY,
+  TRACE_WO_ISSUE_VOCABULARY,
+} from "@/modules/tabular/vocabularies/trace";
 import { detectDelimiter, parseCsv } from "./csv";
 
 export type TraceTemplate = "RECEIPT" | "WO_ISSUE" | "SHIPMENT";
@@ -38,56 +49,11 @@ export type ShipmentField =
   | "fgLotNo" | "workOrderNo" | "customer" | "customerPo"
   | "shipmentNo" | "shippedQty" | "shippedAt";
 
-const RECEIPT_SYNONYMS: Record<ReceiptField, readonly string[]> = {
-  poNo: ["po", "pono", "采购订单", "采购单号", "po号"],
-  poLineNo: ["poline", "行号", "po行号", "采购行号"],
-  supplier: ["supplier", "供应商", "厂商"],
-  mpn: ["mpn", "型号", "制造商料号"],
-  internalPn: ["internalpartnumber", "internal part number", "内部料号", "料号"],
-  supplierLot: ["supplierlot", "供应商批次", "厂商批次", "外部批次"],
-  internalLot: ["internallot", "内部批次", "批次号", "lot"],
-  receivedQty: ["receivedquantity", "received quantity", "收料数量", "入库数量", "数量"],
-  receivedAt: ["receiveddate", "received date", "入库时间", "收料日期", "入库日期"],
-  dateCode: ["dc", "datecode", "date code", "生产周期"],
-  warehouse: ["warehouse", "仓库"],
-  location: ["location", "库位"],
-};
-
-const WO_ISSUE_SYNONYMS: Record<WoIssueField, readonly string[]> = {
-  workOrderNo: ["workorder", "work order", "工单", "工单号"],
-  product: ["product", "产品", "机型"],
-  bomVersion: ["bomversion", "bom version", "bom版本"],
-  lotNo: ["materiallot", "material lot", "物料批次", "批次号", "lot"],
-  mpn: ["mpn", "型号"],
-  issuedQty: ["issuedquantity", "issued quantity", "发料数量", "投料数量"],
-  returnedQty: ["returnedquantity", "returned quantity", "退料数量"],
-  productionLine: ["productionline", "production line", "产线", "生产线"],
-  issuedAt: ["issuetime", "issue time", "发料时间", "投料时间"],
-  operator: ["operator", "操作员", "作业员"],
-};
-
-const SHIPMENT_SYNONYMS: Record<ShipmentField, readonly string[]> = {
-  fgLotNo: ["finishedlot", "finished lot", "成品批次", "成品批号"],
-  workOrderNo: ["workorder", "work order", "工单", "工单号"],
-  customer: ["customer", "客户"],
-  customerPo: ["customerpo", "customer po", "客户po", "客户订单"],
-  shipmentNo: ["shipmentnumber", "shipment number", "出货单", "出货单号", "送货单"],
-  shippedQty: ["shipmentquantity", "shipment quantity", "出货数量"],
-  shippedAt: ["shipmentdate", "shipment date", "出货日期", "出货时间"],
-};
-
-/** 各模板的必需列 —— 缺一个整表就不该导 */
-const REQUIRED: Record<TraceTemplate, readonly string[]> = {
-  RECEIPT: ["internalLot", "receivedQty"],
-  // 工单用料是全链路最关键的一跳:工单号与批次号缺任一都连不起来
-  WO_ISSUE: ["workOrderNo", "lotNo", "issuedQty"],
-  SHIPMENT: ["fgLotNo", "shipmentNo", "shippedQty"],
-};
-
-const SYNONYMS: Record<TraceTemplate, Record<string, readonly string[]>> = {
-  RECEIPT: RECEIPT_SYNONYMS,
-  WO_ISSUE: WO_ISSUE_SYNONYMS,
-  SHIPMENT: SHIPMENT_SYNONYMS,
+/** 三模板的列词表是数据:modules/tabular/vocabularies/trace.ts(含各模板必需列) */
+const VOCABULARY: Record<TraceTemplate, ColumnVocabulary<string>> = {
+  RECEIPT: TRACE_RECEIPT_VOCABULARY satisfies ColumnVocabulary<ReceiptField>,
+  WO_ISSUE: TRACE_WO_ISSUE_VOCABULARY satisfies ColumnVocabulary<WoIssueField>,
+  SHIPMENT: TRACE_SHIPMENT_VOCABULARY satisfies ColumnVocabulary<ShipmentField>,
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -135,11 +101,11 @@ export function parseTraceTemplate(template: TraceTemplate, text: string): Trace
     return { template, mapping: EMPTY, rows: [], errors: [{ row: 0, message: "未能解析出表格" }], notices: [] };
   }
 
-  const mapping = detectMapping<string>(grid, SYNONYMS[template], REQUIRED[template]);
+  const mapping = detectVocabularyMapping(grid, VOCABULARY[template]);
   const errors: { row: number; message: string }[] = [];
   const notices: string[] = [];
 
-  const missing = missingFields(mapping, REQUIRED[template]);
+  const missing = missingFields(mapping, VOCABULARY[template].required);
   if (missing.length > 0) {
     errors.push({
       row: mapping.headerRowIndex + 1,
@@ -170,7 +136,7 @@ export function parseTraceTemplate(template: TraceTemplate, text: string): Trace
 
     const out: Record<string, string | null> = {};
     let rowEmpty = true;
-    for (const f of Object.keys(SYNONYMS[template])) {
+    for (const f of Object.keys(VOCABULARY[template].aliases)) {
       const v = get(f).trim();
       if (v) rowEmpty = false;
       out[f] = v || null;
@@ -178,7 +144,7 @@ export function parseTraceTemplate(template: TraceTemplate, text: string): Trace
     if (rowEmpty) continue;
 
     let bad = false;
-    for (const f of REQUIRED[template]) {
+    for (const f of VOCABULARY[template].required) {
       if (!out[f]) {
         errors.push({ row: i + 1, message: `缺少「${FIELD_LABEL[f] ?? f}」` });
         bad = true;

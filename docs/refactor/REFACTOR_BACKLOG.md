@@ -183,7 +183,7 @@
 - **Tests**: R1-4:`R1,R2` / `R1 R2` / `R1-R10` / `R1~R10` / 全角分隔符 / `R1-C5` 不展开 / span 上限 / 原始串保留。R1-5:0402 英制=1005 公制且不与 0402 公制混淆;`SOIC-8` vs `SOP-8` 兼容;`SOIC-8` vs `QFN-16` 不兼容。R1-6:`customer part number` 不被 `part number` 抢走;`料号` 单独出现=MPN、与 `型号/MPN` 并存=内部料号。
 - **Acceptance**: 每类只剩一个实现;词表是数据且有快照测试。
 
-> **REF-2a(#94)进展**:R1-4 位号**已完成**、R1-5 封装**部分完成**(判等键 + KiCad 类别字母合一),R1-6 词表数据化未动。
+> **REF-2a(#94)进展**:R1-4 位号**已完成**、R1-5 封装**部分完成**(判等键 + KiCad 类别字母合一),R1-6 见下方 REF-2b。
 >
 > - 位号统一到 `modules/bom/domain/reference-designator.ts`,**修掉三个真实缺陷**:
 >   ① `countRefDes` 不展开范围(`R1-R10` 算 1 个)→ 续行合并误判"上一行还差位号",
@@ -195,6 +195,22 @@
 > - 封装:`footprintKey` 与 MPN 键同规则;KiCad 类别字母表合一(此前 kicad-value 缺 CP/FL)。
 >   **刻意不做**:不把任意 4 位数一律当英制尺寸、不新增封装族推断规则(bom2buy 的已知债)。
 > - 金样语料测量:24 行零差异(迁移安全),但也说明**金样此前根本没覆盖这些缺陷**。
+
+> **REF-2b 进展**:R1-6 词表数据化**已完成**(`料号` 冲突已按客户口径裁定,部分待确认)。
+>
+> - 引擎迁到 `modules/tabular/domain/column-mapping.ts`(旧路径转发);12 份词表(含 scrap 路由内联那份)
+>   原样迁为数据 `modules/tabular/vocabularies/*`,**与 main 逐项含顺序零差异**;
+>   表头映射对拍:公共金样 10 文件 + 乾创私有 7 文件 × 12 词表 = 204 次比较,**零差异**。
+> - **修一个缺陷**:`Customer Part No` / `Cust Part Number` / `客户型号` 被 MPN 的包含匹配抢走,
+>   `Customer Part #` 落到描述、`客户物料号` 落到内部料号 —— 客户自编码被当原厂型号去比价。
+>   引擎新增「限定词别名」档(精确 > 限定词 > 包含),BOM 声明 `客户/customer/cust + MPN/内部料号别名 → 客户料号`。
+> - **「料号」裁定**:BOM 里维持**内部料号**,刻意不采纳 bom2buy「单独出现即 MPN」——
+>   乾创全部文档里「料号」都指 ERP 物料编码;只有「料号」列的 BOM 由 `missingRecommendedFields` 如实提示缺 MPN。
+> - 跨词表异义 14 条逐条登记理由(`cross-vocabulary.ts`),`uses` 即快照,任何词表改动改变归属就测试失败。
+>   **2 条 PENDING_CUSTOMER,本 PR 不改行为**:
+>   `po-bulk` / `scrap` 把「料号」映射 MPN(二者出自乾创自己的 ERP/MES,很可能是内部编码,且都没有 internalPn 字段可落);
+>   `recon` 把「料号」「物料编码」映射 MPN(供应商对账单,口径待样本)。
+> - E2 金蝶 profile 与 E3 RFQ 模板**不并入**:前者是合同契约(精确表头),后者是本方写出的模板,不做识别。
 
 ## R1-7 · 统一 NormalizedOffer 收敛(含 ezPLM 与线下)
 

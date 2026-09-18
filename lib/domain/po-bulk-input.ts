@@ -11,7 +11,8 @@
  * - 数量为 0 视为无效行(采购订单不存在下单 0 颗),给 error 而非静默跳过。
  */
 import { detectDelimiter, parseCsv } from "./csv";
-import { cellText, detectMapping, missingFields, type MappingResult } from "./column-mapping";
+import { cellText, detectVocabularyMapping, missingFields, type MappingResult, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { PO_BULK_VOCABULARY } from "@/modules/tabular/vocabularies/po-bulk";
 
 export type PoBulkField =
   | "mpn"
@@ -38,20 +39,10 @@ export const PO_BULK_FIELD_LABELS: Record<PoBulkField, string> = {
   requestDate: "需求日期",
 };
 
-const SYNONYMS: Record<PoBulkField, readonly string[]> = {
-  mpn: ["mpn", "型号", "厂商型号", "制造商型号", "partnumber", "part number", "pn", "料号"],
-  manufacturer: ["manufacturer", "mfg", "制造商", "厂商", "品牌", "brand"],
-  description: ["description", "desc", "描述", "规格", "名称"],
-  qty: ["qty", "quantity", "数量", "订购量", "采购量", "订单数量"],
-  unitPrice: ["unitprice", "price", "单价", "含税单价", "未税单价"],
-  currency: ["currency", "币种", "货币"],
-  moq: ["moq", "最小起订量", "最小订购量"],
-  spq: ["spq", "包装量", "标准包装", "最小包装"],
-  leadTimeDays: ["leadtime", "lead time", "lt", "交期", "交期天数", "货期"],
-  requestDate: ["requestdate", "request date", "需求日期", "需求日", "要求交期", "客户需求日"],
-};
+const VOCABULARY: ColumnVocabulary<PoBulkField> = PO_BULK_VOCABULARY;
+const SYNONYMS = VOCABULARY.aliases;
 
-const REQUIRED: readonly PoBulkField[] = ["mpn", "qty"];
+const REQUIRED = VOCABULARY.required;
 
 export interface ParsedPoBulkLine {
   lineNo: number;
@@ -124,7 +115,7 @@ export function parsePoBulkText(text: string): PoBulkParseResult {
     };
   }
 
-  const mapping = detectMapping<PoBulkField>(rows, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(rows, VOCABULARY);
   const errors: { row: number; message: string }[] = [];
   const notices: string[] = [];
 

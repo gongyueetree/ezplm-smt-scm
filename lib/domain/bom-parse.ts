@@ -1,9 +1,11 @@
 import {
   cellText,
-  detectMapping,
+  detectVocabularyMapping,
   missingFields,
   type MappingResult,
-} from "./column-mapping";
+  type ColumnVocabulary,
+} from "@/modules/tabular/domain/column-mapping";
+import { BOM_VOCABULARY } from "@/modules/tabular/vocabularies/bom";
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { inferMpnFromValue, parseKicadFootprint } from "./kicad-value";
 import { looksLikeReferenceList, referenceCount } from "@/modules/bom/domain/reference-designator";
@@ -38,41 +40,8 @@ export const BOM_FIELD_LABELS: Record<BomField, string> = {
   footprint: "封装",
 };
 
-/**
- * 列名同义词表(小写比较,已去除空格与标点)。
- * 顺序即优先级:越靠前越"典型",用于多列命中同一字段时选优。
- */
-const SYNONYMS: Record<BomField, string[]> = {
-  // KiCad 导出用 Reference(s);Altium 用 Designator
-  refDes: [
-    "位号", "refdes", "reference", "references", "reference(s)", "ref", "refs",
-    "designator", "designators", "部位号", "位置号", "元件位号",
-  ],
-  // KiCad 的 Qnty 是拼写省略,不是错别字;别把它漏了
-  // E1a:`Q'ty` / `Q’ty`(Altium、国内 EMS 模板常用)原先认不出来,
-  // 而数量是必需列 —— 认不出的后果是**整份文件被拒收**,不是少认一列。
-  qty: [
-    "数量", "用量", "qty", "q'ty", "q’ty", "qnty", "quantity", "qty/pcs",
-    "单板用量", "使用数量", "个数", "pcs", "用量/pcs", "数量qty",
-  ],
-  mpn: [
-    "mpn", "mfrp/n", "mfgp/n", "manufacturerp/n", "p/n", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "part#", "partnum",
-    "mfgpn", "mfrpn", "mfgpartnumber", "manufacturerpartnumber", "manufacturerpart", "mfrpart#",
-    "规格型号", "厂家型号", "原厂料号", "supplierpartnumber",
-  ],
-  manufacturer: [
-    "制造商", "厂商", "品牌", "生产厂家", "manufacturer", "manufacture", "mfg", "mfr", "brand",
-    "vendor", "supplier", "厂牌", "生产商",
-  ],
-  customerPn: ["客户料号", "客户物料编码", "customerpn", "customerpartnumber", "custpn", "客户编码"],
-  internalPn: ["内部料号", "物料编码", "料号", "internalpn", "itemcode", "partcode", "物料号", "编码"],
-  // KiCad/Altium 的 Value、Comment 就是这一行的实质描述,没有它这些 BOM 全是空行
-  description: [
-    "描述", "规格", "说明", "description", "desc", "spec", "specification", "品名",
-    "value", "值", "comment", "注释", "名称", "part", "component",
-  ],
-  footprint: ["封装", "footprint", "package", "packagetype", "外形", "封装形式", "pattern"],
-};
+/** 列词表是数据:modules/tabular/vocabularies/bom.ts(含「料号」口径与客户料号限定词规则) */
+const VOCABULARY: ColumnVocabulary<BomField> = BOM_VOCABULARY;
 
 export type ColumnMapping = MappingResult<BomField>;
 
@@ -84,7 +53,7 @@ export type ColumnMapping = MappingResult<BomField>;
  * 把 MPN 也设为必填会让这类文件直接 422 被拒之门外;
  * 正确做法是让它进来,再由校验逐行提示"缺 MPN,无法匹配与比价"。
  */
-const REQUIRED_FIELDS: BomField[] = ["qty"];
+const REQUIRED_FIELDS = VOCABULARY.required;
 
 /** 强烈建议但不强制的字段:缺了会在导入结果里明确提示 */
 export const RECOMMENDED_FIELDS: BomField[] = ["mpn"];
@@ -95,11 +64,11 @@ export function missingRecommendedFields(mapping: ColumnMapping): BomField[] {
 }
 
 /**
- * 检测表头行并生成建议映射(委托通用引擎 lib/domain/column-mapping.ts)。
+ * 检测表头行并生成建议映射(委托通用引擎 modules/tabular/domain/column-mapping.ts)。
  * 非标准 BOM 常见前几行是标题/客户信息,故在前 maxScanRows 行中选"识别字段最多"的一行。
  */
 export function detectColumnMapping(rows: string[][], maxScanRows = 10): ColumnMapping {
-  return detectMapping(rows, SYNONYMS, REQUIRED_FIELDS, maxScanRows);
+  return detectVocabularyMapping(rows, VOCABULARY, maxScanRows);
 }
 
 /** 映射是否可用于导入 */

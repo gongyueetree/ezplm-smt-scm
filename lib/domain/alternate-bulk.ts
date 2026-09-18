@@ -11,7 +11,8 @@
  * 3. **兼容级别非法即报错**,不猜、不回落到 UNKNOWN ——
  *    把"FUNCTIONAL"这种写错的值悄悄当成"未知",等于把人的笔误变成系统结论。
  */
-import { detectMapping, missingFields, type MappingResult } from "@/lib/domain/column-mapping";
+import { detectVocabularyMapping, missingFields, type MappingResult, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { ALTERNATE_VOCABULARY } from "@/modules/tabular/vocabularies/alternate";
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import {
   FUNCTIONAL_VALUES,
@@ -53,21 +54,7 @@ export const FIELD_LABEL: Record<AlternateImportField, string> = {
   note: "备注",
 };
 
-const SYNONYMS: Record<AlternateImportField, string[]> = {
-  basePn: ["基准内部料号", "基准料号", "内部料号", "baseinternalpn", "basepn", "主料号"],
-  baseMfg: ["基准制造商", "基准厂商", "basemfg", "basemanufacturer", "主料制造商"],
-  baseMpn: ["基准mpn", "基准型号", "basempn", "主料mpn"],
-  altPn: ["替代内部料号", "替代料号", "alternateinternalpn", "altpn"],
-  altMfg: ["替代制造商", "替代厂商", "altmfg", "alternatemfg", "alternatemanufacturer"],
-  altMpn: ["替代mpn", "替代型号", "altmpn", "alternatempn"],
-  functional: ["功能等效", "功能一致", "功能兼容", "functionalequivalence", "functional"],
-  packageCompat: ["封装兼容", "封装一致", "packagecompatibility", "packagecompat", "package"],
-  pin: ["引脚兼容", "引脚一致", "pincompatibility", "pincompat", "pin"],
-  reason: ["判定依据", "依据", "原因", "reason"],
-  source: ["依据来源", "来源", "source", "evidencesource"],
-  approvedBy: ["确认人", "审核人", "approvedby", "approver"],
-  note: ["备注", "说明", "note", "remark"],
-};
+const VOCABULARY: ColumnVocabulary<AlternateImportField> = ALTERNATE_VOCABULARY;
 
 /**
  * 必需列:两端各要一个能唯一定位的料号 + 三个兼容维度。
@@ -75,7 +62,7 @@ const SYNONYMS: Record<AlternateImportField, string[]> = {
  * 用**内部料号**而不是 MPN 定位:MPN 可能对应多颗内部料(实测种子库里
  * 一个 MPN 挂过 64 颗),拿 MPN 当键会让导入变成随机挑一颗。
  */
-const REQUIRED: AlternateImportField[] = ["basePn", "altPn", "functional", "packageCompat", "pin"];
+const REQUIRED = VOCABULARY.required;
 
 export interface AlternateImportRow {
   /** 源文件行号(1 基),报错要指得回原表 */
@@ -145,7 +132,7 @@ export function parseAlternateImportGrid(rawGrid: string[][]): AlternateImportPa
     return { mapping: empty, rows: [], errors: [], fatal: "未能从文件里解析出表格内容" };
   }
 
-  const mapping = detectMapping<AlternateImportField>(grid, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(grid, VOCABULARY);
   const missing = missingFields(mapping, REQUIRED);
   if (missing.length > 0) {
     return {

@@ -12,10 +12,12 @@
  */
 import {
   cellText,
-  detectMapping,
+  detectVocabularyMapping,
   missingFields,
   type MappingResult,
-} from "./column-mapping";
+  type ColumnVocabulary,
+} from "@/modules/tabular/domain/column-mapping";
+import { SUPPLIER_QUOTE_VOCABULARY } from "@/modules/tabular/vocabularies/supplier-quote";
 import { parseLeadTimeDays, parseMoneyString, parseQuantity } from "@/lib/providers/common/parse";
 
 export type SupplierQuoteField =
@@ -39,19 +41,10 @@ export const SUPPLIER_QUOTE_FIELD_LABELS: Record<SupplierQuoteField, string> = {
   description: "描述",
 };
 
-const SYNONYMS: Record<SupplierQuoteField, string[]> = {
-  mpn: ["mpn", "制造商料号", "厂商料号", "原厂型号", "型号", "partnumber", "partno", "mfgpn", "manufacturerpartnumber", "规格型号", "料号"],
-  manufacturer: ["制造商", "厂商", "品牌", "生产厂家", "manufacturer", "mfg", "mfr", "brand"],
-  unitPrice: ["单价", "价格", "报价", "unitprice", "price", "含税单价", "未税单价", "cost"],
-  currency: ["币种", "货币", "currency", "curr"],
-  moq: ["moq", "最小起订量", "最小订购量", "起订量", "minimumorderquantity", "minorderqty"],
-  spq: ["spq", "标准包装量", "包装量", "最小包装", "standardpackage", "pkgqty", "倍数"],
-  leadTimeDays: ["leadtime", "交期", "货期", "lt", "交货期", "leadtimedays", "交期天数"],
-  description: ["描述", "规格", "说明", "description", "desc", "品名"],
-};
+const VOCABULARY: ColumnVocabulary<SupplierQuoteField> = SUPPLIER_QUOTE_VOCABULARY;
 
 /** 关键字段:没有 MPN 与单价就不是一份可用的报价表 */
-const REQUIRED_FIELDS: SupplierQuoteField[] = ["mpn", "unitPrice"];
+const REQUIRED_FIELDS = VOCABULARY.required;
 
 export type SupplierQuoteMapping = MappingResult<SupplierQuoteField>;
 
@@ -59,7 +52,7 @@ export function detectSupplierQuoteMapping(
   rows: readonly (readonly string[])[],
   maxScanRows = 10,
 ): SupplierQuoteMapping {
-  return detectMapping(rows, SYNONYMS, REQUIRED_FIELDS, maxScanRows);
+  return detectVocabularyMapping(rows, VOCABULARY, maxScanRows);
 }
 
 export function isSupplierQuoteMappingUsable(mapping: SupplierQuoteMapping): boolean {
