@@ -50,8 +50,8 @@ REF-0.8 交付:① `tests/shadow/` 对拍框架;② `lib/domain/column-mapping.t
 | **REF-0** ✅ | 架构审计(#87,**不改生产代码**) | — | 无 | 无 |
 | **REF-0.5** ✅ | P0 修复 + 回归用例(#89 #90)(R0-1…R0-6 + **R0-8 零价守卫**;R0-7 先补失败用例,实施在 REF-3) | REF-0 确认 | 低 | 无 |
 | **REF-0.8** ✅ | 对拍/shadow 基建 + 缺失基座单测 + flag 基建(#91) | REF-0.5 | 无(只加测试与脚手架) | 无 |
-| **REF-1** | Canonical Part Identity + Manufacturer Registry | REF-0.8 | **高**(归一键变化) | 别名 seed + key 重算 |
-| **REF-2** | BOM Normalization V2(参考 bom2buy) | REF-1 | 高 | 无 |
+| **REF-1** ✅ | Canonical Part Identity + Manufacturer Registry(#92 #93,**实际零数据迁移**) | REF-0.8 | ~~高~~ 实测中→低 | 无(键规则与存量一致) |
+| **REF-2** 🔶 | BOM Normalization V2(参考 bom2buy)—— 2a 位号/封装已合(#94);2b 词表数据化 + 2c 管线拆分待做 | REF-1 | 高 | 无 |
 | **REF-3** | Supplier Mapping V2 + NormalizedOffer 收敛 | REF-1 | 高(含 R0-7) | 待定,需商务确认 |
 | **REF-4** | Alternate Engine V2(参考 altpart-pro) | REF-1、REF-0.5(R0-2/R0-3) | 高 | 无 |
 | **REF-5** | BOM Matching / Sourcing 共用 Identity + Offer | REF-2、REF-3 | 中 | 无 |
