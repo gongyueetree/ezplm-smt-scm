@@ -12,6 +12,7 @@
  *    把"FUNCTIONAL"这种写错的值悄悄当成"未知",等于把人的笔误变成系统结论。
  */
 import { detectMapping, missingFields, type MappingResult } from "@/lib/domain/column-mapping";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import {
   FUNCTIONAL_VALUES,
   PACKAGE_VALUES,
@@ -222,7 +223,8 @@ export interface ResolveResult {
 }
 
 export function normalizePn(v: string): string {
-  return v.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // REF-1b:统一到 canonical
+  return normalizeMpnKey(v);
 }
 
 /**

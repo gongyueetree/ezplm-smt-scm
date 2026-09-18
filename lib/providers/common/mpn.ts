@@ -4,11 +4,21 @@
  * 仅用于「匹配 / 去重 / 缓存键」,禁止用于展示或写入报价单 ——
  * 对外展示与落库一律保留供应商返回的原始 MPN 大小写与分隔符。
  */
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 
-/** 去除全部非字母数字字符并大写(RC0603FR-07 10KL ≡ rc0603fr0710kl) */
+/**
+ * 去除全部非字母数字字符并大写(RC0603FR-07 10KL ≡ rc0603fr0710kl)。
+ *
+ * REF-1b:改为转调 canonical(`modules/parts/domain/part-identity`)。
+ * 对纯 ASCII 输入**结果完全不变**;差别只在非 ASCII:
+ * 旧实现剥掉中文/带音标字母,canonical 保留。这修掉两类静默缺陷 ——
+ * ① 纯非 ASCII 值被剥成空串(R0-1 的形态);
+ * ② 混合值被截成**非空但错误**的键(`贴片电阻0402-10K` 与 `0402-10K` 撞键)。
+ *
+ * @deprecated 请直接用 `normalizeMpnKey`;本函数保留为兼容层,REF-1c 收尾后删除。
+ */
 export function normalizeMpn(mpn: string | null | undefined): string {
-  if (!mpn) return "";
-  return mpn.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  return normalizeMpnKey(mpn);
 }
 
 /** 制造商标准化:大写、压缩空白、去掉常见公司后缀(用于同源去重) */

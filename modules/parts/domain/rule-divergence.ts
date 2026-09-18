@@ -15,13 +15,46 @@
 import { normalizeMpnKey } from "./part-identity";
 import { manufacturerKey, normalizeManufacturerName } from "./manufacturer-registry";
 
-// 旧规则:逐条 import 真身来比,不复制实现(复制就会和本体漂移)
-import { mfgPartNoKey, manufacturerKeyOf } from "@/lib/domain/part-mfg";
-import { normalizeMpn, normalizeManufacturer } from "@/lib/providers/common/mpn";
-import { normalizeForCompare } from "@/lib/domain/similarity";
-import { normalizePnKey } from "@/lib/domain/bom-purpose";
-import { normalizePn } from "@/lib/domain/alternate-bulk";
-import { normalizeInternalPn } from "@/lib/domain/part-create";
+/*
+ * **历史规则快照**(REF-1b 起)。
+ *
+ * REF-1a 时这里是直接 import 各旧函数的真身 —— 那时它们还是各自独立的实现,
+ * 比的是真差异。REF-1b 把它们统一转调 canonical 之后,再 import 真身就会变成
+ * "canonical 跟自己比",差异恒为 0,测量与断言一起失去意义。
+ *
+ * 所以把迁移**前**的实现冻结在这里,逐字照抄,并且**不再随生产代码变化**。
+ * 它们的用途只剩两个:
+ *   ① 证明 canonical 与 A1(= 库内存量与迁移 SQL 的口径)确实等价;
+ *   ② 给 REF-1c 的库内重算提供"旧键长什么样"的参照。
+ * REF-1c 收尾、旧键全部重算完毕后,本模块连同这些快照一起删除。
+ */
+const legacy = {
+  /** A1 lib/domain/part-mfg.ts mfgPartNoKey(迁移前) */
+  mfgPartNoKey: (v: string) => (v ?? "").toUpperCase().replace(/[^\p{L}\p{N}]/gu, ""),
+  /** A2 lib/providers/common/mpn.ts normalizeMpn(迁移前) */
+  normalizeMpn: (v: string) => (v ? v.replace(/[^0-9A-Za-z]/g, "").toUpperCase() : ""),
+  /** A3 lib/domain/similarity.ts normalizeForCompare(迁移前) */
+  normalizeForCompare: (v: string) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, ""),
+  /** A4 lib/domain/bom-purpose.ts normalizePnKey(迁移前) */
+  normalizePnKey: (v: string) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, ""),
+  /** A5 lib/domain/alternate-bulk.ts normalizePn(迁移前) */
+  normalizePn: (v: string) => v.toUpperCase().replace(/[^0-9A-Z]/g, ""),
+  /** A6 lib/domain/part-create.ts normalizeInternalPn(**未迁移**,内部料号口径另算) */
+  normalizeInternalPn: (v: string) =>
+    v.normalize("NFKC").toUpperCase().replace(/\s+/g, "").replace(/-{2,}/g, "-").replace(/^-|-$/g, ""),
+  /** B1 lib/providers/common/mpn.ts normalizeManufacturer(迁移前) */
+  normalizeManufacturer: (v: string) =>
+    v
+      ? v
+          .toUpperCase()
+          .replace(/[.,]/g, " ")
+          .replace(/\b(CO|LTD|INC|CORP|CORPORATION|COMPANY|GMBH|LLC|PLC|SA|AG|KK)\b/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "",
+  /** B4 lib/domain/part-mfg.ts manufacturerKeyOf(迁移前;与 A1 同规则) */
+  manufacturerKeyOf: (v: string) => (v ?? "").toUpperCase().replace(/[^\p{L}\p{N}]/gu, ""),
+};
 
 export interface LegacyRule {
   /** 审计里的编号,便于与 DUPLICATION_MATRIX §D1/§D2 对照 */
@@ -33,18 +66,18 @@ export interface LegacyRule {
 
 /** §D1 的 MPN/料号归一规则全集(A7 recon-match.matchKey 只 trim+upper,不参与键比较) */
 export const LEGACY_MPN_RULES: readonly LegacyRule[] = [
-  { id: "A1", where: "lib/domain/part-mfg.ts mfgPartNoKey", apply: (v) => mfgPartNoKey(v) },
-  { id: "A2", where: "lib/providers/common/mpn.ts normalizeMpn", apply: (v) => normalizeMpn(v) },
-  { id: "A3", where: "lib/domain/similarity.ts normalizeForCompare", apply: (v) => normalizeForCompare(v) },
-  { id: "A4", where: "lib/domain/bom-purpose.ts normalizePnKey", apply: (v) => normalizePnKey(v) },
-  { id: "A5", where: "lib/domain/alternate-bulk.ts normalizePn", apply: (v) => normalizePn(v) },
-  { id: "A6", where: "lib/domain/part-create.ts normalizeInternalPn", apply: (v) => normalizeInternalPn(v) },
+  { id: "A1", where: "lib/domain/part-mfg.ts mfgPartNoKey", apply: (v) => legacy.mfgPartNoKey(v) },
+  { id: "A2", where: "lib/providers/common/mpn.ts normalizeMpn", apply: (v) => legacy.normalizeMpn(v) },
+  { id: "A3", where: "lib/domain/similarity.ts normalizeForCompare", apply: (v) => legacy.normalizeForCompare(v) },
+  { id: "A4", where: "lib/domain/bom-purpose.ts normalizePnKey", apply: (v) => legacy.normalizePnKey(v) },
+  { id: "A5", where: "lib/domain/alternate-bulk.ts normalizePn", apply: (v) => legacy.normalizePn(v) },
+  { id: "A6", where: "lib/domain/part-create.ts normalizeInternalPn", apply: (v) => legacy.normalizeInternalPn(v) },
 ];
 
 /** §D2 的厂商归一规则 */
 export const LEGACY_MANUFACTURER_RULES: readonly LegacyRule[] = [
-  { id: "B1", where: "lib/providers/common/mpn.ts normalizeManufacturer", apply: (v) => normalizeManufacturer(v) },
-  { id: "B4", where: "lib/domain/part-mfg.ts manufacturerKeyOf", apply: (v) => manufacturerKeyOf(v) },
+  { id: "B1", where: "lib/providers/common/mpn.ts normalizeManufacturer", apply: (v) => legacy.normalizeManufacturer(v) },
+  { id: "B4", where: "lib/domain/part-mfg.ts manufacturerKeyOf", apply: (v) => legacy.manufacturerKeyOf(v) },
 ];
 
 export interface RuleDivergence {
@@ -167,5 +200,5 @@ export function newCollisionsVsLegacy(
 
 /** 展示用归一(非键)的差异 —— 与 B1 比较,便于确认 UI 展示不会突变 */
 export function manufacturerDisplayDivergence(samples: readonly string[]): number {
-  return samples.filter((s) => normalizeManufacturerName(s) !== normalizeManufacturer(s)).length;
+  return samples.filter((s) => normalizeManufacturerName(s) !== legacy.normalizeManufacturer(s)).length;
 }

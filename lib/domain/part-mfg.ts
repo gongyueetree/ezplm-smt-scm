@@ -12,6 +12,7 @@ import type {
   PartMfgMatchMode,
   PartMfgRelationType,
 } from "@prisma/client";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 
 /**
  * 匹配/去重键:upper + 只保留字母数字(**含 CJK**,\p{L}\p{N})。
@@ -20,7 +21,8 @@ import type {
  * 禁止用于展示。
  */
 export function mfgPartNoKey(v: string | null | undefined): string {
-  return (v ?? "").toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
+  // REF-1b:规则本身不变(canonical 就是照这条选的),改为单一来源
+  return normalizeMpnKey(v);
 }
 
 /** 制造商去重键(同规则;空制造商 → 空串,唯一约束需要非 null) */

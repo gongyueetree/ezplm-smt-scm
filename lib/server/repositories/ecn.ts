@@ -8,6 +8,7 @@
  *   逐行替换结果如实回报(命中/未命中)。
  */
 import type { Prisma } from "@prisma/client";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import {
   buildEcnCode,
   canApplyToBom,
@@ -428,7 +429,7 @@ export async function applyEcnToBom(
   });
   if (!latest) return { ok: false, reason: "BOM 不存在或没有版本" };
 
-  const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const norm = (v: string | null | undefined) => normalizeMpnKey(v);
 
   const result: ApplyResult = { newVersionId: "", newVersionNo: 0, replaced: [], unmatched: [] };
 

@@ -7,6 +7,7 @@
  * 又不依赖任何后台 worker,Docker 私有化部署同样适用。
  */
 import type { Prisma } from "@prisma/client";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { matchBomLines, type MatchContext, type MatchResult } from "@/lib/domain/bom-match";
 import {
   countUniqueMpns,
@@ -51,7 +52,7 @@ async function validateWithMasterData(
   tenantId: string,
   lines: ParsedBomLine[],
 ): Promise<ValidationReport> {
-  const key = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const key = (v: string | null | undefined) => normalizeMpnKey(v);
   const mpns = [...new Set(lines.map((l) => l.mpn).filter((m): m is string => !!m))];
   const parts =
     mpns.length === 0
@@ -271,7 +272,8 @@ export async function buildMatchContext(
   tenantId: string,
   batchLines: { internalPn?: string | null; mpn?: string | null; customerPn?: string | null }[],
 ): Promise<MatchContext> {
-  const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // REF-1b:与 bom-match 的查表侧同为 canonical —— 两侧必须一起改,只改一侧就是 R0-1
+  const norm = (v: string | null | undefined) => normalizeMpnKey(v);
   // R0-1:查 PartMfgMapping 必须用**写入侧同一把键**(mfgPartNoKey,保留 CJK),
   // 不能用上面剥 ASCII 的 norm —— 否则含中文的 MFG_PN 查不出任何映射且不报错。
   // 其余映射(byMpn / byInternalPn / customerMappings)两侧都用 norm,保持原样。
