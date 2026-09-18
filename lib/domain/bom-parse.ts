@@ -9,6 +9,30 @@ import { BOM_VOCABULARY } from "@/modules/tabular/vocabularies/bom";
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { inferMpnFromValue, parseKicadFootprint } from "./kicad-value";
 import { looksLikeReferenceList, referenceCount } from "@/modules/bom/domain/reference-designator";
+import {
+  type BomField,
+  type MpnSource,
+  type ParsedBomLine,
+  type RowDisposition,
+  type RowTrace,
+} from "@/modules/bom/domain/normalizer/types";
+import { isPageFooter, looksLikeMpnCell, parseQty } from "@/modules/bom/domain/normalizer/cells";
+import { normalizeBom } from "@/modules/bom/domain/normalizer/pipeline";
+import { isRefactorFlagOn } from "./refactor-flags";
+
+// REF-2c:类型、单元格规则与账本迁到 modules/bom/domain/normalizer/,此处原样转出
+export {
+  DISPOSITION_LABEL,
+  NEEDS_REVIEW_DISPOSITIONS,
+  NON_BUSINESS_DISPOSITIONS,
+  type BomField,
+  type MpnSource,
+  type ParsedBomLine,
+  type RowDisposition,
+  type RowTrace,
+} from "@/modules/bom/domain/normalizer/types";
+export { isPageFooter, looksLikeMpnCell, parseQty } from "@/modules/bom/domain/normalizer/cells";
+export { reconcileImport, type ImportReconciliation } from "@/modules/bom/domain/normalizer/ledger";
 
 /**
  * BOM 列映射与标准化(SPEC §6:列映射、非标准 BOM 转标准结构)。
@@ -17,17 +41,6 @@ import { looksLikeReferenceList, referenceCount } from "@/modules/bom/domain/ref
  * - 自动识别只产出「建议映射 + 置信度」,人工可覆盖;不确定的列一律留空而不是猜。
  * - 数量解析失败不静默填 1 —— 记 issue,由人工处理(错误的用量会一路错到报价)。
  */
-
-/** 标准 BOM 行字段(与 Prisma BOMLine 对齐) */
-export type BomField =
-  | "refDes"
-  | "qty"
-  | "mpn"
-  | "manufacturer"
-  | "customerPn"
-  | "internalPn"
-  | "description"
-  | "footprint";
 
 export const BOM_FIELD_LABELS: Record<BomField, string> = {
   refDes: "位号",
@@ -108,149 +121,12 @@ export function countRefDes(refDes: string | null | undefined): number {
   return referenceCount(refDes);
 }
 
-/** 页脚:`Page 1 of 3` / `第 1 页,共 3 页`。多页 PDF 每页都有,不是数据 */
-export function isPageFooter(text: string | null | undefined): boolean {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  return /^page\s*\d+\s*(of|\/)\s*\d+$/i.test(t) || /^第\s*\d+\s*页(\s*[,,]?\s*共\s*\d+\s*页)?$/.test(t);
-}
-
 /**
- * 单元格内容是否可能是 MPN。
+ * 按映射把原始行转为标准 BOM 行(非标准 BOM → 标准结构)。
  *
- * 用来挡住整段落进料号列的正文 —— PDF 页尾的法律声明会被表格重建
- * 当成某一列的内容(实测 TI 的 BOM 就把"These resources are subject to change…"
- * 落进了 PartNumber 列)。真实 MPN 不会是一个句子。
+ * @deprecated REF-2c:V1 实现,原样保留作对拍基准;V2 见 modules/bom/domain/normalizer/pipeline.ts。
+ * flag 翻转且对拍持续零差异后,与 `refDesAgreement` 一并在 REF-10 删除。
  */
-export function looksLikeMpnCell(text: string | null | undefined): boolean {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  if (t.length > 50) return false;
-  if ((t.match(/\s/g) ?? []).length >= 3) return false;
-  return true;
-}
-
-/** MPN 的来源:来自独立列,还是从 Value 推断出来的(推断的必须人工确认) */
-export type MpnSource = "column" | "inferred-from-value";
-
-export interface ParsedBomLine {
-  /** 源文件行号(1 基,含表头行,便于人工回原表定位) */
-  sourceRow: number;
-  lineNo: number;
-  refDes: string | null;
-  qty: number | null;
-  mpn: string | null;
-  manufacturer: string | null;
-  customerPn: string | null;
-  internalPn: string | null;
-  description: string | null;
-  footprint: string | null;
-  /** MPN 来源;缺省/为 null 表示本行没有 MPN(可选:旧调用点无需构造) */
-  mpnSource?: MpnSource | null;
-  /** 从封装串归一出的封装代码(如 0603 / SOT-23-5 / QFN-32),取不出为 null */
-  packageCode?: string | null;
-  /** 本行解析问题(数量非法等) */
-  issues: string[];
-  /** 本行的提示(不是错误):如 MPN 由 Value 推断,需人工确认 */
-  notices?: string[];
-}
-
-/** 数量:支持 "10"、"10.0"、"10 pcs"、全角数字;失败返回 null 并记 issue */
-/**
- * 解析数量。
- *
- * **数量 0 是合法且有意义的**:BOM 里的不贴装件(DNP / Do Not Populate)
- * 就是写 0 —— TI 的规范 BOM 正是这么标的。
- * 把它当成"数量非法"会做两件错事:丢掉这一行的物料信息,
- * 以及在错误列表里刷屏,把真正的错误淹掉。
- * 因此 0 保留为 0 并给一条**提示**(不是错误);负数才是错误。
- */
-export function parseQty(raw: string | null): {
-  qty: number | null;
-  issue?: string;
-  notice?: string;
-} {
-  if (raw === null) return { qty: null, issue: "数量为空" };
-  const halfWidth = raw.replace(/[０-９．]/g, (c) =>
-    String.fromCharCode(c.charCodeAt(0) - 0xfee0),
-  );
-  /*
-   * F5 golden 套件抓出的缺陷:`2026/8/1` 落进数量列会被读成 2026 ——
-   * 首段数字匹配把日期当成了数量,而 2026 个的采购需求就这么静默出现了。
-   * 日期与区间(8-10)形态一律判为无法解析,交人工;
-   * 负数守卫在下方,此处只拦「数字-分隔符-数字」的多段形态。
-   */
-  if (/\d[\/\-年月]\s*\d/.test(halfWidth)) {
-    return { qty: null, issue: `数量像日期或区间,不能当数量用:${raw}` };
-  }
-  const m = halfWidth.match(/-?\d+(\.\d+)?/);
-  if (!m) return { qty: null, issue: `数量无法解析:${raw}` };
-  const n = Number(m[0]);
-  if (!Number.isFinite(n)) return { qty: null, issue: `数量无法解析:${raw}` };
-  if (n < 0) return { qty: null, issue: `数量不能为负:${raw}` };
-  if (n === 0) return { qty: 0, notice: "数量为 0:不贴装件(DNP),不产生采购需求" };
-  return { qty: n };
-}
-
-/**
- * 一行原始数据的**去向**(E1a / 客户 Q13:「AI 无法全部识别,数据会丢失」)。
- *
- * 在此之前,解析器用 5 个 `continue` 悄悄丢行:空行、翻页表头、续行、
- * 没有料号的行、只有位号的行 —— 每一条都有它的道理,但**没有一条留下痕迹**。
- * 于是 100 行进去、92 行出来,没人说得清另外 8 行去哪了。
- *
- * 现在每一行都必须落到下面某一个取值上,一行不许没有去向。
- * 这不是把丢弃改成不丢弃 —— 空行确实不该变成物料 ——
- * 而是**把"我丢了它、以及为什么"写下来**,让人能复核。
- */
-export type RowDisposition =
-  /** 成为一条 BOM 行 */
-  | "RECOGNIZED"
-  /** 续行/折行,内容并入上一行(位号、描述、封装) */
-  | "MERGED_INTO_PREVIOUS"
-  /** 整行为空 */
-  | "BLANK"
-  /** 翻页重复表头 */
-  | "REPEATED_HEADER"
-  /** 页脚(Page 1 of 3 这类) */
-  | "PAGE_FOOTER"
-  /** 既没有任何料号也没有位号 —— 不能当物料,但**需要人看一眼** */
-  | "NO_IDENTIFIER"
-  /** 只有位号、其它列全空 —— 多半是附注,但**需要人看一眼** */
-  | "INSUFFICIENT";
-
-export const DISPOSITION_LABEL: Record<RowDisposition, string> = {
-  RECOGNIZED: "已识别为物料行",
-  MERGED_INTO_PREVIOUS: "并入上一行(折行)",
-  BLANK: "空行",
-  REPEATED_HEADER: "重复表头",
-  PAGE_FOOTER: "页脚",
-  NO_IDENTIFIER: "无料号也无位号 —— 待人工判断",
-  INSUFFICIENT: "仅有位号 —— 待人工判断",
-};
-
-/** 需要人工看一眼的去向:这些行**没有**变成物料,但也不能当成理所当然的垃圾 */
-export const NEEDS_REVIEW_DISPOSITIONS: RowDisposition[] = ["NO_IDENTIFIER", "INSUFFICIENT"];
-
-/** 确定为非业务内容的去向:可以安全略过,但仍然计数 */
-export const NON_BUSINESS_DISPOSITIONS: RowDisposition[] = ["BLANK", "REPEATED_HEADER", "PAGE_FOOTER"];
-
-/** 一行原始数据的去向记录 —— 与 RawBomRow 表一一对应 */
-export interface RowTrace {
-  /** 源文件行号(1 基,与 ParsedBomLine.sourceRow 同一口径) */
-  sourceRow: number;
-  disposition: RowDisposition;
-  /** 人话原因,直接显示给用户 */
-  reason: string;
-  /** 成为了第几条 BOM 行(仅 RECOGNIZED) */
-  lineNo: number | null;
-  /** 并进了哪一行(仅 MERGED_INTO_PREVIOUS) */
-  mergedIntoSourceRow: number | null;
-  /** 原始单元格,便于人在界面上核对"这一行长什么样" */
-  cells: string[];
-}
-
-/** 按映射把原始行转为标准 BOM 行(非标准 BOM → 标准结构) */
 function buildLines(
   rows: string[][],
   mapping: ColumnMapping,
@@ -481,67 +357,15 @@ export function toStandardLines(rows: string[][], mapping: ColumnMapping): Parse
 export function toStandardLinesTraced(
   rows: string[][],
   mapping: ColumnMapping,
+  impl: "v1" | "v2" = isRefactorFlagOn("BOM_NORMALIZER_V2") ? "v2" : "v1",
 ): { lines: ParsedBomLine[]; trace: RowTrace[] } {
+  // REF-2c:`REFACTOR_BOM_NORMALIZER_V2=1` 时走拆分后的管线(输出应逐字段相同,
+  // 由 tests/golden/bom-normalizer-v2.golden.test.ts 对拍证明);默认仍是 V1。
+  if (impl === "v2") {
+    const { lines, trace } = normalizeBom(rows, mapping);
+    return { lines, trace };
+  }
   const plain = buildLines(rows, mapping, false);
   const merged = buildLines(rows, mapping, true);
   return refDesAgreement(merged.lines) > refDesAgreement(plain.lines) ? merged : plain;
-}
-
-export interface ImportReconciliation {
-  /** 表头之后的原始行数 —— 对账的分母 */
-  totalRows: number;
-  recognized: number;
-  mergedIntoPrevious: number;
-  /** 空行 / 重复表头 / 页脚 */
-  nonBusiness: number;
-  /** 需要人工看一眼的行(**这就是以前被悄悄丢掉的那部分**) */
-  needsReview: number;
-  /** 已识别但带解析问题的行(数量非法等)—— 它们仍算 recognized */
-  withIssues: number;
-  byDisposition: Record<RowDisposition, number>;
-  /**
-   * 账平不平:`totalRows === recognized + merged + nonBusiness + needsReview`。
-   * 为 false 说明解析器里有一条路径没有登记去向 —— 这是**代码缺陷**,
-   * 界面必须报出来,不能当没看见。
-   */
-  balanced: boolean;
-}
-
-/**
- * 导入行去向对账(客户 Q13 的验收口径)。
- *
- * 空行与重复表头**计入 totalRows**,单列一类。
- * 先偷偷减掉空行再对账,对账本身就成了新的黑洞 ——
- * 客户要的恰恰是"每一行都有去向"。
- */
-export function reconcileImport(
-  trace: readonly RowTrace[],
-  lines: readonly ParsedBomLine[],
-): ImportReconciliation {
-  const byDisposition = {
-    RECOGNIZED: 0,
-    MERGED_INTO_PREVIOUS: 0,
-    BLANK: 0,
-    REPEATED_HEADER: 0,
-    PAGE_FOOTER: 0,
-    NO_IDENTIFIER: 0,
-    INSUFFICIENT: 0,
-  } as Record<RowDisposition, number>;
-  for (const t of trace) byDisposition[t.disposition] += 1;
-
-  const nonBusiness = NON_BUSINESS_DISPOSITIONS.reduce((n, d) => n + byDisposition[d], 0);
-  const needsReview = NEEDS_REVIEW_DISPOSITIONS.reduce((n, d) => n + byDisposition[d], 0);
-  const recognized = byDisposition.RECOGNIZED;
-  const mergedIntoPrevious = byDisposition.MERGED_INTO_PREVIOUS;
-
-  return {
-    totalRows: trace.length,
-    recognized,
-    mergedIntoPrevious,
-    nonBusiness,
-    needsReview,
-    withIssues: lines.filter((l) => l.issues.length > 0).length,
-    byDisposition,
-    balanced: trace.length === recognized + mergedIntoPrevious + nonBusiness + needsReview,
-  };
 }
