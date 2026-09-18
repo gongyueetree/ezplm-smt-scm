@@ -183,6 +183,19 @@
 - **Tests**: R1-4:`R1,R2` / `R1 R2` / `R1-R10` / `R1~R10` / 全角分隔符 / `R1-C5` 不展开 / span 上限 / 原始串保留。R1-5:0402 英制=1005 公制且不与 0402 公制混淆;`SOIC-8` vs `SOP-8` 兼容;`SOIC-8` vs `QFN-16` 不兼容。R1-6:`customer part number` 不被 `part number` 抢走;`料号` 单独出现=MPN、与 `型号/MPN` 并存=内部料号。
 - **Acceptance**: 每类只剩一个实现;词表是数据且有快照测试。
 
+> **REF-2a(#94)进展**:R1-4 位号**已完成**、R1-5 封装**部分完成**(判等键 + KiCad 类别字母合一),R1-6 词表数据化未动。
+>
+> - 位号统一到 `modules/bom/domain/reference-designator.ts`,**修掉三个真实缺陷**:
+>   ① `countRefDes` 不展开范围(`R1-R10` 算 1 个)→ 续行合并误判"上一行还差位号",
+>   同文件里只要还有真 PDF 折行,独立物料就会被**静默吞进上一行**,且账本照样平衡;
+>   ② bom-parse 的分隔符 `[,,;;\s]` 字节级核查**两对全是 ASCII**,全角逗号/分号从未被处理;
+>   ③ `expandRefDes` 不认连接号/全角波浪/省略号范围(`R1–R10` 只算 1 个)。
+>   回归金样 `tests/fixtures/golden/bom/range-refdes`:**main 上实测识别 3 / 合并 3(TP1、C7 被吞),修复后识别 5 / 合并 1**。
+> - 采纳 bom2buy 规则但**刻意不照搬**两处:不去重(重复位号检测要看见重复)、跨度上限保持 10000。
+> - 封装:`footprintKey` 与 MPN 键同规则;KiCad 类别字母表合一(此前 kicad-value 缺 CP/FL)。
+>   **刻意不做**:不把任意 4 位数一律当英制尺寸、不新增封装族推断规则(bom2buy 的已知债)。
+> - 金样语料测量:24 行零差异(迁移安全),但也说明**金样此前根本没覆盖这些缺陷**。
+
 ## R1-7 · 统一 NormalizedOffer 收敛(含 ezPLM 与线下)
 
 - **Priority**: P1 · **Problem**: 归一 DTO 只覆盖两个分销商;ezPLM 无 offer 概念;线下报价绕过 DTO 直写;`NormalizedOfferSchema` 生产期从不校验。

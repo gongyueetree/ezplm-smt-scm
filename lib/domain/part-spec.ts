@@ -8,6 +8,7 @@
  * 纪律:认不出来就返回 null(未知),**绝不猜** ——
  * 猜错管脚数会让人以为可以换,是会烧板子的错误。
  */
+import { KICAD_CLASS_SEGMENT } from "@/modules/bom/domain/package-normalize";
 
 /** 封装族里"名字后面那个数字就是管脚数"的那一类 */
 const PIN_COUNT_IN_NAME = new Set([
@@ -49,7 +50,7 @@ function normalize(pkg: string): string {
 }
 
 /** KiCad 会在封装名前加器件类别字母(C_0603_1608Metric),它不是封装的一部分 */
-const CLASS_PREFIX = /^(C|R|L|D|LED|FB|Q|U|SW|J|CP|FL)$/;
+const CLASS_PREFIX = KICAD_CLASS_SEGMENT; // REF-2a:与 kicad-value 共用一张表
 
 /** 只保留封装名部分:去掉库前缀与类别字母 */
 export function cleanPackageName(pkg: string | null | undefined): string | null {

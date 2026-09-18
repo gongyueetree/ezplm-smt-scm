@@ -6,6 +6,7 @@ import {
 } from "./column-mapping";
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { inferMpnFromValue, parseKicadFootprint } from "./kicad-value";
+import { looksLikeReferenceList, referenceCount } from "@/modules/bom/domain/reference-designator";
 
 /**
  * BOM 列映射与标准化(SPEC §6:列映射、非标准 BOM 转标准结构)。
@@ -118,23 +119,24 @@ export function missingRequiredFields(mapping: ColumnMapping): BomField[] {
  * 必须与"备注:以上为主料"这类附注区分开 —— 后者是散文,不是位号串。
  */
 export function looksLikeRefDesList(text: string | null | undefined): boolean {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  const parts = t
-    .split(/[,,;;]/)
-    .map((x) => x.trim())
-    .filter((x) => x !== "");
-  if (parts.length === 0) return false;
-  // 每一段都必须形如「字母开头 + 含数字」:R1 / C101 / U2A / !PCB700 / SH-J700。
-  // 允许连字符与下划线 —— 实测 TI 的 BOM 用 SH-J700 这种带连字符的位号。
-  return parts.every((x) => /^!?[A-Za-z][A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$/.test(x));
+  // REF-2a:转调 canonical。修正两处:空格分隔的续行(`C3 C4`)与 `~`/全角范围续行
+  // 此前都认不出,导致折行位号不被合并、位号被截断。
+  return looksLikeReferenceList(text);
 }
 
-/** 数一行位号里有几个位号 */
+/**
+ * 数一行位号里有几个位号(**展开范围后**)。
+ *
+ * REF-2a 修正两个缺陷,二者都会让续行合并的判据"上一行位号数 < 数量"误判:
+ * 1. 旧实现只数 token、**不展开范围**:`R1-R10` 算 1 个。同一文件里只要还有真正的
+ *    PDF 折行、自校准选了"合并模式",随后一条独立的 `TP1` 就会被错误并入 `R1-R10`,
+ *    作为物料行静默消失(账本照样平衡 —— 它如实记录了那个错误的合并);
+ * 2. 旧分隔符 `[,,;;\s]` 本意是"半角+全角"成对,字节级核查发现**两对全是 ASCII**,
+ *    全角逗号/分号从未被处理:`C1,C2`(全角)也算 1 个。
+ * 回归见 tests/golden/bom/range-refdes 与 tests/unit/reference-designator.test.ts。
+ */
 export function countRefDes(refDes: string | null | undefined): number {
-  return (refDes ?? "")
-    .split(/[,,;;\s]+/)
-    .filter((x) => x.trim() !== "").length;
+  return referenceCount(refDes);
 }
 
 /** 页脚:`Page 1 of 3` / `第 1 页,共 3 页`。多页 PDF 每页都有,不是数据 */

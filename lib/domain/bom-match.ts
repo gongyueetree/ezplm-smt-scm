@@ -19,6 +19,7 @@ import type { LifecycleValue } from "@/lib/providers/common/normalized-offer";
 import { getApplicablePriceBreak } from "./offers";
 import { rankBySimilarity, type SimilarityQuery } from "./similarity";
 import type { ParsedBomLine } from "./bom-parse";
+import { footprintKey } from "@/modules/bom/domain/package-normalize";
 
 export type MatchSourceValue =
   | "CUSTOMER_MAPPING"
@@ -175,9 +176,11 @@ function keyOf(v: string | null | undefined): string {
  * R0-1:乾创 MFG 映射通道**专用**的键 —— 必须与写入侧 `PartMfgMapping.manufacturerPartNoKey`
  * 以及迁移 r4_3 的 `regexp_replace(upper(x),'[^[:alnum:]]','','g')` 完全同规则(保留 CJK)。
  *
- * 不能复用上面的 `keyOf`:`normalizeMpn` 剥掉所有非 ASCII,
- * 真实数据里 52,256 条 MFG_PN 有 510 条含中文,用 ASCII 键去查 CJK 键**永远查不到且不报错**。
- * 其余通道(ezPLM / 分销商 / 客户料号 / 内部料号)两侧都用 ASCII 规则,保持原样不动。
+ * R0-1 当时 `keyOf` 背后的 `normalizeMpn` 会剥掉所有非 ASCII,
+ * 真实数据里 52,256 条 MFG_PN 有 510 条含中文,用 ASCII 键去查 CJK 键永远查不到且不报错。
+ * REF-1b 起两者已统一到 canonical `normalizeMpnKey`,规则相同;
+ * 保留独立的 mfgKeyOf 只为**标明契约**:这个通道的键必须与写入侧、迁移 SQL 同规则,
+ * 将来任何人要改 keyOf 都不能顺带改掉这里。
  */
 function mfgKeyOf(v: string | null | undefined): string {
   return mfgPartNoKey(v);
@@ -343,8 +346,7 @@ export async function matchBomLine(
       const footprintOk =
         !line.footprint || !p.footprint
           ? true
-          : line.footprint.toUpperCase().replace(/[^0-9A-Z]/g, "") ===
-            p.footprint.toUpperCase().replace(/[^0-9A-Z]/g, "");
+          : footprintKey(line.footprint) === footprintKey(p.footprint);
       if (!footprintOk) continue;
       candidates.push({
         ...fromLocal(p, "DESCRIPTION", Number((SOURCE_CONFIDENCE.DESCRIPTION * sim).toFixed(4))),
