@@ -12,10 +12,12 @@
  * 纪律:打分只用于**排序与展示**,绝不据此自动写入 ——
  * 型号选错会一路错到询价、报价与采购。
  */
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 
 /** 归一:大写、去掉所有非字母数字(型号里的 - _ / 空格不承载区分度) */
 export function normalizeForCompare(value: string | null | undefined): string {
-  return (value ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // REF-1b:统一到 canonical(纯 ASCII 结果不变;非 ASCII 不再被剥空)
+  return normalizeMpnKey(value);
 }
 
 /** 公共前缀长度(归一后) */

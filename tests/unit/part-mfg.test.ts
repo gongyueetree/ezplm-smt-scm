@@ -17,6 +17,7 @@ import {
   mfgPartNoKey,
   whyCannotSyncPreferredMpn,
 } from "@/lib/domain/part-mfg";
+import { normalizeMpn } from "@/lib/providers/common/mpn";
 
 describe("键规则(与迁移 SQL regexp_replace 完全一致;禁止用于展示)", () => {
   it("upper + 去标点空白,保留字母数字含 CJK(纯 ASCII 规则会把中文厂商剥成空串)", () => {
@@ -120,5 +121,32 @@ describe("R0-1 键规则:TS 与迁移 SQL 必须同源", () => {
     }
     // 关键性质:中文不得被剥成空串(旧 ASCII 规则的致命后果)
     expect(mfgPartNoKey("风华高科")).not.toBe("");
+  });
+});
+
+describe("REF-1b:查 manufacturerPartNoKey 的各处都必须与写入侧同规则", () => {
+  /**
+   * R0-1 修的是 bom-import / bom-match 这一对。审计 REF-1b 时发现
+   * **同源第二例**:alternate-search.ts 的 localHit 判定用
+   * `normalizeMpn(input.mpn)` 去查 `manufacturerPartNoKey`,
+   * 而该列是 CJK 保留的 —— 含中文的型号一律判成"本地没有"。
+   *
+   * 规则统一后这条自然成立;这里把它钉死,防止将来又分出第二套。
+   */
+  it("normalizeMpn(alternate-search 查 localHit 用的)≡ mfgPartNoKey(写入侧)", () => {
+    for (const s of [
+      "RC0402FR-07-10KL(风华)",
+      "风华高科",
+      "GRM188R71H104KA93D",
+      "贴片电阻0402-10K",
+      "",
+    ]) {
+      expect(normalizeMpn(s), s).toBe(mfgPartNoKey(s));
+    }
+  });
+
+  it("混合中英值不再被截成会撞键的错键", () => {
+    // 旧 ASCII 规则下这两个会归一成同一个键 040210K
+    expect(mfgPartNoKey("贴片电阻0402-10K")).not.toBe(mfgPartNoKey("0402-10K"));
   });
 });

@@ -4,6 +4,7 @@
  * 无位号的行退化为按 MPN 比对。
  */
 import { expandRefDes } from "./bom-validate";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import type { ParsedBomLine } from "./bom-parse";
 
 export type BomDiffType = "added" | "removed" | "qty_changed" | "part_changed" | "unchanged";
@@ -28,12 +29,12 @@ export interface BomDiffSummary {
 function lineKey(line: ParsedBomLine): string {
   const refs = expandRefDes(line.refDes);
   if (refs.length > 0) return `REF:${[...refs].sort().join(",")}`;
-  const pn = (line.mpn ?? line.internalPn ?? line.customerPn ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const pn = normalizeMpnKey(line.mpn ?? line.internalPn ?? line.customerPn);
   return pn ? `PN:${pn}` : `ROW:${line.lineNo}`;
 }
 
 function samePart(a: ParsedBomLine, b: ParsedBomLine): boolean {
-  const norm = (v: string | null) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const norm = (v: string | null) => normalizeMpnKey(v);
   return norm(a.mpn) === norm(b.mpn) && norm(a.manufacturer) === norm(b.manufacturer);
 }
 

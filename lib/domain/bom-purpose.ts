@@ -23,6 +23,7 @@
  *    (`acknowledgeUnmatched`),未匹配行在正式 BOM 上带标记且计入台账。
  *    客户答复后若要求"一律阻止",只需把 needsAcknowledge 改成 blocked。
  */
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 
 export type BomPurpose = "PRE_QUOTE" | "PRODUCTION";
 
@@ -75,7 +76,8 @@ export interface LineMatchResult {
  * 两处不一致会出现"校验说认识这颗料、转换却说匹配不到"的鬼故事。
  */
 export function normalizePnKey(v: string | null | undefined): string {
-  return (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  // REF-1b:统一到 canonical
+  return normalizeMpnKey(v);
 }
 
 /**

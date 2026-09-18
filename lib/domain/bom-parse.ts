@@ -4,6 +4,7 @@ import {
   missingFields,
   type MappingResult,
 } from "./column-mapping";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { inferMpnFromValue, parseKicadFootprint } from "./kicad-value";
 
 /**
@@ -470,7 +471,7 @@ function buildLines(
 export function countUniqueMpns(lines: ParsedBomLine[]): number {
   const set = new Set<string>();
   for (const l of lines) {
-    const key = (l.mpn ?? l.internalPn ?? l.customerPn ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+    const key = normalizeMpnKey(l.mpn ?? l.internalPn ?? l.customerPn);
     if (key) set.add(key);
   }
   return set.size;

@@ -16,6 +16,7 @@ import {
   compareMpnKeyRules,
   LEGACY_MANUFACTURER_RULES,
   newCollisionsVsLegacy,
+  suffixStrippingCost,
   summarizeDivergence,
 } from "@/modules/parts/domain/rule-divergence";
 import { manufacturerKey } from "@/modules/parts/domain/manufacturer-registry";
@@ -75,19 +76,22 @@ describe("REF-1a:真实 MFG 数据上的归一规则差异", () => {
         ",涉及原值 " + report.canonicalCollisions.reduce((n, c) => n + c.samples.length, 0) + " 条",
     );
 
-    // **真正的迁移风险量**:旧规则下各自独立、canonical 下撞在一起的组。
-    // 这些会违反 ManufacturerAlias.normalizedAlias 的唯一约束,迁移必须先合并。
     const b4Rule = LEGACY_MANUFACTURER_RULES.find((r) => r.id === "B4")!;
-    const newly = newCollisionsVsLegacy(mfrs, b4Rule, manufacturerKey);
-    console.log(
-      "[REF-1a] **新增**撞键组(旧 B4 下不同键、canonical 下同键):" +
-        newly.length + " 组,涉及原值 " + newly.reduce((n, c) => n + c.count, 0) + " 条",
-    );
-    for (const c of newly) expect(c.legacyKeys.length).toBeGreaterThan(1);
 
+    // REF-1c 的决策结果:canonical 键 ≡ 库内存量键 → **零迁移、零新增撞键**
+    const newly = newCollisionsVsLegacy(mfrs, b4Rule, manufacturerKey);
+    expect(newly).toEqual([]);
     const b4 = report.rules.find((r) => r.ruleId === "B4")!;
-    // canonical 额外剥公司后缀 → 与存量键不同,**这就是必须做重算迁移的原因**
-    expect(b4.differing).toBeGreaterThan(0);
+    expect(b4.differing).toBe(0);
+
+    // 被否决的备选(剥公司后缀)在真实数据上要付的代价 —— 保留可复现,
+    // 将来若重提该方案,直接看这两个数字,不必凭印象争论。
+    const cost = suffixStrippingCost(mfrs);
+    console.log(
+      "[REF-1c] 若改用「剥公司后缀」键:新增撞键 " + cost.newCollisionGroups +
+        " 组,涉及原值 " + cost.affectedValues + " 条(= 需人工确认的身份合并数量)",
+    );
+    expect(cost.newCollisionGroups).toBeGreaterThan(0);
     expect(report.rules.every((r) => r.examples.length === 0)).toBe(true);
 
     // 撞键组要么为 0,要么每组至少 2 条 —— 结构自检,防止报告本身算错

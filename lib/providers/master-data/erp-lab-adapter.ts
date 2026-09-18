@@ -18,6 +18,7 @@ import type {
   InventoryResult,
   SearchPartsInput,
 } from "@/lib/providers/ezplm/types";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import type { EzplmPartsProvider } from "@/lib/providers/ezplm/provider";
 import type { ErpMaterial, ErpProvider } from "@/lib/providers/erp/types";
 
@@ -46,7 +47,7 @@ function toCanonical(m: ErpMaterial): CanonicalPart {
   };
 }
 
-const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+const norm = (v: string | null | undefined) => normalizeMpnKey(v);
 
 export function createErpLabMasterDataAdapter(lab: ErpProvider): EzplmPartsProvider {
   async function scanMaterials(matcher: (m: ErpMaterial) => boolean, cap: number): Promise<ErpMaterial[]> {

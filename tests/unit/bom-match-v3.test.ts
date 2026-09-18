@@ -130,13 +130,15 @@ describe("§27 乾创 MFG 映射通道", () => {
     expect(r.candidates[0].partId).toBe("p1");
   });
 
-  it("R0-1:两套键规则对 CJK 结果不同 —— 用错即静默失配(记录差异本身)", () => {
+  it("REF-1b:两套键规则**已统一** —— 曾经的 CJK 分叉不复存在", () => {
+    // R0-1 时这里断言的是「两者不同」(那是当时的事故成因)。
+    // REF-1b 把 normalizeMpn 统一转调 canonical 后,分叉消失 ——
+    // 这条用例随之改为**锁住统一后的等价性**,防止将来有人再分出第二套规则。
+    // 历史差异本身已由 modules/parts/domain/rule-divergence.ts 的冻结快照留档。
     const raw = "RC0402FR-07-10KL(风华)";
     expect(mfgPartNoKey(raw)).toBe("RC0402FR0710KL风华");
-    expect(normalizeMpn(raw)).toBe("RC0402FR0710KL");
-    expect(mfgPartNoKey(raw)).not.toBe(normalizeMpn(raw));
-    // 纯 ASCII 输入下两者必须等价(所以缺陷只在含 CJK 时暴露,测试长期未抓到)
-    expect(mfgPartNoKey("GRM188R71H104KA93D")).toBe(normalizeMpn("GRM188R71H104KA93D"));
+    expect(normalizeMpn(raw)).toBe(mfgPartNoKey(raw));
+    expect(normalizeMpn("GRM188R71H104KA93D")).toBe(mfgPartNoKey("GRM188R71H104KA93D"));
   });
 
   it("§10:PATTERN 映射不参与 exact 匹配", async () => {

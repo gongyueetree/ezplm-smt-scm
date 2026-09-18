@@ -9,6 +9,7 @@
  * - 每卡带来源与取数时间。
  */
 import { ErpNotConfiguredError, ErpNotImplementedError } from "@/lib/providers/erp";
+import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
 import { prisma } from "@/lib/server/db";
 import { resolveErpTarget } from "@/lib/server/repositories/integration-sync";
 import { tenantWhere } from "@/lib/server/tenant-scope";
@@ -45,7 +46,7 @@ export interface EcnImpact {
   salesOrders: SourceResult<{ soNumber: string; customerCode: string; lines: number }>;
 }
 
-const norm = (v: string | null | undefined) => (v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+const norm = (v: string | null | undefined) => normalizeMpnKey(v);
 
 function notConfigured<T>(reason: string, coverage: SourceCoverage = "FULL", warning: string | null = null): SourceResult<T> {
   return { state: "not_configured", coverage, warning, note: reason, fetchedAt: null, items: [] };

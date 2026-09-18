@@ -138,19 +138,28 @@
 
 - **Priority**: P1 · **Problem**: 5 处归一 + 1 处带外 override;`resolveManufacturer` 在同一函数内混用两套键规则(B1 保空格剥后缀 / B4 剥空格保后缀)。
 - **Files**: `providers/common/mpn.ts:15-72` · `part-mfg.ts:27` · `integration/erp/normalization/manufacturer-resolver.ts:70-246` · `repositories/manufacturer-review.ts:131,192` · `integration/erp/uat-package.ts:43,83`
-- **Risk**: 中高 —— `ManufacturerAlias.normalizedAlias` 有唯一约束,键规则变化需重算。
-  **实测规模**(REF-1a #92,真实数据 2,959 个唯一原始厂商串):
+- **Risk**: ~~中高~~ → **REF-1c(#93)实际做法为零迁移,风险降为低**。
 
-  | 项 | 实测 |
-  |---|---|
-  | canonical 与库内存量 **B4** 不同 | **234 / 2,959**(7.9%)→ 需重算这些行 |
-  | canonical 与 B1(展示归一)不同 | 1,267 / 2,959(43%) |
-  | canonical 下撞键组(总) | 344 组 / 906 个原值 |
-  | **新增撞键组(B4 下不同键、canonical 下同键)** | **65 组 / 246 个原值** |
+  **决策(REF-1c)**:canonical 的**厂商键刻意不剥公司后缀**,与库内存量口径一致
+  (`PartMfgMapping.manufacturerKey`、`ManufacturerAlias.normalizedAlias`,均由 r4_3 写入)——
+  实测 2,959 个唯一厂商串**零差异、零新增撞键 → 不需要任何数据迁移**。
+  剥后缀的形态保留为 `manufacturerFuzzyForm`,**明确标注不是键**,只用于模糊候选与冲突检测。
 
-  只有最后一行是**真正的迁移工作量** —— 那 65 组会违反唯一约束,
-  迁移必须**先合并行再重算键**;其余 279 组在旧规则下本来就是同一行,不构成风险。
-  差异来源是 canonical 额外剥掉公司后缀(`Murata` / `Murata Co., Ltd.` 归一为同键)。
+  **否决"剥后缀作键"的三条理由**:
+  1. 它等于把 `Murata` 与 `Murata Co., Ltd.` 判成同一身份 —— 实测会**新增 65 组撞键、
+     涉及 246 个原值**。合并厂商身份是业务决定,该由人在 manufacturer-review 逐条确认
+     (CLAUDE.md 约束 3),不能由归一函数顺手做掉;
+  2. 带词边界的规则**做不到 TS ≡ 迁移 SQL 的可证等价**(`\b` 与 PG 的 `\y`
+     在 CJK 相邻时语义不同),而那是 MIGRATION_PLAN §2 对归一键变化的硬要求;
+  3. 想要更高自动解析率,正确做法是**扩充别名表**(人工批准后落 `ManufacturerAlias`),
+     可审计、可回滚;放宽键规则则是一次性的静默合并。
+
+  该备选方案的代价由 `suffixStrippingCost()` 保留为**可复现测量**,
+  将来若重提可直接跑出数字,不必凭印象争论。
+
+  **本次实际改变的**:`normalizeManufacturer`(B1,模糊形态)转调 registry,
+  后缀表更全,实测 **102 / 2,959(3.4%)** 结果改变 ——
+  影响面只在模糊候选与冲突检测(均须人工确认),**不触及任何库内键**。
 - **Target**: `modules/parts/domain/manufacturer-registry.ts`;优先级 ezPLM 标准厂商 → 租户批准别名 → 内置别名 → 仅清洗原值。别名迁入 seed/版本化 reference table。**保留**本仓既有优势:租户别名分域、人工批准、ezPLM 为真源、`§20 不静默生成永久别名`。
 - **Migration**: 别名 seed 迁移 + `normalizedAlias` 重算迁移;租户别名不跨租户泄漏的断言先行。
 - **Tests**: `TI` / `Texas Instrument` / `Texas Instruments Inc` / `德州仪器` → 同一 canonical;未收录厂商 → `matched:false` 且**不猜**;租户 A 的别名对租户 B 不可见;现有 40.9% 覆盖率 UAT 不回退。
