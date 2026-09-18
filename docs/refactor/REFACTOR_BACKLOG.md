@@ -115,7 +115,20 @@
 
 - **Priority**: P1 · **Problem**: 7 个 TS 规则 + 2 个 SQL 规则 + 9 处内联复制(见 DUPLICATION_MATRIX §D1)。
 - **Files**: `part-mfg.ts:22` · `providers/common/mpn.ts:9` · `similarity.ts:17` · `bom-purpose.ts:77` · `alternate-bulk.ts:224` · `part-create.ts:109` · `recon-match.ts:104` + 9 内联点
-- **Risk**: 高 —— 归一键变化会改变匹配结果与唯一约束。
+- **Risk**: ~~高~~ → **实测后降为中**(REF-1a #92 已量化,真实数据 27,099 个唯一 MFG_PN):
+  | 旧规则 | 与 canonical 不同 | 其中被剥成空串 |
+  |---|---|---|
+  | **A1** `mfgPartNoKey` | **0 / 27,099** | — |
+  | A2/A3/A4/A5(ASCII 四条) | 各 324 / 27,099 | 各 22 |
+  | A6 `normalizeInternalPn` | 12,740 / 27,099 | — |
+
+  **关键结论:canonical 选的就是 A1 的规则,而 A1 正是库内 `manufacturerPartNoKey`
+  与迁移 r4_3 的口径 → 采纳 canonical 不需要重算该列**,REF-1c 的迁移风险大幅下降。
+  A6 差异大属预期(它是内部料号口径,本就不该用作 MPN 键)。
+
+  另一个实测发现:ASCII 规则对**混合中英值**的危害比纯中文更大 ——
+  纯中文会被剥成空串(一眼看得出不对),而 `贴片电阻0402-10K` 会被剥成 `040210K`,
+  与真实存在的 `0402-10K` **撞成同一个键**(非空但错误)。canonical 下两者不同键。
 - **Target**: `modules/parts/domain/part-identity.ts`,`CanonicalPartIdentity`(TS + Zod),字段含 `requestedMpn/normalizedMpn/exactMpn/baseDevice/orderableSuffix/rawManufacturer/canonicalManufacturerId/canonicalManufacturerName/rawPackage/canonicalPackage/customerPn/internalPn/matchType/source`。参考 altpart-pro `part-identity.js` 的**两条纪律**:requested identity 不被模糊结果静默替换;缓存键 = MPN + 厂商 + 封装(厂商须先标准化)。
 - **Migration**: 旧函数改 `@deprecated` 薄包装 → 逐点替换 → shadow diff 列出键变化行 → 键变则配套 SQL 重算迁移。
 - **Tests**: 各规则等价性参数化用例;`TL431` 对 `[TL431-1, TL431ACDR]` → `exactMpn === null` 且 `requestedMpn` 保持;`AD8331ARQ-REEL7` → base `AD8331` / suffix `REEL7`;缓存键对 TI 与 Texas Instruments 一致、对 SOIC-8 与 TSSOP-8 不同。
@@ -126,6 +139,18 @@
 - **Priority**: P1 · **Problem**: 5 处归一 + 1 处带外 override;`resolveManufacturer` 在同一函数内混用两套键规则(B1 保空格剥后缀 / B4 剥空格保后缀)。
 - **Files**: `providers/common/mpn.ts:15-72` · `part-mfg.ts:27` · `integration/erp/normalization/manufacturer-resolver.ts:70-246` · `repositories/manufacturer-review.ts:131,192` · `integration/erp/uat-package.ts:43,83`
 - **Risk**: 中高 —— `ManufacturerAlias.normalizedAlias` 有唯一约束,键规则变化需重算。
+  **实测规模**(REF-1a #92,真实数据 2,959 个唯一原始厂商串):
+
+  | 项 | 实测 |
+  |---|---|
+  | canonical 与库内存量 **B4** 不同 | **234 / 2,959**(7.9%)→ 需重算这些行 |
+  | canonical 与 B1(展示归一)不同 | 1,267 / 2,959(43%) |
+  | canonical 下撞键组(总) | 344 组 / 906 个原值 |
+  | **新增撞键组(B4 下不同键、canonical 下同键)** | **65 组 / 246 个原值** |
+
+  只有最后一行是**真正的迁移工作量** —— 那 65 组会违反唯一约束,
+  迁移必须**先合并行再重算键**;其余 279 组在旧规则下本来就是同一行,不构成风险。
+  差异来源是 canonical 额外剥掉公司后缀(`Murata` / `Murata Co., Ltd.` 归一为同键)。
 - **Target**: `modules/parts/domain/manufacturer-registry.ts`;优先级 ezPLM 标准厂商 → 租户批准别名 → 内置别名 → 仅清洗原值。别名迁入 seed/版本化 reference table。**保留**本仓既有优势:租户别名分域、人工批准、ezPLM 为真源、`§20 不静默生成永久别名`。
 - **Migration**: 别名 seed 迁移 + `normalizedAlias` 重算迁移;租户别名不跨租户泄漏的断言先行。
 - **Tests**: `TI` / `Texas Instrument` / `Texas Instruments Inc` / `德州仪器` → 同一 canonical;未收录厂商 → `matched:false` 且**不猜**;租户 A 的别名对租户 B 不可见;现有 40.9% 覆盖率 UAT 不回退。
