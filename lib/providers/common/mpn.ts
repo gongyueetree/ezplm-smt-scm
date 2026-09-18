@@ -5,6 +5,7 @@
  * 对外展示与落库一律保留供应商返回的原始 MPN 大小写与分隔符。
  */
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
+import { manufacturerFuzzyForm } from "@/modules/parts/domain/manufacturer-registry";
 
 /**
  * 去除全部非字母数字字符并大写(RC0603FR-07 10KL ≡ rc0603fr0710kl)。
@@ -21,15 +22,20 @@ export function normalizeMpn(mpn: string | null | undefined): string {
   return normalizeMpnKey(mpn);
 }
 
-/** 制造商标准化:大写、压缩空白、去掉常见公司后缀(用于同源去重) */
+/**
+ * 制造商标准化:大写、压缩空白、去掉常见公司后缀(用于同源去重)。
+ *
+ * REF-1c:转调 registry 的 `manufacturerFuzzyForm`。
+ * 那边的后缀表更全(多了 LIMITED/INCORPORATED/HOLDINGS/PTE/SAS/SPA/BV/NV/AB/OY)。
+ * 实测真实数据 2,959 个唯一厂商串中 **102 条(3.4%)** 结果改变,
+ * 影响面只在**模糊匹配与冲突检测**——都是须人工确认的路径(§19 模糊档),
+ * 不触及任何库内键。
+ *
+ * ⚠️ 这个形态**不是键**,永远不要拿它查表或落库。
+ * @deprecated 请直接用 `manufacturerFuzzyForm`;本函数保留为兼容层。
+ */
 export function normalizeManufacturer(name: string | null | undefined): string {
-  if (!name) return "";
-  return name
-    .toUpperCase()
-    .replace(/[.,]/g, " ")
-    .replace(/\b(CO|LTD|INC|CORP|CORPORATION|COMPANY|GMBH|LLC|PLC|SA|AG|KK)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return manufacturerFuzzyForm(name);
 }
 
 /** 多制造商串分隔符:"Microchip / Microsemi"、"AVX & Kyocera" 等合并厂商名 */

@@ -13,6 +13,7 @@ import type {
   PartMfgRelationType,
 } from "@prisma/client";
 import { normalizeMpnKey } from "@/modules/parts/domain/part-identity";
+import { manufacturerKey } from "@/modules/parts/domain/manufacturer-registry";
 
 /**
  * 匹配/去重键:upper + 只保留字母数字(**含 CJK**,\p{L}\p{N})。
@@ -25,9 +26,17 @@ export function mfgPartNoKey(v: string | null | undefined): string {
   return normalizeMpnKey(v);
 }
 
-/** 制造商去重键(同规则;空制造商 → 空串,唯一约束需要非 null) */
+/**
+ * 制造商去重键(空制造商 → 空串,唯一约束需要非 null)。
+ *
+ * REF-1c:转调 registry 的 `manufacturerKey`。规则与 `mfgPartNoKey` **完全相同**
+ * (实测真实数据 2,959 个唯一厂商串零差异),但转调 registry 让**意图**明确:
+ * 这是厂商键,不是 MPN 键,将来任一方要改规则时不会误伤另一方。
+ *
+ * @deprecated 请直接用 `manufacturerKey`;本函数保留为兼容层。
+ */
 export function manufacturerKeyOf(v: string | null | undefined): string {
-  return mfgPartNoKey(v);
+  return manufacturerKey(v);
 }
 
 /**

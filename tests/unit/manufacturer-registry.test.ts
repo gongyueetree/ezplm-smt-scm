@@ -5,47 +5,51 @@
 import { describe, expect, it } from "vitest";
 import {
   manufacturerAliasList,
+  manufacturerFuzzyForm,
   manufacturerKey,
   MANUFACTURER_RESOLUTION_ORDER,
-  normalizeManufacturerName,
   resolveManufacturer,
   sameManufacturer,
 } from "@/modules/parts/domain/manufacturer-registry";
 
-describe("normalizeManufacturerName:展示用,保留空格", () => {
+describe("manufacturerFuzzyForm:**模糊/展示形态,不是键**", () => {
   it("大写 + 剥公司后缀 + 压缩空白", () => {
-    expect(normalizeManufacturerName("Murata Manufacturing Co., Ltd.")).toBe("MURATA MANUFACTURING");
-    expect(normalizeManufacturerName("Texas Instruments Inc")).toBe("TEXAS INSTRUMENTS");
-    expect(normalizeManufacturerName("Vishay Intertechnology, Inc.")).toBe("VISHAY INTERTECHNOLOGY");
+    expect(manufacturerFuzzyForm("Murata Manufacturing Co., Ltd.")).toBe("MURATA MANUFACTURING");
+    expect(manufacturerFuzzyForm("Texas Instruments Inc")).toBe("TEXAS INSTRUMENTS");
+    expect(manufacturerFuzzyForm("Vishay Intertechnology, Inc.")).toBe("VISHAY INTERTECHNOLOGY");
   });
 
   it("中文厂商名原样保留", () => {
-    expect(normalizeManufacturerName("风华高科")).toBe("风华高科");
-    expect(normalizeManufacturerName("YAGEO(国巨)")).toBe("YAGEO(国巨)");
+    expect(manufacturerFuzzyForm("风华高科")).toBe("风华高科");
+    expect(manufacturerFuzzyForm("YAGEO(国巨)")).toBe("YAGEO(国巨)");
   });
 
   it("空值安全", () => {
-    expect(normalizeManufacturerName(null)).toBe("");
-    expect(normalizeManufacturerName("   ")).toBe("");
+    expect(manufacturerFuzzyForm(null)).toBe("");
+    expect(manufacturerFuzzyForm("   ")).toBe("");
   });
 });
 
 describe("manufacturerKey:**唯一**的键规则", () => {
-  it("在展示归一基础上剥掉所有非字母数字,中文保留", () => {
-    expect(manufacturerKey("Murata Manufacturing Co., Ltd.")).toBe("MURATAMANUFACTURING");
+  it("大写 + 只留字母数字,中文保留", () => {
     expect(manufacturerKey("YAGEO(国巨)")).toBe("YAGEO国巨");
     expect(manufacturerKey("风华高科")).toBe("风华高科");
+    expect(manufacturerKey("Murata Manufacturing Co., Ltd.")).toBe("MURATAMANUFACTURINGCOLTD");
   });
 
   it("与 MPN 键同一套字符规则 —— 不同规则正是 R0-1 的成因", () => {
-    // 两者都用 [^\p{L}\p{N}];中文都不会被剥空
     expect(manufacturerKey("风华")).not.toBe("");
   });
 
-  it("公司后缀不影响键:三种写法归一到同一个键", () => {
-    const k = manufacturerKey("Murata");
-    expect(manufacturerKey("Murata Co Ltd")).toBe(k);
-    expect(manufacturerKey("MURATA, INC.")).toBe(k);
+  it("**公司后缀刻意保留在键里** —— 剥后缀是身份合并,那是人的决定不是归一的", () => {
+    // 这条与直觉相反,但是有意的(REF-1c 决策):
+    // ① 它与库内存量一致 → 采纳零迁移;
+    // ② 剥后缀在真实数据上会新增 65 组撞键 / 246 个原值,那是静默的身份合并;
+    // ③ 带词边界的规则做不到 TS ≡ 迁移 SQL 的可证等价(\b 与 \y 在 CJK 相邻时不同)。
+    // 想要更高自动解析率,正确做法是**扩充别名表**(人工批准、可审计、可回滚)。
+    expect(manufacturerKey("Murata Co Ltd")).not.toBe(manufacturerKey("Murata"));
+    // 而模糊形态**会**把它们归一到一起 —— 用于候选与冲突检测,不用于查表
+    expect(manufacturerFuzzyForm("Murata Co Ltd")).toBe(manufacturerFuzzyForm("Murata"));
   });
 });
 
@@ -85,10 +89,22 @@ describe("resolveManufacturer:六级顺序的纯函数部分", () => {
     expect(resolveManufacturer("TI", { globalAlias, canonical }).kind).toBe("GLOBAL_ALIAS");
   });
 
-  it("标准名精确命中(公司后缀不影响)", () => {
-    const r = resolveManufacturer("Texas Instruments Inc.", { canonical });
+  it("标准名精确命中", () => {
+    const r = resolveManufacturer("Texas Instruments", { canonical });
     expect(r.kind).toBe("CANONICAL_EXACT");
     expect(r.canonicalName).toBe("Texas Instruments");
+  });
+
+  it("**带公司后缀的写法不自动命中** —— 走评审队列建别名,而不是靠放宽键规则蒙对", () => {
+    const r = resolveManufacturer("Texas Instruments Inc.", { canonical });
+    expect(r.kind).toBe("CLEANED_ONLY");
+    expect(r.requiresManualDecision).toBe(true);
+    // 人工批准一条别名后即可命中 —— 可审计、可回滚
+    const withAlias = resolveManufacturer("Texas Instruments Inc.", {
+      canonical,
+      tenantAlias: new Map([[manufacturerKey("Texas Instruments Inc."), { id: "cmr_ti", name: "Texas Instruments" }]]),
+    });
+    expect(withAlias.kind).toBe("TENANT_ALIAS");
   });
 
   it("**未收录只清洗不猜**:给 CLEANED_ONLY + 进评审队列,但不阻塞流程", () => {

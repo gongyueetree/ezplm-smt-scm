@@ -40,10 +40,13 @@ const ALIAS_SEPARATORS = /[/&|+]/;
  * ------------------------------------------------------------------ */
 
 /**
- * 展示用归一:大写、剥公司后缀、压缩空白。**保留空格**,人能读。
- * 用于 UI 呈现与模糊比较,**不可作为库内键**。
+ * **模糊/展示形态**(不是键!):大写、剥公司后缀、压缩空白,保留空格,人能读。
+ *
+ * 用途只有两个:UI 呈现、模糊候选与冲突检测。
+ * **绝不可用作库内键** —— 它会把 `Murata` 与 `Murata Co., Ltd.` 归一成同一个串,
+ * 而那是一个**身份合并决定**,必须由人来做,不能由归一函数顺手做掉。
  */
-export function normalizeManufacturerName(v: string | null | undefined): string {
+export function manufacturerFuzzyForm(v: string | null | undefined): string {
   if (!v) return "";
   return v
     .normalize("NFKC")
@@ -55,22 +58,32 @@ export function normalizeManufacturerName(v: string | null | undefined): string 
 }
 
 /**
- * **唯一的**厂商键:在展示归一基础上再剥掉所有非字母数字(含 CJK 保留)。
+ * **唯一的厂商键**:大写 + 只保留字母数字(含 CJK)。与 MPN 键同一套字符规则。
  *
- * 与 MPN 键同一套字符规则(`[^\p{L}\p{N}]`),两处保持一致 ——
- * 不同规则正是 R0-1 事故的成因。
+ * ⚠️ **刻意不剥公司后缀**,理由有三(REF-1c 的决策记录):
  *
- * ⚠️ 与库内存量 `manufacturerKey` 的差别:存量**没有剥公司后缀**。
- * 例:`MURATA CO LTD` 存量键 = `MURATACOLTD`,本规则 = `MURATA`。
- * 采纳本规则须做 key 重算 + 撞键处理(见 rule-divergence)。
+ * 1. **它与库内存量完全一致**(`PartMfgMapping.manufacturerKey`、
+ *    `ManufacturerAlias.normalizedAlias`,均由 r4_3 迁移按此规则写入)——
+ *    所以采纳它**不需要任何数据迁移**;
+ * 2. 剥后缀等于把 `Murata` 与 `Murata Co., Ltd.` 判成同一身份。实测在真实数据上
+ *    会**新增 65 组撞键、涉及 246 个原值**(见 rule-divergence 的 UAT)。
+ *    合并厂商身份是**业务决定**,该由人在 manufacturer-review 里逐条确认,
+ *    不能由一个归一函数顺手做掉(CLAUDE.md 约束 3);
+ * 3. TS 与 PG 的词边界语义在 CJK 相邻时并不等价(`\b` vs `\y`),
+ *    带词边界的规则做不到"TS 规则 ≡ 迁移 SQL"的可证等价 ——
+ *    而那是 MIGRATION_PLAN §2 对归一键变化的硬要求。
+ *
+ * 想要"Murata Inc 自动命中 Murata Co Ltd 的别名"这种更高的自动解析率,
+ * 正确做法是**扩充别名表**(人工批准后落 ManufacturerAlias),
+ * 而不是放宽键规则 —— 前者可审计、可回滚,后者是一次性的静默合并。
  */
 export function manufacturerKey(v: string | null | undefined): string {
-  return normalizeManufacturerName(v).replace(/[^\p{L}\p{N}]/gu, "");
+  return (v ?? "").toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 /** 拆出别名列表:`Microchip / Microsemi` → ["MICROCHIP", "MICROSEMI"] */
 export function manufacturerAliasList(v: string | null | undefined): string[] {
-  const norm = normalizeManufacturerName(v);
+  const norm = manufacturerFuzzyForm(v);
   if (!norm) return [];
   return norm
     .split(ALIAS_SEPARATORS)
@@ -137,7 +150,7 @@ export function resolveManufacturer(
   raw: string | null | undefined,
   lookup: ManufacturerLookup = {},
 ): ManufacturerResolution {
-  const cleanedName = normalizeManufacturerName(raw);
+  const cleanedName = manufacturerFuzzyForm(raw);
   const key = manufacturerKey(raw);
   const trimmed = (raw ?? "").trim();
 

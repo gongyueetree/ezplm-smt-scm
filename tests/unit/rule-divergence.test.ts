@@ -14,6 +14,8 @@ import {
   LEGACY_MPN_RULES,
   manufacturerDisplayDivergence,
   newCollisionsVsLegacy,
+  suffixStrippingCost,
+  suffixStrippedManufacturerKey,
   summarizeDivergence,
 } from "@/modules/parts/domain/rule-divergence";
 import { manufacturerKey } from "@/modules/parts/domain/manufacturer-registry";
@@ -107,24 +109,26 @@ describe("REF-1a 厂商键差异(**风险点**)", () => {
     expect(LEGACY_MANUFACTURER_RULES.map((r) => r.id)).toEqual(["B1", "B4"]);
   });
 
-  it("**canonical 与库内存量 B4 不同** —— 因为 canonical 额外剥掉公司后缀", () => {
-    // 这正是 REF-1c 必须做 key 重算迁移的原因,也是本 PR 不切换的原因。
+  it("**canonical 与库内存量 B4 完全一致 → 采纳零迁移**(REF-1c 的决策结果)", () => {
     const b4 = report.rules.find((r) => r.ruleId === "B4")!;
-    expect(b4.differing).toBeGreaterThan(0);
+    expect(b4.differing).toBe(0);
   });
 
-  it("**剥公司后缀会让不同写法撞成同一个键** —— 这是重算迁移要处理的冲突", () => {
-    const withDup = compareManufacturerKeyRules([
-      "Murata",
-      "Murata Co., Ltd.",
-      "MURATA, INC.",
-      "Yageo",
-    ]);
-    const collision = withDup.canonicalCollisions.find((c) => c.key === "MURATA");
-    expect(collision).toBeDefined();
-    expect(collision!.samples.length).toBe(3);
-    // 撞键本身是**期望行为**(三种写法本就是同一家),但库里若三行各自独立存在,
-    // 重算后会违反 ManufacturerAlias 的唯一约束 —— 迁移必须先合并再重算。
+  it("**被否决方案的代价可量化**:改用剥后缀键会新增撞键(= 静默的身份合并)", () => {
+    const cost = suffixStrippingCost(["Murata", "Murata Co., Ltd.", "MURATA, INC.", "Yageo"]);
+    expect(cost.newCollisionGroups).toBe(1);
+    expect(cost.affectedValues).toBe(3);
+    // 三种写法本就是同一家 —— 但"把它们合并成一个身份"是**人的决定**,
+    // 不能由归一函数顺手做掉;正确做法是人工批准后扩充别名表。
+  });
+
+  it("当前键规则下不产生任何新增撞键", () => {
+    const cost = newCollisionsVsLegacy(
+      ["Murata", "Murata Co., Ltd.", "Yageo"],
+      LEGACY_MANUFACTURER_RULES.find((r) => r.id === "B4")!,
+      manufacturerKey,
+    );
+    expect(cost).toEqual([]);
   });
 
   it("中文厂商名在 canonical 下不被剥空", () => {
@@ -149,9 +153,12 @@ describe("newCollisionsVsLegacy:唯一约束的真实风险量", () => {
     expect(same).toEqual([]);
   });
 
-  it("旧规则下不同键、canonical 下同键 → 计入新增(迁移必须先合并)", () => {
-    // B4 保留公司后缀:MURATACOLTD ≠ MURATA;canonical 剥后缀后两者同键
-    const newly = newCollisionsVsLegacy(["Murata", "Murata Co., Ltd."], b4, manufacturerKey);
+  it("旧规则下不同键、备选规则下同键 → 计入新增(这正是被否决方案要付的代价)", () => {
+    const newly = newCollisionsVsLegacy(
+      ["Murata", "Murata Co., Ltd."],
+      b4,
+      suffixStrippedManufacturerKey,
+    );
     expect(newly).toHaveLength(1);
     expect(newly[0].key).toBe("MURATA");
     expect(newly[0].count).toBe(2);

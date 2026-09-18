@@ -13,7 +13,7 @@
  * 本模块**只读不改**,不接任何生产路径。
  */
 import { normalizeMpnKey } from "./part-identity";
-import { manufacturerKey, normalizeManufacturerName } from "./manufacturer-registry";
+import { manufacturerFuzzyForm, manufacturerKey } from "./manufacturer-registry";
 
 /*
  * **历史规则快照**(REF-1b 起)。
@@ -198,7 +198,34 @@ export function newCollisionsVsLegacy(
   return out.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
+/**
+ * **被否决的备选键规则**:在 canonical 键的基础上再剥掉公司后缀。
+ *
+ * REF-1c 讨论过是否采纳它(好处是 `Murata Inc` 能自动命中 `Murata Co Ltd` 的别名,
+ * 自动解析率更高),最终**否决**,理由见 manufacturer-registry.manufacturerKey 的注释。
+ *
+ * 保留它**只为一件事**:让"否决的代价"可量化、可复现 ——
+ * 将来若有人要重提这个方案,可以直接跑出它会新增多少撞键、需要合并多少条身份,
+ * 而不是凭印象争论。
+ */
+export function suffixStrippedManufacturerKey(v: string | null | undefined): string {
+  return manufacturerFuzzyForm(v).replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/** 量化"改用剥后缀键"的代价:新增撞键组(相对当前存量键 B4) */
+export function suffixStrippingCost(samples: readonly string[]): {
+  newCollisionGroups: number;
+  affectedValues: number;
+} {
+  const b4 = LEGACY_MANUFACTURER_RULES.find((r) => r.id === "B4")!;
+  const groups = newCollisionsVsLegacy(samples, b4, suffixStrippedManufacturerKey);
+  return {
+    newCollisionGroups: groups.length,
+    affectedValues: groups.reduce((n, g) => n + g.count, 0),
+  };
+}
+
 /** 展示用归一(非键)的差异 —— 与 B1 比较,便于确认 UI 展示不会突变 */
 export function manufacturerDisplayDivergence(samples: readonly string[]): number {
-  return samples.filter((s) => normalizeManufacturerName(s) !== legacy.normalizeManufacturer(s)).length;
+  return samples.filter((s) => manufacturerFuzzyForm(s) !== legacy.normalizeManufacturer(s)).length;
 }
