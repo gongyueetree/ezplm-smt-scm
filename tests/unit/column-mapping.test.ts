@@ -18,8 +18,9 @@ import {
   detectMapping,
   missingFields,
   normalizeHeader,
+  QUALIFIED_SCORE,
   scoreFieldForCell,
-} from "@/lib/domain/column-mapping";
+} from "@/modules/tabular/domain/column-mapping";
 
 type F = "mpn" | "qty" | "manufacturer";
 
@@ -179,5 +180,52 @@ describe("cellText:空串归一为 null(空 ≠ 空串,更 ≠ 0)", () => {
     expect(cellText([" STM32 "], 0)).toBe("STM32");
     // "0" 是合法内容,不能被当成空
     expect(cellText(["0"], 0)).toBe("0");
+  });
+});
+
+describe("REF-2b 限定词别名:「限定词 + 另一字段的精确别名」", () => {
+  type G = "mpn" | "customerPn" | "qty";
+  const syn: Record<G, readonly string[]> = {
+    mpn: ["mpn", "partno", "型号"],
+    customerPn: ["客户料号"],
+    qty: ["qty"],
+  };
+  const qualified = [{ qualifiers: ["customer", "客户"], of: ["mpn"] as G[], field: "customerPn" as G }];
+
+  it("**不带规则时**,MPN 的包含匹配抢走客户料号列(这正是要修的缺陷)", () => {
+    const m = detectMapping<G>([["Customer Part No", "Qty"]], syn, ["qty"]);
+    expect(m.fields.mpn).toBe(0);
+    expect(m.fields.customerPn).toBeUndefined();
+  });
+
+  it("带规则:归客户料号,分数介于精确与包含之间", () => {
+    const m = detectMapping([["Customer Part No", "Qty"]], syn, ["qty"], 10, qualified);
+    expect(m.fields.customerPn).toBe(0);
+    expect(m.fields.mpn).toBeUndefined();
+    expect(QUALIFIED_SCORE).toBeLessThan(10_000 - 100);
+    expect(QUALIFIED_SCORE).toBeGreaterThan(scoreFieldForCell("customerpartno", ["partno"]));
+  });
+
+  it("余下部分必须**精确**等于别名 —— 标题行 `客户:联创科技` 不会被当成表头列", () => {
+    const m = detectMapping([["客户:联创科技"], ["MPN", "Qty"]], syn, ["qty"], 10, qualified);
+    expect(m.headerRowIndex).toBe(1);
+  });
+
+  it("只有限定词、没有余下部分的列(`Customer`)不归客户料号", () => {
+    const m = detectMapping([["Customer", "Qty"]], syn, ["qty"], 10, qualified);
+    expect(m.fields.customerPn).toBeUndefined();
+  });
+
+  it("精确别名仍然最优先:同表另有 `MPN` 列时各归其位", () => {
+    const m = detectMapping([["客户型号", "MPN", "Qty"]], syn, ["qty"], 10, qualified);
+    expect(m.fields).toEqual({ customerPn: 0, mpn: 1, qty: 2 });
+  });
+});
+
+describe("兼容层:lib/domain/column-mapping 仍可用", () => {
+  it("转发的是同一个实现", async () => {
+    const legacy = await import("@/lib/domain/column-mapping");
+    expect(legacy.detectMapping).toBe(detectMapping);
+    expect(legacy.normalizeHeader).toBe(normalizeHeader);
   });
 });

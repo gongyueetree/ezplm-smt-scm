@@ -10,7 +10,8 @@
  *   MPN 疑似重复=标记但不阻断,由人在预览里逐行决定;
  * - 预览与执行分离:先看清楚会建多少、跳多少、撞多少,再决定要不要写。
  */
-import { cellText, detectMapping, missingFields, type MappingResult } from "./column-mapping";
+import { cellText, detectVocabularyMapping, missingFields, type MappingResult, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { PART_BULK_VOCABULARY } from "@/modules/tabular/vocabularies/part-bulk";
 import { detectDelimiter, parseCsv } from "./csv";
 import { normalizeInternalPn } from "./part-create";
 
@@ -21,26 +22,7 @@ export type PartImportField =
   // N-12:标准成本(STD 价)。损耗报告按金额分析靠它,由客户在主数据里维护。
   | "standardCost" | "standardCostCurrency";
 
-const SYNONYMS: Record<PartImportField, readonly string[]> = {
-  internalPn: ["internalpn", "internal part number", "内部料号", "料号", "物料编码"],
-  mpn: ["mpn", "型号", "制造商料号", "厂商型号", "partnumber", "pn"],
-  manufacturer: ["manufacturer", "mfg", "制造商", "厂商"],
-  description: ["description", "描述", "中文描述", "规格", "名称"],
-  descriptionEn: ["descriptionen", "english description", "英文描述"],
-  categoryL1: ["category", "分类", "物料分类", "一级分类", "大类"],
-  categoryL2: ["subcategory", "二级分类", "细分类"],
-  footprint: ["footprint", "package", "封装"],
-  brand: ["brand", "品牌"],
-  standardCost: ["standardcost", "std price", "stdprice", "标准价", "标准成本", "std 价格", "std价格"],
-  standardCostCurrency: ["standardcostcurrency", "标准价币种", "标准成本币种", "std 币种"],
-  msl: ["msl", "湿敏等级"],
-  packaging: ["packaging", "包装", "包装方式"],
-  reelQty: ["reelqty", "盘装数量", "每盘数量"],
-  moq: ["moq", "最小起订量"],
-  spq: ["spq", "最小包装"],
-  leadTimeDays: ["leadtime", "lead time", "lt", "交期"],
-  note: ["note", "remark", "备注"],
-};
+const VOCABULARY: ColumnVocabulary<PartImportField> = PART_BULK_VOCABULARY;
 
 const FIELD_LABEL: Record<PartImportField, string> = {
   internalPn: "内部料号", mpn: "MPN", manufacturer: "制造商", description: "中文描述",
@@ -50,7 +32,7 @@ const FIELD_LABEL: Record<PartImportField, string> = {
   standardCost: "标准价(STD)", standardCostCurrency: "标准价币种",
 };
 
-const REQUIRED: readonly PartImportField[] = ["internalPn", "mpn"];
+const REQUIRED = VOCABULARY.required;
 
 /**
  * 金额类字段保留**原始字符串**交给 Decimal,不经 Number ——
@@ -133,7 +115,7 @@ export function parsePartImportGrid(rawGrid: string[][]): PartImportParseResult 
     return { mapping: EMPTY, rows: [], errors: [{ row: 0, message: "未能解析出表格" }], notices: [] };
   }
 
-  const mapping = detectMapping<PartImportField>(grid, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(grid, VOCABULARY);
   const errors: { row: number; message: string }[] = [];
   const notices: string[] = [];
 

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequest, requireSession } from "@/lib/server/api";
 import { detectDelimiter, parseCsv } from "@/lib/domain/csv";
-import { cellText, detectMapping, missingFields } from "@/lib/domain/column-mapping";
+import { cellText, detectVocabularyMapping, missingFields, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { SCRAP_VOCABULARY } from "@/modules/tabular/vocabularies/scrap";
 import { writeAudit } from "@/lib/server/audit";
 import { prisma } from "@/lib/server/db";
 import { tenantData } from "@/lib/server/tenant-scope";
@@ -12,17 +13,9 @@ export const runtime = "nodejs";
 
 type Field = "period" | "customerId" | "workOrder" | "mpn" | "issuedQty" | "scrapQty" | "reason";
 
-const SYNONYMS: Record<Field, readonly string[]> = {
-  period: ["period", "期间", "月份", "年月"],
-  customerId: ["customer", "客户", "客户编码", "客户代码"],
-  workOrder: ["workorder", "工单", "工单号", "wo"],
-  mpn: ["mpn", "型号", "料号", "partnumber"],
-  issuedQty: ["issued", "发料", "发料数量", "投料数量", "领料数量"],
-  scrapQty: ["scrap", "报废", "报废数量", "损耗数量", "损耗"],
-  reason: ["reason", "原因", "损耗原因", "报废原因"],
-};
+const VOCABULARY: ColumnVocabulary<Field> = SCRAP_VOCABULARY;
 
-const REQUIRED: Field[] = ["issuedQty", "scrapQty"];
+const REQUIRED = VOCABULARY.required;
 
 const Input = z.object({ text: z.string().min(1).max(2_000_000), period: z.string().trim().max(20).optional() });
 
@@ -42,7 +35,7 @@ export async function POST(req: Request) {
   const rows = parseCsv(text, detectDelimiter(text)).filter((r) => r.some((c) => c.trim() !== ""));
   if (rows.length === 0) return badRequest("未能从输入中解析出表格");
 
-  const mapping = detectMapping<Field>(rows, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(rows, VOCABULARY);
   const missing = missingFields(mapping, REQUIRED);
   if (missing.length > 0) {
     return NextResponse.json(

@@ -11,7 +11,8 @@
  * 系统若拿库存去"纠正"它,就等于用一份可能过期的缓存去否定业务判断。
  */
 import { Decimal } from "decimal.js";
-import { detectMapping, missingFields } from "./column-mapping";
+import { detectVocabularyMapping, missingFields, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { SHORTAGE_VOCABULARY } from "@/modules/tabular/vocabularies/shortage";
 
 export type ShortageField =
   | "customer"
@@ -40,22 +41,10 @@ export const SHORTAGE_FIELD_LABEL: Record<ShortageField, string> = {
   requiredDate: "需求日期",
 };
 
-const SYNONYMS: Record<ShortageField, string[]> = {
-  customer: ["客户", "customer", "客户名称"],
-  internalPn: ["内部料号", "料号", "internalpn", "物料编码", "pn"],
-  manufacturer: ["制造商", "厂商", "manufacturer", "mfg", "品牌"],
-  mpn: ["mpn", "型号", "厂商型号", "partnumber"],
-  requiredQty: ["需求数量", "需求量", "requiredqty", "需求"],
-  availableInventory: ["可用库存", "库存", "availableinventory", "inventory", "onhand"],
-  openPoQty: ["在途", "未交", "openpo", "openpoqty", "在途数量"],
-  supplier: ["供应商", "supplier", "vendor"],
-  eta: ["eta", "预计到货", "到货日期"],
-  shortageQty: ["缺口数量", "缺口", "shortage", "shortageqty", "缺料数量"],
-  requiredDate: ["需求日期", "requireddate", "需求时间", "要求交期"],
-};
+const VOCABULARY: ColumnVocabulary<ShortageField> = SHORTAGE_VOCABULARY;
 
 /** MPN 与缺口是最低限度 —— 没有它们这行没有意义 */
-const REQUIRED: ShortageField[] = ["mpn", "shortageQty"];
+const REQUIRED = VOCABULARY.required;
 
 export interface ParsedShortageLine {
   rowNo: number;
@@ -103,7 +92,7 @@ export function parseShortageSheet(rawGrid: string[][]): ShortageParseResult {
     return { lines: [], errors: [{ row: 0, message: "未能解析出表格" }], notices: [] };
   }
 
-  const mapping = detectMapping<ShortageField>(grid, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(grid, VOCABULARY);
   const missing = missingFields(mapping, REQUIRED);
   if (missing.length > 0) {
     return {

@@ -17,7 +17,8 @@
  * - MOQ/SPQ/交期取该组**第一条非空**值,并在组内出现冲突时报出来,
  *   不按"最后一条赢"这种没人能预期的规则处理。
  */
-import { detectMapping, missingFields } from "./column-mapping";
+import { detectVocabularyMapping, missingFields, type ColumnVocabulary } from "@/modules/tabular/domain/column-mapping";
+import { SUPPLIER_OFFER_VOCABULARY } from "@/modules/tabular/vocabularies/supplier-offer";
 import { checkUsablePrice } from "./price-guard";
 
 export type SupplierOfferField =
@@ -43,19 +44,9 @@ export const OFFER_FIELD_LABEL: Record<SupplierOfferField, string> = {
   unitPrice: "单价",
 };
 
-const SYNONYMS: Record<SupplierOfferField, string[]> = {
-  supplierCode: ["供应商编码", "供应商代码", "供应商", "supplier", "suppliercode", "vendor"],
-  mpn: ["mpn", "型号", "厂商型号", "制造商料号", "partnumber", "pn"],
-  manufacturer: ["制造商", "厂商", "品牌", "manufacturer", "mfg", "brand"],
-  currency: ["币种", "货币", "currency"],
-  moq: ["moq", "最小起订量", "最小订购量"],
-  spq: ["spq", "包装量", "最小包装"],
-  leadTimeDays: ["交期", "交期(天)", "leadtime", "leadtimedays", "lt", "货期"],
-  minQty: ["起订数量", "阶梯数量", "数量", "minqty", "qty", "breakqty"],
-  unitPrice: ["单价", "价格", "unitprice", "price"],
-};
+const VOCABULARY: ColumnVocabulary<SupplierOfferField> = SUPPLIER_OFFER_VOCABULARY;
 
-const REQUIRED: SupplierOfferField[] = ["supplierCode", "mpn", "minQty", "unitPrice"];
+const REQUIRED = VOCABULARY.required;
 
 export interface ParsedOfferGroup {
   supplierCode: string;
@@ -89,7 +80,7 @@ export function parseSupplierOfferGrid(rawGrid: string[][]): OfferImportResult {
     return { groups: [], errors: [{ row: 0, message: "未能解析出表格" }], notices: [] };
   }
 
-  const mapping = detectMapping<SupplierOfferField>(grid, SYNONYMS, REQUIRED);
+  const mapping = detectVocabularyMapping(grid, VOCABULARY);
   const missing = missingFields(mapping, REQUIRED);
   if (missing.length > 0) {
     return {
